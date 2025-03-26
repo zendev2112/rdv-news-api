@@ -1,11 +1,1011 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
+    <title>RDV News API - Article Preview</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Roboto:wght@300;400;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      body {
+        font-family: 'Roboto', sans-serif;
+        background-color: #f8f9fa;
+        color: #343a40;
+        line-height: 1.6;
+      }
+
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+      }
+
+      .navbar {
+        border-bottom: 1px solid #dee2e6;
+        margin-bottom: 2rem;
+      }
+
+      .section-badge {
+        display: inline-block;
+        padding: 0.35em 0.65em;
+        font-size: 0.75em;
+        font-weight: 700;
+        line-height: 1;
+        text-transform: uppercase;
+        border-radius: 0.25rem;
+        margin-bottom: 1rem;
+      }
+
+      .article-volanta {
+        font-size: 0.9rem;
+        font-weight: bold;
+        color: #6c757d;
+        text-transform: uppercase;
+        margin-bottom: 0.5rem;
+      }
+
+      .article-title {
+        font-family: 'Playfair Display', serif;
+        font-weight: 900;
+        font-size: 2.5rem;
+        line-height: 1.2;
+        margin-bottom: 1rem;
+      }
+
+      .article-bajada {
+        font-size: 1.25rem;
+        font-weight: 300;
+        color: #495057;
+        margin-bottom: 1.5rem;
+      }
+
+      .article-featured-image {
+        width: 100%;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .article-content {
+        font-size: 1.05rem;
+        margin-bottom: 2.5rem;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .article-content p {
+        margin-bottom: 1.25rem;
+      }
+
+      .article-content h2 {
+        font-family: 'Playfair Display', serif;
+        font-weight: 700;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+      }
+
+      .article-content h3 {
+        font-family: 'Playfair Display', serif;
+        font-weight: 700;
+        margin-top: 1.8rem;
+        margin-bottom: 1rem;
+      }
+
+      .article-content h4 {
+        font-family: 'Playfair Display', serif;
+        font-weight: 600;
+        margin-top: 1.6rem;
+        margin-bottom: 1rem;
+      }
+
+      .article-content blockquote {
+        border-left: 4px solid #dee2e6;
+        padding-left: 1rem;
+        color: #6c757d;
+        font-style: italic;
+        margin: 1.5rem 0;
+      }
+
+      .article-content strong {
+        color: #000;
+      }
+
+      .source-attribution {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid #dee2e6;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .embed-container {
+        margin: 1.5rem 0;
+      }
+
+      /* Styling for in-article images */
+      figure.figure {
+        margin: 2rem 0;
+        width: 100%;
+      }
+
+      figure.figure img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 4px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      figure.figure figcaption {
+        margin-top: 0.5rem;
+        font-style: italic;
+        color: #6c757d;
+        font-size: 0.9rem;
+      }
+
+      .inArticleImage {
+        margin: 1rem 0;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .inArticleImage img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        transition: transform 0.3s ease;
+      }
+
+      .inArticleImage:hover img {
+        transform: scale(1.02);
+      }
+
+      .inArticleImage figcaption {
+        margin-top: 0.75rem;
+        font-style: italic;
+        color: #6c757d;
+        font-size: 0.9rem;
+        padding: 0 0.5rem;
+      }
+
+      pre {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 4px;
+        overflow-x: auto;
+        margin: 1.5rem 0;
+      }
+
+      ul,
+      ol {
+        margin-bottom: 1.5rem;
+      }
+
+      .api-url-display {
+        background-color: #e9ecef;
+        padding: 0.75rem;
+        font-family: monospace;
+        border-radius: 4px;
+        margin-bottom: 1.5rem;
+      }
+
+      /* Dark mode toggle */
+      .color-mode-toggle {
+        cursor: pointer;
+      }
+
+      /* Dark mode styles */
+      body.dark-mode {
+        background-color: #212529;
+        color: #e9ecef;
+      }
+
+      body.dark-mode .navbar {
+        background-color: #343a40 !important;
+        border-color: #495057;
+      }
+
+      body.dark-mode .article-title {
+        color: #f8f9fa;
+      }
+
+      body.dark-mode .article-bajada {
+        color: #ced4da;
+      }
+
+      body.dark-mode .article-content blockquote {
+        border-color: #495057;
+        color: #adb5bd;
+      }
+
+      body.dark-mode .article-content strong {
+        color: #f8f9fa;
+      }
+
+      body.dark-mode .source-attribution {
+        color: #adb5bd;
+        border-color: #495057;
+      }
+
+      body.dark-mode pre,
+      body.dark-mode .api-url-display {
+        background-color: #343a40;
+        color: #e9ecef;
+      }
+
+      body.dark-mode .card {
+        background-color: #343a40;
+        border-color: #495057;
+      }
+
+      /* Loading spinner styles */
+      .loading-spinner {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid rgba(0, 0, 0, 0.1);
+        border-left-color: #007bff;
+        border-radius: 50%;
+        animation: spinner 1s linear infinite;
+      }
+
+      @keyframes spinner {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .debug-info {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        margin: 1rem 0;
+        padding: 1rem;
+        font-family: monospace;
+        font-size: 0.85rem;
+        white-space: pre-wrap;
+      }
+
+      body.dark-mode .debug-info {
+        background-color: #343a40;
+        border-color: #495057;
+      }
+
+      /* New styles for improved article layout */
+      .article-image-gallery {
+        margin: 2rem auto;
+        max-width: 800px;
+      }
+
+      .social-embed {
+        background-color: transparent;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        box-shadow: none;
+        overflow: hidden;
+      }
+
+      body.dark-mode .social-embed {
+        background-color: transparent;
+      }
+
+      .article-embeds {
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+        margin-bottom: 2rem;
+      }
+
+      .object-fit-cover {
+        object-fit: cover;
+      }
+
+      /* Clean spacing around all article elements */
+      .article-volanta,
+      .article-title,
+      .article-bajada {
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      /* Add breathing room to the article */
+      #articlePreview {
+        padding-bottom: 3rem;
+      }
+
+      /* Image gallery for multiple images */
+      .row.g-3 {
+        display: flex;
+        flex-wrap: wrap;
+        margin: 0 -0.75rem;
+      }
+
+      .row.g-3 > .col-md-4 {
+        flex: 0 0 33.333333%;
+        max-width: 33.333333%;
+        padding: 0 0.75rem;
+        margin-bottom: 1.5rem;
+      }
+
+      @media (max-width: 767px) {
+        .row.g-3 > .col-md-4 {
+          flex: 0 0 100%;
+          max-width: 100%;
+        }
+
+        .article-title {
+          font-size: 2rem;
+        }
+      }
+
+      /* Better presentation for embedded content */
+      .twitter-embed,
+      .facebook-embed,
+      .instagram-embed,
+      .youtube-embed {
+        display: flex;
+        justify-content: center;
+        max-width: 100%;
+        overflow: hidden;
+      }
+
+      .twitter-embed pre,
+      .facebook-embed pre,
+      .instagram-embed pre,
+      .youtube-embed pre {
+        max-width: 100%;
+        overflow: auto;
+        background-color: transparent;
+        padding: 0;
+        margin: 0;
+        box-shadow: none;
+        border: none;
+      }
+
+      /* Fix spacing for article content elements */
+      .article-content p:last-child {
+        margin-bottom: 0;
+      }
+
+      /* Prevent raw URLs from breaking layout */
+      .article-content a {
+        word-break: break-word;
+      }
+
+      /* Clean display for code snippets */
+      .article-content code {
+        background-color: rgba(0, 0, 0, 0.05);
+        padding: 0.2em 0.4em;
+        border-radius: 3px;
+        font-family: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+          'Courier New', monospace;
+        font-size: 0.9em;
+      }
+
+      body.dark-mode .article-content code {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+
+      /* Make sure lists look good */
+      .article-content ul,
+      .article-content ol {
+        padding-left: 2rem;
+      }
+
+      .article-content li {
+        margin-bottom: 0.5rem;
+      }
+
+      /* Better spacing for images within text */
+      .inArticleImage {
+        margin: 2rem 0;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      /* Ensure images don't break layout */
+      .article-content img {
+        max-width: 100%;
+        height: auto;
+      }
+
+      /* Special styling for featured image */
+      .featured-image {
+        margin-top: 1.5rem;
+        margin-bottom: 2.5rem;
+      }
+
+      /* Make paragraphs readable */
+      .article-content p {
+        font-size: 1.1rem;
+        line-height: 1.7;
+        margin-bottom: 1.5rem;
+      }
+
+      /* Better headings in article */
+      .article-content h2,
+      .article-content h3,
+      .article-content h4 {
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+      }
+    </style>
   </head>
   <body>
-    <script type="module" src="index.js"></script>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light py-3">
+      <div class="container">
+        <a class="navbar-brand" href="/">
+          <strong>RDV News API</strong>
+        </a>
+        <div class="ms-auto d-flex align-items-center">
+          <div class="color-mode-toggle me-3" id="colorModeToggle">
+            <i class="bi bi-moon-fill"></i>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container mb-5" id="contentContainer">
+      <div class="text-center mb-5">
+        <h1>Article Preview</h1>
+        <p class="lead">Select an article to preview</p>
+
+        <div class="mb-4">
+          <select class="form-select mb-3" id="sectionSelect">
+            <option value="" selected>Select a section...</option>
+            <!-- Sections will be populated by JavaScript -->
+          </select>
+        </div>
+
+        <div class="mb-4">
+          <select class="form-select mb-3" id="articleSelect" disabled>
+            <option value="" selected>Select an article...</option>
+            <!-- Articles will be populated after selecting a section -->
+          </select>
+        </div>
+
+        <div class="mb-4">
+          <button
+            type="button"
+            class="btn btn-outline-secondary btn-sm"
+            id="testApiBtn"
+          >
+            Test API Connection
+          </button>
+        </div>
+      </div>
+
+      <div id="apiUrlDisplay" class="api-url-display d-none">
+        <!-- API URL will be shown here -->
+      </div>
+
+      <div id="debugInfo" class="debug-info d-none">
+        <!-- Debug info will be shown here -->
+      </div>
+
+      <div id="articlePreview">
+        <!-- Article preview will be rendered here -->
+      </div>
+    </div>
+
+    <script>
+      // Dark mode toggle
+      const colorModeToggle = document.getElementById('colorModeToggle')
+      const body = document.body
+
+      // Check for saved preference
+      if (localStorage.getItem('darkMode') === 'enabled') {
+        body.classList.add('dark-mode')
+        colorModeToggle.innerHTML = '<i class="bi bi-sun-fill"></i>'
+      }
+
+      colorModeToggle.addEventListener('click', () => {
+        if (body.classList.contains('dark-mode')) {
+          body.classList.remove('dark-mode')
+          colorModeToggle.innerHTML = '<i class="bi bi-moon-fill"></i>'
+          localStorage.setItem('darkMode', 'disabled')
+        } else {
+          body.classList.add('dark-mode')
+          colorModeToggle.innerHTML = '<i class="bi bi-sun-fill"></i>'
+          localStorage.setItem('darkMode', 'enabled')
+        }
+      })
+
+      // Get references to the elements
+      const sectionSelect = document.getElementById('sectionSelect')
+      const articleSelect = document.getElementById('articleSelect')
+      const articlePreview = document.getElementById('articlePreview')
+      const apiUrlDisplay = document.getElementById('apiUrlDisplay')
+      const debugInfo = document.getElementById('debugInfo')
+      const testApiBtn = document.getElementById('testApiBtn')
+
+      // Helper function to show debug info
+      function showDebugInfo(title, data) {
+        debugInfo.innerHTML = `<h5>${title}</h5>`
+
+        if (typeof data === 'object') {
+          debugInfo.innerHTML += `<pre>${JSON.stringify(data, null, 2)}</pre>`
+        } else {
+          debugInfo.innerHTML += `<pre>${data}</pre>`
+        }
+
+        debugInfo.classList.remove('d-none')
+      }
+
+      // Helper function to show loading state
+      function showLoading(element, isLoading = true) {
+        if (isLoading) {
+          element.innerHTML = '<div class="loading-spinner"></div> Loading...'
+        }
+      }
+
+      // Helper function for API requests with better error handling
+      async function fetchWithErrorHandling(url, options = {}) {
+        try {
+          showDebugInfo('Fetching', { url })
+
+          const response = await fetch(url, options)
+
+          // Check if the response is OK
+          if (!response.ok) {
+            throw new Error(
+              `HTTP error ${response.status}: ${response.statusText}`
+            )
+          }
+
+          // Check if the response is JSON
+          const contentType = response.headers.get('content-type')
+          if (!contentType || !contentType.includes('application/json')) {
+            // Try to get the text to see what was returned
+            const text = await response.text()
+            console.error('Non-JSON response:', text)
+
+            showDebugInfo('Received non-JSON response', {
+              contentType,
+              responseText:
+                text.substring(0, 500) + (text.length > 500 ? '...' : ''),
+            })
+
+            throw new Error(
+              `Expected JSON but got ${contentType || 'unknown content type'}`
+            )
+          }
+
+          // Parse the JSON
+          const data = await response.json()
+          showDebugInfo('Response data', data)
+          return data
+        } catch (error) {
+          console.error(`Error fetching ${url}:`, error)
+          throw error
+        }
+      }
+
+      // Test API connection
+      testApiBtn.addEventListener('click', async () => {
+        try {
+          articlePreview.innerHTML =
+            '<div class="alert alert-info">Testing API connection...</div>'
+          const data = await fetchWithErrorHandling('/api/test')
+          articlePreview.innerHTML = `
+            <div class="alert alert-success">
+              <h4>API Connection Successful!</h4>
+              <p>Message: ${data.message}</p>
+              <p>Timestamp: ${data.timestamp}</p>
+              <p>Sections available: ${data.sections?.join(', ') || 'None'}</p>
+            </div>
+          `
+        } catch (error) {
+          articlePreview.innerHTML = `
+            <div class="alert alert-danger">
+              <h4>API Connection Failed</h4>
+              <p>${error.message}</p>
+              <p>Please check that your API server is running.</p>
+              <p>Try running: <code>npm start</code> in your terminal</p>
+            </div>
+          `
+        }
+      })
+
+      // Fetch and populate sections
+      async function getSections() {
+        try {
+          showLoading(articlePreview)
+          const sections = await fetchWithErrorHandling('/api/sections')
+
+          // Check if sections is an array
+          if (!Array.isArray(sections)) {
+            showDebugInfo('Sections is not an array', sections)
+            throw new Error('Unexpected format: sections is not an array')
+          }
+
+          if (sections.length === 0) {
+            throw new Error('No sections available')
+          }
+
+          // Clear loading indicator
+          articlePreview.innerHTML = ''
+
+          // Populate the select
+          sections.forEach((section) => {
+            const option = document.createElement('option')
+            option.value = section.id
+            option.textContent = section.name
+            option.dataset.color = section.color
+            sectionSelect.appendChild(option)
+          })
+
+          return sections
+        } catch (error) {
+          console.error('Error fetching sections:', error)
+          articlePreview.innerHTML = `
+            <div class="alert alert-danger">
+              <h4>Error: Could not load sections</h4>
+              <p>${error.message}</p>
+              <p>Possible causes:</p>
+              <ul>
+                <li>API server is not running</li>
+                <li>There's an issue with the /api/sections endpoint</li>
+                <li>The server returned invalid data</li>
+              </ul>
+              <p>Please check your console for more details.</p>
+            </div>
+          `
+          throw error
+        }
+      }
+
+      // Handle section selection
+      sectionSelect.addEventListener('change', async function () {
+        const sectionId = this.value
+
+        // Clear article select and preview
+        articleSelect.innerHTML =
+          '<option value="" selected>Select an article...</option>'
+        articlePreview.innerHTML = ''
+        apiUrlDisplay.classList.add('d-none')
+        debugInfo.classList.add('d-none')
+
+        if (sectionId) {
+          articleSelect.disabled = false
+          showLoading(articlePreview)
+
+          try {
+            // Show API URL being accessed
+            apiUrlDisplay.textContent = `API Endpoint: /api/articles/${sectionId}`
+            apiUrlDisplay.classList.remove('d-none')
+
+            const articles = await fetchWithErrorHandling(
+              `/api/articles/${sectionId}`
+            )
+
+            // Clear loading indicator
+            articlePreview.innerHTML = ''
+
+            // Check if articles is an array
+            if (!Array.isArray(articles)) {
+              showDebugInfo('Articles is not an array', articles)
+              throw new Error('Unexpected format: articles is not an array')
+            }
+
+            if (articles.length === 0) {
+              articleSelect.disabled = true
+              articlePreview.innerHTML = `
+                <div class="alert alert-info">
+                  <h4>No Articles Found</h4>
+                  <p>No articles found in this section.</p>
+                  <p>You may need to fetch some articles first.</p>
+                  <p>Try running: <code>npm run fetch:${sectionId}</code></p>
+                </div>
+              `
+              return
+            }
+
+            articles.forEach((article) => {
+              const option = document.createElement('option')
+              option.value = article.id
+              option.textContent = article.title
+              articleSelect.appendChild(option)
+            })
+          } catch (error) {
+            console.error('Error fetching articles:', error)
+            articlePreview.innerHTML = `
+              <div class="alert alert-danger">
+                <h4>Error: Could not load articles</h4>
+                <p>${error.message}</p>
+                <p>URL: /api/articles/${sectionId}</p>
+                <p>Please check your browser console for more details.</p>
+              </div>
+            `
+          }
+        } else {
+          articleSelect.disabled = true
+        }
+      })
+
+      // Handle article selection
+      articleSelect.addEventListener('change', async function () {
+        const articleId = this.value
+        const sectionId = sectionSelect.value
+
+        articlePreview.innerHTML = ''
+        apiUrlDisplay.classList.add('d-none')
+        debugInfo.classList.add('d-none')
+
+        if (articleId) {
+          showLoading(articlePreview)
+
+          try {
+            // Show API URL being accessed
+            const apiUrl = `/api/article/${sectionId}/${articleId}`
+            apiUrlDisplay.textContent = `API Endpoint: ${apiUrl}`
+            apiUrlDisplay.classList.remove('d-none')
+
+            const article = await fetchWithErrorHandling(apiUrl)
+
+            // Render the article
+            articlePreview.innerHTML = renderArticle(article)
+          } catch (error) {
+            console.error('Error fetching article:', error)
+            articlePreview.innerHTML = `
+              <div class="alert alert-danger">
+                <h4>Error: Could not load article</h4>
+                <p>${error.message}</p>
+                <p>URL: /api/article/${sectionId}/${articleId}</p>
+                <p>Please check your browser console for more details.</p>
+              </div>
+            `
+          }
+        }
+      })
+
+      // Update the renderArticle function in your script section:
+
+      // Function to render the article
+      // Replace the existing renderArticle function with this improved version:
+
+      // Replace your current renderArticle function with this implementation:
+
+      // Function to render the article with better image placement
+      function renderArticle(article) {
+        if (!article || !article.content) {
+          return '<div class="alert alert-danger">Invalid article data</div>'
+        }
+
+        let html = ''
+
+        // Section indicator
+        if (article.section) {
+          html += `
+      <div class="section-badge" style="background-color: ${
+        article.section.color || '#6c757d'
+      }; color: white">
+        ${article.section.name || 'News'}
+      </div>
+    `
+        }
+
+        // Organize content items by type for easier handling
+        const headerItems = article.content.filter((item) =>
+          ['volanta', 'title', 'bajada'].includes(item.type)
+        )
+
+        const featuredImage = article.content.find(
+          (item) => item.type === 'featuredImage'
+        )
+
+        const textSection = article.content.find(
+          (item) => item.type === 'textSection'
+        )
+
+        const articleImages = article.content.filter(
+          (item) => item.type === 'inArticleImage'
+        )
+
+        const embeds = article.content.filter((item) => item.type === 'embed')
+
+        const sourceAttribution = article.content.find(
+          (item) => item.type === 'sourceAttribution'
+        )
+
+        // Render header content (volanta, title, bajada)
+        headerItems.forEach((item) => {
+          switch (item.type) {
+            case 'volanta':
+              html += `<div class="article-volanta">${item.content}</div>`
+              break
+            case 'title':
+              html += `<h1 class="article-title">${item.content}</h1>`
+              break
+            case 'bajada':
+              html += `<div class="article-bajada">${item.content}</div>`
+              break
+          }
+        })
+
+        // Add featured image if available
+        if (featuredImage) {
+          html += `
+      <figure class="figure featured-image w-100 mb-4">
+        <img src="${featuredImage.url}" alt="${
+            featuredImage.altText || 'Featured image'
+          }" class="article-featured-image">
+        ${
+          featuredImage.caption
+            ? `<figcaption class="figure-caption">${featuredImage.caption}</figcaption>`
+            : ''
+        }
+      </figure>
+    `
+        }
+
+        // Process main text content with interspersed images
+        if (textSection) {
+          // Create an article content wrapper
+          html += `<div class="article-content">`
+
+          const content = textSection.content
+
+          // Process markdown to HTML
+          let processedContent = content
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/^### (.*$)/gm, '<h4>$1</h4>')
+            .replace(/^## (.*$)/gm, '<h3>$1</h3>')
+            .replace(/^# (.*$)/gm, '<h2>$1</h2>')
+            .replace(/^\> (.*$)/gm, '<blockquote>$1</blockquote>')
+            .replace(/^\* (.*$)/gm, '<li>$1</li>')
+            // Remove any URLs that might be in the text
+            .replace(/https?:\/\/\S+\.(jpg|jpeg|png|gif|webp)/gi, '')
+            .replace(/https?:\/\/\S+/g, '')
+
+          // Split into paragraphs
+          const paragraphs = processedContent
+            .split(/\n\s*\n/)
+            .filter((p) => p.trim().length > 0)
+            .map((p) => `<p>${p}</p>`)
+
+          // Create an array to hold all content elements in order
+          const contentElements = []
+
+          // Add paragraphs to contentElements
+          paragraphs.forEach((paragraph, index) => {
+            contentElements.push({
+              type: 'paragraph',
+              content: paragraph,
+              index: index,
+            })
+          })
+
+          // Add images with their positions
+          articleImages.forEach((image) => {
+            // Extract the paragraph position from the position attribute
+            let position = paragraphs.length // Default to end
+
+            if (image.position && typeof image.position === 'string') {
+              const match = image.position.match(/after-paragraph-(\d+)/)
+              if (match && match[1]) {
+                position = parseInt(match[1])
+                // Make sure position is valid
+                if (position > paragraphs.length) {
+                  position = paragraphs.length
+                }
+              }
+            }
+
+            contentElements.push({
+              type: 'image',
+              content: `
+          <figure class="inArticleImage">
+            <img src="${image.url}" alt="${
+                image.altText || 'Article image'
+              }" class="img-fluid">
+            ${image.caption ? `<figcaption>${image.caption}</figcaption>` : ''}
+          </figure>
+        `,
+              index: position - 0.5, // Position between paragraphs
+            })
+          })
+
+          // Sort content elements by index
+          contentElements.sort((a, b) => a.index - b.index)
+
+          // Add all content elements in order
+          contentElements.forEach((element) => {
+            html += element.content
+          })
+
+          html += `</div>`
+        }
+
+        // Add embeds after content
+        if (embeds.length > 0) {
+          html += `<div class="article-embeds mt-4">`
+
+          embeds.forEach((item) => {
+            html += `<div class="embed-container">`
+
+            // Clean embed display without titles
+            if (item.embedType === 'twitter') {
+              html += `<div class="social-embed twitter-embed">${item.content}</div>`
+            } else if (item.embedType === 'instagram') {
+              html += `<div class="social-embed instagram-embed">${item.content}</div>`
+            } else if (item.embedType === 'facebook') {
+              html += `<div class="social-embed facebook-embed">${item.content}</div>`
+            } else if (item.embedType === 'youtube') {
+              html += `<div class="social-embed youtube-embed">${item.content}</div>`
+            } else {
+              html += `<div class="social-embed">${item.content}</div>`
+            }
+
+            html += `</div>`
+          })
+
+          html += `</div>`
+        }
+
+        // Source attribution at the end
+        if (sourceAttribution) {
+          html += `
+      <div class="source-attribution">
+        <a href="${sourceAttribution.url}" target="_blank" rel="noopener noreferrer">
+          ${sourceAttribution.text} <i class="bi bi-box-arrow-up-right"></i>
+        </a>
+      </div>
+    `
+        }
+
+        return html
+      }
+
+      // Get query parameters to preselect section and article
+      const urlParams = new URLSearchParams(window.location.search)
+      const sectionParam = urlParams.get('section')
+      const articleParam = urlParams.get('article')
+
+      // Initialize
+      window.addEventListener('DOMContentLoaded', async () => {
+        try {
+          await getSections()
+
+          // Preselect section if provided in URL
+          if (sectionParam) {
+            sectionSelect.value = sectionParam
+            sectionSelect.dispatchEvent(new Event('change'))
+
+            // Wait for articles to load then select article
+            if (articleParam) {
+              setTimeout(() => {
+                articleSelect.value = articleParam
+                articleSelect.dispatchEvent(new Event('change'))
+              }, 1000)
+            }
+          }
+        } catch (error) {
+          console.error('Error initializing:', error)
+        }
+      })
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   </body>
 </html>
