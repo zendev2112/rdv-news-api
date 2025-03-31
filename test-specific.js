@@ -2,14 +2,15 @@ require('dotenv').config();
 const axios = require('axios');
 
 // Configure with your specific record details
-const RECORD_ID = 'recuT2Up1IvpVk23k' // Your specific Airtable record ID
-const TABLE_NAME = 'Agro';     // Your Airtable table name
-const API_URL = 'https://c0ec-131-196-0-163.ngrok-free.app'
+const RECORD_ID = 'recPOZ1urGa2h3nMX' // Your specific Airtable record ID
+const TABLE_NAME = 'Primera Plana';     // Your Airtable table name
+const API_URL = 'http://localhost:3000';
 const SECRET_KEY = process.env.AIRTABLE_WEBHOOK_SECRET;
 
 async function publishSpecificRecord() {
   try {
     console.log(`Publishing record ${RECORD_ID} from table ${TABLE_NAME}...`);
+    console.log(`Using API URL: ${API_URL}`);
     
     // First test the API health endpoint
     console.log('Testing API health endpoint...');
@@ -23,6 +24,7 @@ async function publishSpecificRecord() {
     }
     
     // Proceed with the publish request
+    console.log('Sending publish request...');
     const response = await axios.post(
       `${API_URL}/api/publish/${RECORD_ID}`,
       {
@@ -42,6 +44,8 @@ async function publishSpecificRecord() {
     if (error.response) {
       console.error(`Status: ${error.response.status}`);
       console.error('Response:', error.response.data);
+    } else if (error.request) {
+      console.error('No response received:', error.message);
     } else {
       console.error('Error:', error.message);
     }

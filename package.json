@@ -1,9 +1,10 @@
 {
   "name": "rdv-news-api",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
     "fetch": "node fetch-to-airtable.js",
     "fetch:section": "node fetch-to-airtable.js",
     "fetch:all": "node fetch-to-airtable.js --all",
@@ -13,12 +14,16 @@
     "fetch:economia": "node fetch-to-airtable.js economia",
     "fetch:lifestyle": "node fetch-to-airtable.js lifestyle",
     "check-airtable": "node check-airtable.js",
-    "schedule": "node scheduler.js"
+    "schedule": "node scheduler.js",
+    "vercel-build": "echo 'Build step completed'"
+  },
+  "engines": {
+    "node": ">=18.x"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "API for publishing Airtable records to Supabase",
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
     "@mozilla/readability": "^0.6.0",
@@ -28,15 +33,20 @@
     "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
+    "date-fns": "^4.1.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsdom": "^26.0.0",
     "morgan": "^1.10.0",
+    "next-pwa": "^5.6.0",
     "node-cron": "^3.0.3",
     "openai": "^4.87.4",
     "promisify": "^0.0.3",
+    "react-icons": "^5.5.0",
+    "react-youtube": "^10.1.0",
     "sharp": "^0.33.5",
     "supabase": "^2.20.3",
+    "workbox-window": "^7.3.0",
     "yargs": "^17.7.2"
   },
   "devDependencies": {
