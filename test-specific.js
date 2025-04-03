@@ -2,7 +2,7 @@ require('dotenv').config();
 const axios = require('axios');
 
 // Configure with your specific record details
-const RECORD_ID = 'recPOZ1urGa2h3nMX' // Your specific Airtable record ID
+const RECORD_ID = 'recnYFMfzlmmtc3uD' // Your specific Airtable record ID
 const TABLE_NAME = 'Primera Plana';     // Your Airtable table name
 const API_URL = 'http://localhost:3000';
 const SECRET_KEY = process.env.AIRTABLE_WEBHOOK_SECRET;

@@ -13,6 +13,9 @@
     "fetch:deportes": "node fetch-to-airtable.js deportes",
     "fetch:economia": "node fetch-to-airtable.js economia",
     "fetch:lifestyle": "node fetch-to-airtable.js lifestyle",
+    "fetch:instituciones": "node fetch-to-airtable.js instituciones",
+    "process:social": "node src/scripts/process-social-media.js",
+    "social:full": "npm run fetch:instituciones && npm run process:social",
     "check-airtable": "node check-airtable.js",
     "schedule": "node scheduler.js",
     "vercel-build": "echo 'Build step completed'"
