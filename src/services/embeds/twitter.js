@@ -1,5 +1,6 @@
-const { JSDOM } = require('jsdom')
-const logger = require('../../utils/logger')
+import { JSDOM } from 'jsdom';
+import logger from '../../utils/logger.js'
+
 
 /**
  * Extracts Twitter embeds from HTML content
@@ -107,6 +108,4 @@ function extractTwitterEmbeds(htmlContent) {
   }
 }
 
-module.exports = {
-    extractTwitterEmbeds
-}
+export { extractTwitterEmbeds };

@@ -1,35 +1,108 @@
-const axios = require('axios')
-const { JSDOM } = require('jsdom')
-const { Readability } = require('@mozilla/readability')
-const { GoogleGenerativeAI } = require('@google/generative-ai')
-const path = require('path')
-const fs = require('fs')
-const config = require('./src/config')
-const cheerio = require('cheerio') // Make sure to install this: npm install cheerio
+import axios from 'axios';
+import { JSDOM } from 'jsdom';
+import { Readability } from '@mozilla/readability';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+import * as configModule from './src/config/index.js';
+import * as cheerio from 'cheerio';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
 
-// Parse command line arguments
-const args = process.argv.slice(2)
-const processAllSections = args.includes('--all')
-const requestedSectionId = args.find((arg) => !arg.startsWith('--'))
+// Setup dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Setup yargs for ES modules
+const args = yargs(hideBin(process.argv))
+  .option('all', {
+    alias: 'a',
+    description: 'Process all sections',
+    type: 'boolean'
+  })
+  .option('limit', {
+    alias: 'l',
+    description: 'Limit the number of articles to fetch per section',
+    type: 'number'
+  })
+  .help()
+  .parse();
+
+// Extract config from module
+const config = configModule.default;
+
+// Log the full config object to debug
+console.log('Config structure:', Object.keys(config || {}));
+
+// Define helper functions that use config without modifying it
+function getSections() {
+  if (config && typeof config.getSections === 'function') {
+    return config.getSections();
+  }
+  return config?.sections || [];
+}
+
+function getSection(sectionId) {
+  if (config && typeof config.getSection === 'function') {
+    return config.getSection(sectionId);
+  }
+  return (config?.sections || []).find(section => section.id === sectionId) || null;
+}
+
+function getDefaultSection() {
+  if (config && typeof config.getDefaultSection === 'function') {
+    return config.getDefaultSection();
+  }
+  return (config?.sections || [])[0] || null;
+}
+
+// Log config for debugging
+console.log('Config sections available:', config.sections ? config.sections.length : 0);
+console.log('Config imported properly:', !!config);
+console.log('Config sections:', config.sections);
+console.log('Config gemini:', config.gemini);
+console.log('Config getSection function:', typeof config.getSection);
+
+// Store the limit for use throughout the script
+const ITEM_LIMIT = args.limit || Infinity; // Default to no limit if not specified
+
+console.log(`Fetch limit: ${ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT} items per section`);
 
 // Determine which section(s) to process
-let sectionsToProcess = []
+let sectionsToProcess = [];
 
-if (processAllSections) {
+if (args.all) {
   // Process all sections
-  sectionsToProcess = config.sections
-} else if (requestedSectionId) {
+  sectionsToProcess = getSections();
+  console.log('Processing all sections');
+} else if (args._[0]) {
   // Process specific section
-  const section = config.getSection(requestedSectionId)
+  const requestedSectionId = args._[0];
+  const section = getSection(requestedSectionId);
   if (section) {
-    sectionsToProcess = [section]
+    sectionsToProcess = [section];
+    console.log(`Processing section: ${section.name}`);
   } else {
-    console.error(`Section "${requestedSectionId}" not found`)
-    process.exit(1)
+    console.error(`Section "${requestedSectionId}" not found`);
+    process.exit(1);
   }
 } else {
-  // Default to the test section
-  sectionsToProcess = [config.getDefaultSection()]
+  // Default to the test section if available, otherwise first section
+  const defaultSection = getDefaultSection();
+  if (defaultSection) {
+    sectionsToProcess = [defaultSection];
+    console.log(`Processing default section: ${defaultSection.name}`);
+  } else {
+    const allSections = getSections();
+    if (allSections && allSections.length > 0) {
+      sectionsToProcess = [allSections[0]];
+      console.log(`Processing first available section: ${allSections[0].name}`);
+    } else {
+      console.error('No sections found in configuration');
+      process.exit(1);
+    }
+  }
 }
 
 console.log(
@@ -42,21 +115,23 @@ console.log(
 let airtableService, embeds
 
 try {
-  const services = require('./src/services')
-  airtableService = services.airtableService
-  embeds = services.embeds
-  console.log('Successfully loaded services')
+  // ES module import
+  const servicesModule = await import('./src/services/index.js');
+  airtableService = servicesModule.airtableService;
+  embeds = servicesModule.embeds;
+  console.log('Successfully loaded services');
 } catch (error) {
-  console.error('Error loading services:', error.message)
+  console.error('Error loading services:', error.message);
   console.error(
     'Make sure you have created all the necessary files in src/services'
-  )
-  process.exit(1)
+  );
+  process.exit(1);
 }
 
 // Configuration from config file
-const GEMINI_API_KEY = config.gemini.apiKey
-const MODEL_NAME = config.gemini.model
+const GEMINI_API_KEY = config?.gemini?.apiKey || process.env.GEMINI_API_KEY || '';
+console.log('Using GEMINI_API_KEY:', GEMINI_API_KEY ? 'API key found' : 'No API key');
+const GEMINI_MODEL = config?.gemini?.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const BATCH_SIZE = 2 // Reduced from 3 to 2
 const FEED_SIZE = 50 // Original feed size
 const API_DELAY = 3000 // 3 seconds delay between API calls
@@ -71,7 +146,7 @@ if (!fs.existsSync(STATE_DIR)) {
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY)
-const model = genAI.getGenerativeModel({ model: MODEL_NAME })
+const model = genAI.getGenerativeModel({ model: GEMINI_MODEL })
 
 /**
  * Load the persisted state for a section
@@ -889,7 +964,7 @@ async function processArticle(item, sectionId) {
     }
 
     // Get section information
-    const section = config.getSection(sectionId)
+    const section = getSection(sectionId)
 
     // Prepare record
     const attachments = item.attachments || []
@@ -1019,8 +1094,12 @@ async function processSection(section) {
         `Found ${newItems.length} new items to process for ${section.name}`
       )
 
-      // Process social media items
-      for (const item of newItems) {
+      // Apply the limit
+      const limitedItems = newItems.slice(0, ITEM_LIMIT);
+      console.log(`Processing ${limitedItems.length} social media items (limit: ${ITEM_LIMIT})`);
+      
+      // Process the limited items
+      for (const item of limitedItems) {
         try {
           console.log(
             `Processing social media item: ${item.title || 'Untitled'}`
@@ -1163,13 +1242,20 @@ const recordFields = {
       `Found ${newItems.length} new items to process for ${section.name}`
     )
 
-    // Process items in smaller batches
-    for (let i = 0; i < newItems.length; i += BATCH_SIZE) {
-      const batchItems = newItems.slice(i, i + BATCH_SIZE)
+    // Add limit before processing items
+    console.log(`Found ${newItems.length} items in ${section.name}`);
+    
+    // Apply the limit
+    const limitedItems = newItems.slice(0, ITEM_LIMIT);
+    console.log(`Processing ${limitedItems.length} items (limit: ${ITEM_LIMIT})`);
+    
+    // Process the limited items instead of all items
+    for (let i = 0; i < limitedItems.length; i += BATCH_SIZE) {
+      const batchItems = limitedItems.slice(i, i + BATCH_SIZE)
       console.log(
         `\n=== Processing batch ${
           Math.floor(i / BATCH_SIZE) + 1
-        } of ${Math.ceil(newItems.length / BATCH_SIZE)} for ${
+        } of ${Math.ceil(limitedItems.length / BATCH_SIZE)} for ${
           section.name
         } ===\n`
       )
@@ -1192,7 +1278,7 @@ const recordFields = {
       }
 
       // Add a longer delay between batches
-      if (i + BATCH_SIZE < newItems.length) {
+      if (i + BATCH_SIZE < limitedItems.length) {
         console.log(
           `Waiting ${
             BATCH_DELAY / 1000
@@ -1241,7 +1327,55 @@ async function processAllRequestedSections() {
   }
 }
 
-// Start processing
+// Look for a function like fetchFeed or getFeedItems
+
+async function fetchFeed(feedUrl) {
+  // Existing code to fetch and parse the feed...
+  
+  // After you have the items array, apply the limit
+  const limitedItems = items.slice(0, ITEM_LIMIT);
+  console.log(`Fetched ${items.length} items, returning ${limitedItems.length} (limit: ${ITEM_LIMIT})`);
+  
+  return limitedItems; // Return limited items
+}
+
+// Look for any functions with maxItems, limit, or similar parameters
+
+// For example:
+async function fetchSourceItems(source, maxItems) {
+  // If the function already has a maxItems parameter,
+  // make sure it's respecting the global limit
+  const effectiveLimit = maxItems || ITEM_LIMIT;
+  
+  // Use effectiveLimit in your code...
+}
+
+// Near the end of your file where the main execution happen
+
+// If --all flag is specified, process all sections
+if (args.all) {
+  console.log('Processing all sections with limit:', ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT);
+  const allSections = getSections();
+  for (const section of allSections) {
+    await processSection(section); // This will use the ITEM_LIMIT
+  }
+  process.exit(0);
+}
+
+// Process specific section if provided
+const sectionName = args._[0];
+if (sectionName) {
+  console.log(`Processing section: ${sectionName} with limit:`, ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT);
+  const section = getSection(sectionName);
+  if (section) {
+    await processSection(section); // This will use the ITEM_LIMIT
+  } else {
+    console.error(`Section not found: ${sectionName}`);
+  }
+  process.exit(0);
+}
+
+// Start processing 
 processAllRequestedSections()
   .then(() => console.log('Process completed'))
   .catch((error) => console.error('Process failed:', error.message))

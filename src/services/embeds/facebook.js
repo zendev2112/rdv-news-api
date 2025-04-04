@@ -1,5 +1,5 @@
-const { JSDOM } = require('jsdom')
-const logger = require('../../utils/logger')
+import { JSDOM } from 'jsdom';
+
 
 /**
  * Extracts Facebook embeds from HTML content
@@ -156,6 +156,4 @@ function extractFacebookEmbeds(htmlContent) {
   }
 }
 
-module.exports = {
-  extractFacebookEmbeds,
-}
+export { extractFacebookEmbeds };

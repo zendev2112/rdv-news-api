@@ -1,5 +1,6 @@
-const { JSDOM } = require('jsdom')
-const logger = require('../../utils/logger')
+import { JSDOM } from 'jsdom';
+import logger from '../../utils/logger.js'
+
 
 /**
  * Extracts Instagram embeds from HTML content
@@ -56,6 +57,4 @@ function extractInstagramEmbeds(htmlContent) {
   }
 }
 
-module.exports = {
-  extractInstagramEmbeds,
-}
+export { extractInstagramEmbeds };

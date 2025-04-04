@@ -1,4 +1,5 @@
-require('dotenv').config()
+import dotenv from 'dotenv';
+dotenv.config();
 
 const NEWS_SECTIONS = [
   {
@@ -55,7 +56,7 @@ const NEWS_SECTIONS = [
     icon: 'public',
     priority: 6,
   },
-]
+];
 
 const config = {
   port: process.env.PORT || 3001,
@@ -68,24 +69,26 @@ const config = {
   },
 
   gemini: {
-    apiKey: process.env.GEMINI_API_KEY,
-    model: 'gemini-2.0-flash',
+    apiKey: process.env.GEMINI_API_KEY || '',
+    model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
   },
 
   sections: NEWS_SECTIONS,
 
   // Find a section by its ID
   getSection(sectionId) {
-    return (
-      this.sections.find((section) => section.id === sectionId) ||
-      this.sections.find((section) => section.id === 'test')
-    )
+    return this.sections.find((section) => section.id === sectionId) || null;
   },
 
   // Get default section
   getDefaultSection() {
-    return this.sections.find((section) => section.id === 'test')
+    return this.sections[0] || null;
   },
-}
 
-module.exports = config
+  // Get all sections
+  getSections() {
+    return this.sections;
+  },
+};
+
+export default config;

@@ -1,5 +1,5 @@
-const { JSDOM } = require('jsdom')
-const logger = require('../../utils/logger')
+import { JSDOM } from 'jsdom';
+
 
 /**
  * Extracts Youtube embeds from HTML content
@@ -169,6 +169,4 @@ function extractYoutubeEmbeds(htmlContent) {
   }
 }
 
-module.exports = {
-    extractYoutubeEmbeds
-}
+export { extractYoutubeEmbeds };

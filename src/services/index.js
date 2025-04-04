@@ -1,9 +1,9 @@
-const airtableService = require('./airtable')
-const { structureArticleData } = require('./structureBuilder')
-const embeds = require('./embeds')
+import airtableService from './airtable.js';
 
-module.exports = {
+import * as embeds from './embeds/index.js';
+
+export {
   airtableService,
-  structureArticleData,
+ 
   embeds,
-}
+};
