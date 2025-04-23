@@ -4,18 +4,18 @@
   "framework": null,
   "builds": [
     {
-      "src": "api/**/*.{js,cjs}",
+      "src": "pages/**/*.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "dest": "/pages/api/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "/api/index.cjs"
+      "dest": "/pages/index.js"
     }
   ]
 }
