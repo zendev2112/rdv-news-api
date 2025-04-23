@@ -1,106 +1,120 @@
-import axios from 'axios';
-import { JSDOM } from 'jsdom';
-import { Readability } from '@mozilla/readability';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
-import * as configModule from './src/config/index.js';
-import * as cheerio from 'cheerio';
-import yargs from 'yargs';
-import { hideBin } from 'yargs/helpers';
+import axios from 'axios'
+import { JSDOM } from 'jsdom'
+import { Readability } from '@mozilla/readability'
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import fs from 'fs'
+import * as configModule from './src/config/index.js'
+import * as cheerio from 'cheerio'
+import yargs from 'yargs'
+import { hideBin } from 'yargs/helpers'
 
 // Setup dirname equivalent for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // Setup yargs for ES modules
 const args = yargs(hideBin(process.argv))
   .option('all', {
     alias: 'a',
     description: 'Process all sections',
-    type: 'boolean'
+    type: 'boolean',
   })
   .option('limit', {
     alias: 'l',
     description: 'Limit the number of articles to fetch per section',
-    type: 'number'
+    type: 'number',
+  })
+  .option('force', {
+    alias: 'f',
+    description: 'Force reprocessing of already processed articles',
+    type: 'boolean',
   })
   .help()
-  .parse();
+  .parse()
 
 // Extract config from module
-const config = configModule.default;
+const config = configModule.default
 
 // Log the full config object to debug
-console.log('Config structure:', Object.keys(config || {}));
+console.log('Config structure:', Object.keys(config || {}))
 
 // Define helper functions that use config without modifying it
 function getSections() {
   if (config && typeof config.getSections === 'function') {
-    return config.getSections();
+    return config.getSections()
   }
-  return config?.sections || [];
+  return config?.sections || []
 }
 
 function getSection(sectionId) {
   if (config && typeof config.getSection === 'function') {
-    return config.getSection(sectionId);
+    return config.getSection(sectionId)
   }
-  return (config?.sections || []).find(section => section.id === sectionId) || null;
+  return (
+    (config?.sections || []).find((section) => section.id === sectionId) || null
+  )
 }
 
 function getDefaultSection() {
   if (config && typeof config.getDefaultSection === 'function') {
-    return config.getDefaultSection();
+    return config.getDefaultSection()
   }
-  return (config?.sections || [])[0] || null;
+  return (config?.sections || [])[0] || null
 }
 
 // Log config for debugging
-console.log('Config sections available:', config.sections ? config.sections.length : 0);
-console.log('Config imported properly:', !!config);
-console.log('Config sections:', config.sections);
-console.log('Config gemini:', config.gemini);
-console.log('Config getSection function:', typeof config.getSection);
+console.log(
+  'Config sections available:',
+  config.sections ? config.sections.length : 0
+)
+console.log('Config imported properly:', !!config)
+console.log('Config sections:', config.sections)
+console.log('Config gemini:', config.gemini)
+console.log('Config getSection function:', typeof config.getSection)
 
 // Store the limit for use throughout the script
-const ITEM_LIMIT = args.limit || Infinity; // Default to no limit if not specified
+const ITEM_LIMIT = args.limit || Infinity // Default to no limit if not specified
 
-console.log(`Fetch limit: ${ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT} items per section`);
+console.log(
+  `Fetch limit: ${
+    ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT
+  } items per section`
+)
 
 // Determine which section(s) to process
-let sectionsToProcess = [];
+let sectionsToProcess = []
 
 if (args.all) {
   // Process all sections
-  sectionsToProcess = getSections();
-  console.log('Processing all sections');
+  sectionsToProcess = getSections()
+  console.log('Processing all sections')
 } else if (args._[0]) {
   // Process specific section
-  const requestedSectionId = args._[0];
-  const section = getSection(requestedSectionId);
+  const requestedSectionId = args._[0]
+  const section = getSection(requestedSectionId)
   if (section) {
-    sectionsToProcess = [section];
-    console.log(`Processing section: ${section.name}`);
+    sectionsToProcess = [section]
+    console.log(`Processing section: ${section.name}`)
   } else {
-    console.error(`Section "${requestedSectionId}" not found`);
-    process.exit(1);
+    console.error(`Section "${requestedSectionId}" not found`)
+    process.exit(1)
   }
 } else {
   // Default to the test section if available, otherwise first section
-  const defaultSection = getDefaultSection();
+  const defaultSection = getDefaultSection()
   if (defaultSection) {
-    sectionsToProcess = [defaultSection];
-    console.log(`Processing default section: ${defaultSection.name}`);
+    sectionsToProcess = [defaultSection]
+    console.log(`Processing default section: ${defaultSection.name}`)
   } else {
-    const allSections = getSections();
+    const allSections = getSections()
     if (allSections && allSections.length > 0) {
-      sectionsToProcess = [allSections[0]];
-      console.log(`Processing first available section: ${allSections[0].name}`);
+      sectionsToProcess = [allSections[0]]
+      console.log(`Processing first available section: ${allSections[0].name}`)
     } else {
-      console.error('No sections found in configuration');
-      process.exit(1);
+      console.error('No sections found in configuration')
+      process.exit(1)
     }
   }
 }
@@ -116,22 +130,27 @@ let airtableService, embeds
 
 try {
   // ES module import
-  const servicesModule = await import('./src/services/index.js');
-  airtableService = servicesModule.airtableService;
-  embeds = servicesModule.embeds;
-  console.log('Successfully loaded services');
+  const servicesModule = await import('./src/services/index.js')
+  airtableService = servicesModule.airtableService
+  embeds = servicesModule.embeds
+  console.log('Successfully loaded services')
 } catch (error) {
-  console.error('Error loading services:', error.message);
+  console.error('Error loading services:', error.message)
   console.error(
     'Make sure you have created all the necessary files in src/services'
-  );
-  process.exit(1);
+  )
+  process.exit(1)
 }
 
 // Configuration from config file
-const GEMINI_API_KEY = config?.gemini?.apiKey || process.env.GEMINI_API_KEY || '';
-console.log('Using GEMINI_API_KEY:', GEMINI_API_KEY ? 'API key found' : 'No API key');
-const GEMINI_MODEL = config?.gemini?.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const GEMINI_API_KEY =
+  config?.gemini?.apiKey || process.env.GEMINI_API_KEY || ''
+console.log(
+  'Using GEMINI_API_KEY:',
+  GEMINI_API_KEY ? 'API key found' : 'No API key'
+)
+const GEMINI_MODEL =
+  config?.gemini?.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash'
 const BATCH_SIZE = 2 // Reduced from 3 to 2
 const FEED_SIZE = 50 // Original feed size
 const API_DELAY = 3000 // 3 seconds delay between API calls
@@ -974,26 +993,48 @@ async function processArticle(item, sectionId) {
     // Clean the reelaborated text using postProcessText
     const processedText = postProcessText(reelaboratedText)
 
-    const recordFields = {
-      title: metadata ? metadata.title : item.title,
-      url: item.url,
-      article: processedText,
-      imgUrl: imgUrl || (images.length > 0 ? images[0] : ''),
-      bajada: metadata ? metadata.bajada : 'No summary available.',
-      volanta: metadata ? metadata.volanta : 'No overline available.',
-      // Store the raw image URLs in article-images field
-      'article-images': images.join(', '),
-      // Use sectionId instead of section to avoid errors
-      section: sectionId,
-      sectionName: section.name,
-      sectionColor: section.color,
+    // Format image URLs as attachment objects for Airtable
+    let imageAttachments = []
+    if (images.length > 0) {
+      imageAttachments = images.map(url => ({ url }))
+    } else if (imgUrl) {
+      imageAttachments = [{ url: imgUrl }]
     }
 
-    // Add embeds if available
-    if (instagramContent) recordFields['ig-post'] = instagramContent
-    if (facebookContent) recordFields['fb-post'] = facebookContent
-    if (twitterContent) recordFields['tw-post'] = twitterContent
-    if (youtubeContent) recordFields['yt-video'] = youtubeContent
+    // Map section ID to the exact dropdown values available in Airtable
+    // For Primera Plana table, the section field only accepts 'Politica', 'Economia', or 'Agro'
+    let sectionValue = 'Politica' // Default value for all sections that don't match below
+    
+    // Map specific section IDs to their corresponding dropdown values
+    if (sectionId === 'economia') {
+      sectionValue = 'Economia'
+    } else if (sectionId === 'agro') {
+      sectionValue = 'Agro'
+    } else if (sectionId === 'primera-plana') {
+      sectionValue = 'Politica' // Map primera-plana to Politica by default
+    }
+    
+    // Extract source name from the URL
+    const sourceName = extractSourceName(item.url);
+    console.log(`Extracted source name: ${sourceName} from URL: ${item.url}`);
+    
+    const recordFields = {
+      title: metadata ? metadata.title : item.title,
+      overline: metadata ? metadata.volanta : 'No overline available.',
+      excerpt: metadata ? metadata.bajada : 'No summary available.',
+      article: processedText,
+      image: imageAttachments, // Array of attachment objects for Airtable
+      imgUrl: imgUrl || (images.length > 0 ? images[0] : ''),
+      'article-images': images.join(', '),
+      url: item.url,
+      source: sourceName, // Add the extracted source name
+      'ig-post': instagramContent || '',
+      'fb-post': facebookContent || '',
+      'tw-post': twitterContent || '',
+      'yt-video': youtubeContent || '',
+      section: sectionValue, // Using exact dropdown value from Airtable options
+      status: 'draft'  // Using exact dropdown value 'draft' instead of 'Borrador'
+    }
 
     console.log(
       `Successfully processed article: ${item.url} for section ${sectionId}`
@@ -1080,24 +1121,34 @@ async function processSection(section) {
       )
       console.log(`Already processed ${processedUrls.size} items previously`)
 
-      // Filter out already processed items
-      const newItems = feedData.items
-        .filter((item) => !processedUrls.has(item.url))
-        .slice(0, FEED_SIZE) // Limit to desired feed size
+      // Filter out already processed items unless force flag is used
+      const newItems = args.force
+        ? feedData.items.slice(0, FEED_SIZE)
+        : feedData.items
+            .filter((item) => !processedUrls.has(item.url))
+            .slice(0, FEED_SIZE)
 
       if (newItems.length === 0) {
-        console.log(`No new items to process for ${section.name}`)
+        console.log(
+          `No new items to process for ${section.name}${
+            args.force ? ' (even with force flag)' : ''
+          }`
+        )
         return
       }
 
       console.log(
-        `Found ${newItems.length} new items to process for ${section.name}`
+        `Found ${newItems.length} ${
+          args.force ? '' : 'new '
+        }items to process for ${section.name}`
       )
 
       // Apply the limit
-      const limitedItems = newItems.slice(0, ITEM_LIMIT);
-      console.log(`Processing ${limitedItems.length} social media items (limit: ${ITEM_LIMIT})`);
-      
+      const limitedItems = newItems.slice(0, ITEM_LIMIT)
+      console.log(
+        `Processing ${limitedItems.length} social media items (limit: ${ITEM_LIMIT})`
+      )
+
       // Process the limited items
       for (const item of limitedItems) {
         try {
@@ -1149,22 +1200,20 @@ async function processSection(section) {
             .replace(/\s+/g, ' ')
             .trim()
 
-const recordFields = {
-  title: title,
-  url: sourceUrl,
-  bajada: cleanDescription,
-  imgUrl: imageUrl || '',
-  volanta: sourceName, // Using source name as volanta
-  section: section.id,
-  sectionName: section.name,
-  sectionColor: section.color,
-  status: 'Ready',
-  processingStatus: 'needs_extraction',
-  //publishedDate: item.pubDate || item.published || new Date().toISOString(),
-  isOcrNeeded: true, // Flag for OCR processing
-}
-
-
+          const recordFields = {
+            title: title,
+            url: sourceUrl,
+            bajada: cleanDescription,
+            imgUrl: imageUrl || '',
+            volanta: sourceName, // Using source name as volanta
+            section: section.id,
+            sectionName: section.name,
+            sectionColor: section.color,
+            status: 'Ready',
+            processingStatus: 'needs_extraction',
+            //publishedDate: item.pubDate || item.published || new Date().toISOString(),
+            isOcrNeeded: true, // Flag for OCR processing
+          }
 
           // Use your existing airtableService instead of direct airtableBase
           try {
@@ -1228,27 +1277,34 @@ const recordFields = {
     )
     console.log(`Already processed ${processedUrls.size} items previously`)
 
-    // Filter out already processed items
-    const newItems = feedData.items
-      .filter((item) => !processedUrls.has(item.url))
-      .slice(0, FEED_SIZE) // Limit to desired feed size
+    // Filter out already processed items UNLESS force flag is used
+    const newItems = args.force
+      ? feedData.items.slice(0, FEED_SIZE)
+      : feedData.items
+          .filter((item) => !processedUrls.has(item.url))
+          .slice(0, FEED_SIZE)
 
     if (newItems.length === 0) {
-      console.log(`No new items to process for ${section.name}`)
+      console.log(
+        `No new items to process for ${section.name}${
+          args.force ? ' (even with force flag)' : ''
+        }`
+      )
       return
     }
 
     console.log(
-      `Found ${newItems.length} new items to process for ${section.name}`
+      `Found ${newItems.length} ${
+        args.force ? '' : 'new '
+      }items to process for ${section.name}`
     )
 
-    // Add limit before processing items
-    console.log(`Found ${newItems.length} items in ${section.name}`);
-    
     // Apply the limit
-    const limitedItems = newItems.slice(0, ITEM_LIMIT);
-    console.log(`Processing ${limitedItems.length} items (limit: ${ITEM_LIMIT})`);
-    
+    const limitedItems = newItems.slice(0, ITEM_LIMIT)
+    console.log(
+      `Processing ${limitedItems.length} items (limit: ${ITEM_LIMIT})`
+    )
+
     // Process the limited items instead of all items
     for (let i = 0; i < limitedItems.length; i += BATCH_SIZE) {
       const batchItems = limitedItems.slice(i, i + BATCH_SIZE)
@@ -1331,12 +1387,14 @@ async function processAllRequestedSections() {
 
 async function fetchFeed(feedUrl) {
   // Existing code to fetch and parse the feed...
-  
+
   // After you have the items array, apply the limit
-  const limitedItems = items.slice(0, ITEM_LIMIT);
-  console.log(`Fetched ${items.length} items, returning ${limitedItems.length} (limit: ${ITEM_LIMIT})`);
-  
-  return limitedItems; // Return limited items
+  const limitedItems = items.slice(0, ITEM_LIMIT)
+  console.log(
+    `Fetched ${items.length} items, returning ${limitedItems.length} (limit: ${ITEM_LIMIT})`
+  )
+
+  return limitedItems // Return limited items
 }
 
 // Look for any functions with maxItems, limit, or similar parameters
@@ -1345,8 +1403,8 @@ async function fetchFeed(feedUrl) {
 async function fetchSourceItems(source, maxItems) {
   // If the function already has a maxItems parameter,
   // make sure it's respecting the global limit
-  const effectiveLimit = maxItems || ITEM_LIMIT;
-  
+  const effectiveLimit = maxItems || ITEM_LIMIT
+
   // Use effectiveLimit in your code...
 }
 
@@ -1354,28 +1412,111 @@ async function fetchSourceItems(source, maxItems) {
 
 // If --all flag is specified, process all sections
 if (args.all) {
-  console.log('Processing all sections with limit:', ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT);
-  const allSections = getSections();
+  console.log(
+    'Processing all sections with limit:',
+    ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT
+  )
+  const allSections = getSections()
   for (const section of allSections) {
-    await processSection(section); // This will use the ITEM_LIMIT
+    await processSection(section) // This will use the ITEM_LIMIT
   }
-  process.exit(0);
+  process.exit(0)
 }
 
 // Process specific section if provided
-const sectionName = args._[0];
+const sectionName = args._[0]
 if (sectionName) {
-  console.log(`Processing section: ${sectionName} with limit:`, ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT);
-  const section = getSection(sectionName);
+  console.log(
+    `Processing section: ${sectionName} with limit:`,
+    ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT
+  )
+  const section = getSection(sectionName)
   if (section) {
-    await processSection(section); // This will use the ITEM_LIMIT
+    await processSection(section) // This will use the ITEM_LIMIT
   } else {
-    console.error(`Section not found: ${sectionName}`);
+    console.error(`Section not found: ${sectionName}`)
   }
-  process.exit(0);
+  process.exit(0)
 }
 
-// Start processing 
+// Start processing
 processAllRequestedSections()
   .then(() => console.log('Process completed'))
   .catch((error) => console.error('Process failed:', error.message))
+
+/**
+ * Extract source name from URL dynamically without hardcoding
+ * @param {string} url - The article URL
+ * @returns {string} - The extracted source name
+ */
+function extractSourceName(url) {
+  try {
+    if (!url) return 'Unknown Source';
+    
+    // Parse the URL to get the hostname
+    const hostname = new URL(url).hostname;
+    
+    // Step 1: Remove common prefixes
+    let domain = hostname
+      .replace(/^www\./, '')
+      .replace(/^m\./, '')
+      .replace(/^mobile\./, '')
+      .replace(/^news\./, '')
+      .replace(/^noticias\./, '');
+    
+    // Step 2: Handle social media separately
+    if (domain.includes('facebook.com')) return 'Facebook';
+    if (domain.includes('instagram.com')) return 'Instagram';
+    if (domain.includes('twitter.com') || domain.includes('x.com')) return 'Twitter';
+    if (domain.includes('youtube.com') || domain.includes('youtu.be')) return 'YouTube';
+    if (domain.includes('tiktok.com')) return 'TikTok';
+    if (domain.includes('linkedin.com')) return 'LinkedIn';
+    if (domain.includes('t.co')) return 'Twitter';
+    
+    // Step 3: Strip common TLDs and country codes
+    domain = domain.replace(/\.(com|co|net|org|info|ar|mx|es|cl|pe|br|uy|py|bo|ec|ve|us|io|tv|app|web|digital|news|online|press|media|blog|site)(\.[a-z]{2,3})?$/, '');
+    
+    // Step 4: Split by dots and get the main part
+    const parts = domain.split('.');
+    let sourceName = parts[0];
+    
+    // Step 5: Handle special cases like clarin.com.ar -> Clarín
+    const domainMapping = {
+      'lanacion': 'La Nación',
+      'eldiario': 'El Diario',
+      'pagina12': 'Página 12',
+      'larazon': 'La Razón',
+      'lavoz': 'La Voz',
+      'eleconomista': 'El Economista',
+      'elpais': 'El País',
+      'ole': 'Olé',
+      'ambito': 'Ámbito',
+      'telam': 'Télam',
+      'infobae': 'Infobae',
+      'eldestape': 'El Destape',
+      'cronista': 'El Cronista',
+      'tiempoar': 'Tiempo Argentino',
+      'tn': 'Todo Noticias'
+    };
+    
+    if (domainMapping[sourceName]) {
+      return domainMapping[sourceName];
+    }
+    
+    // Step 6: Handle compound domains (remove dashes/underscores and capitalize words)
+    return sourceName
+      .split(/[-_]/)
+      .map(word => {
+        // Special case for single-letter words like "c" in "c5n"
+        if (word.length === 1) return word.toUpperCase();
+        
+        // Proper capitalization for normal words
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      })
+      .join(' ');
+    
+  } catch (error) {
+    console.error(`Error extracting source name from ${url}:`, error.message);
+    return 'Unknown Source';
+  }
+}

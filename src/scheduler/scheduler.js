@@ -1,82 +1,70 @@
-// filepath: /home/zen/Documents/RDV-NEWS-API/src/scheduler/jobs.js
-const cron = require('node-cron')
-const config = require('../config')
-const { fetchFeedData } = require('../services/fetcher')
-const { processBatch } = require('../processors/articleProcessor')
-const airtableService = require('../services/airtable')
-const logger = require('../utils/logger')
+import cron from 'node-cron';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
-// Store processed URLs to avoid duplicates
-const processedUrls = new Set()
+dotenv.config();
+const execAsync = promisify(exec);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.join(__dirname, '../../');
 
-/**
- * Fetches and processes items from the RSS feed
- */
-async function fetchAndProcessFeed() {
+console.log('Starting content scheduler...');
+
+// Check Airtable connection - runs every 6 hours
+cron.schedule('0 */6 * * *', async () => {
   try {
-    logger.info('Starting feed processing')
-
-    // Fetch feed data
-    const feedData = await fetchFeedData(config.sources.rss.feedUrl)
-
-    if (!feedData || !feedData.items || !Array.isArray(feedData.items)) {
-      logger.warn('No valid items in feed data')
-      return
-    }
-
-    logger.info(`Fetched ${feedData.items.length} items from feed`)
-
-    // Filter out already processed items
-    const newItems = feedData.items.filter(
-      (item) => !processedUrls.has(item.url)
-    )
-
-    if (newItems.length === 0) {
-      logger.info('No new items to process')
-      return
-    }
-
-    logger.info(`Found ${newItems.length} new items to process`)
-
-    // Process a batch of up to 5 items
-    const batch = newItems.slice(0, 5)
-    logger.info(`Processing batch of ${batch.length} items`)
-
-    const processedBatch = await processBatch(batch)
-
-    if (processedBatch.length > 0) {
-      // Insert into Airtable
-      await airtableService.insertRecords(processedBatch)
-
-      // Add to processed URLs
-      batch.forEach((item) => processedUrls.add(item.url))
-
-      logger.info(`Completed processing batch of ${batch.length} items`)
-    } else {
-      logger.info('No valid records after processing batch')
-    }
+    console.log('Running scheduled Airtable connection check');
+    await execAsync('npm run check-airtable', { cwd: rootDir });
+    console.log('Airtable connection check completed');
   } catch (error) {
-    logger.error('Error in fetch and process job:', error)
+    console.error('Airtable connection check failed:', error.stdout || error.message);
   }
-}
+});
 
-/**
- * Starts the scheduled jobs
- */
-function startJobs() {
-  logger.info('Starting scheduled jobs')
+// Fetch content from all sections - runs every 3 hours
+cron.schedule('0 */3 * * *', async () => {
+  try {
+    console.log('Running scheduled content fetch for all sections');
+    await execAsync('npm run fetch:all', { cwd: rootDir });
+    console.log('Content fetch completed');
+  } catch (error) {
+    console.error('Content fetch failed:', error.stdout || error.message);
+  }
+});
 
-  // Schedule feed processing
-  cron.schedule(config.scheduler.interval, () => {
-    logger.info('Running scheduled feed processing')
-    fetchAndProcessFeed()
-  })
+// Fetch social media content - runs every 4 hours
+cron.schedule('0 */4 * * *', async () => {
+  try {
+    console.log('Running scheduled social media fetch');
+    await execAsync('npm run fetch:instituciones', { cwd: rootDir });
+    console.log('Social media fetch completed');
+  } catch (error) {
+    console.error('Social media fetch failed:', error.stdout || error.message);
+  }
+});
 
-  // Run immediately on startup
-  fetchAndProcessFeed()
-}
+// Process social media content - runs 15 minutes after social media fetch
+cron.schedule('15 */4 * * *', async () => {
+  try {
+    console.log('Running scheduled social media processing');
+    await execAsync('npm run process:social', { cwd: rootDir });
+    console.log('Social media processing completed');
+  } catch (error) {
+    console.error('Social media processing failed:', error.stdout || error.message);
+  }
+});
 
-module.exports = {
-  fetchAndProcessFeed,
-  startJobs,
-}
+// Sync Primera Plana articles - runs every 2 hours
+cron.schedule('0 */2 * * *', async () => {
+  try {
+    console.log('Running scheduled Primera Plana sync');
+    await execAsync('npm run sync:primera-plana', { cwd: rootDir });
+    console.log('Primera Plana sync completed');
+  } catch (error) {
+    console.error('Primera Plana sync failed:', error.stdout || error.message);
+  }
+});
+
+console.log('Scheduler initialized with all tasks');

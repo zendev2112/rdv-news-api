@@ -6,17 +6,20 @@ CREATE TABLE articles (
   slug TEXT UNIQUE NOT NULL,
   content TEXT NOT NULL,
   excerpt TEXT,
+  overline TEXT, -- Added for "volanta"
   header TEXT,
   section_id TEXT NOT NULL,
   section_name TEXT,
   section_color TEXT,
   image_url TEXT,
+  article_images TEXT, -- Added for "article-images"
   source_url TEXT,
+  author TEXT, -- Added explicit author field
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   published_at TIMESTAMPTZ,
-  status TEXT DEFAULT 'draft',
-  social_media JSONB
+  status TEXT DEFAULT 'draft', -- Used for "estado"
+  social_media JSONB -- Already exists for social media fields
 );
 
 -- Add indexes for better performance
@@ -93,3 +96,27 @@ INSERT INTO sections (id, name, color, priority) VALUES
 ('economia', 'Economía', '#2a9d8f', 30),
 ('deportes', 'Deportes', '#f77f00', 40),
 ('lifestyle', 'Lifestyle', '#9c6644', 50);
+
+-- Create table for layout positions
+CREATE TABLE IF NOT EXISTS layout_positions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  section TEXT NOT NULL,
+  position TEXT NOT NULL,
+  article_id UUID REFERENCES articles(id),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(section, position)
+);
+
+-- Add trigger for updated_at
+CREATE TRIGGER update_layout_positions_modtime
+BEFORE UPDATE ON layout_positions
+FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+-- Add RLS for layout_positions
+ALTER TABLE layout_positions ENABLE ROW LEVEL SECURITY;
+
+-- Allow authenticated users to manage layout positions
+CREATE POLICY "Allow all operations for authenticated users" 
+ON layout_positions FOR ALL 
+TO authenticated 
+USING (true);

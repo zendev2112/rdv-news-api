@@ -2,9 +2,15 @@ import axios from 'axios';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 
-// Airtable configuration
-const apiToken = process.env.AIRTABLE_TOKEN;
-const baseId = process.env.AIRTABLE_BASE_ID;
+// Airtable configuration - use config object if available, fallback to env vars
+const apiToken = config.airtable?.personalAccessToken || process.env.AIRTABLE_TOKEN;
+const baseId = config.airtable?.baseId || process.env.AIRTABLE_BASE_ID;
+
+// Debug log to verify credentials are available
+console.log('Airtable credentials available:', {
+  hasToken: !!apiToken,
+  hasBaseId: !!baseId
+});
 
 /**
  * Gets the Airtable API URL for a specific section table
@@ -13,7 +19,27 @@ const baseId = process.env.AIRTABLE_BASE_ID;
  */
 function getAirtableApiUrl(sectionId) {
   const section = config.getSection(sectionId);
-  return `https://api.airtable.com/v0/${config.airtable.baseId}/${section.tableName}`;
+  
+  // Debug log to check if section and tableName exist
+  console.log(`Section data for ${sectionId}:`, { 
+    hasSection: !!section,
+    tableName: section?.tableName || 'NOT_FOUND' 
+  });
+  
+  // Use explicit baseId fallback to ensure we have a value
+  const actualBaseId = config.airtable?.baseId || baseId;
+  
+  if (!section || !section.tableName) {
+    // Special handling for primera-plana
+    if (sectionId === 'primera-plana') {
+      logger.info(`Using hardcoded table name for primera-plana`);
+      return `https://api.airtable.com/v0/${actualBaseId}/Primera%20Plana`;
+    }
+    logger.error(`Missing section or tableName for ${sectionId}`);
+    return null;
+  }
+  
+  return `https://api.airtable.com/v0/${actualBaseId}/${encodeURIComponent(section.tableName)}`;
 }
 
 /**
@@ -29,41 +55,50 @@ async function insertRecords(records, sectionId = 'test') {
   }
 
   try {
-    const section = config.getSection(sectionId);
-    if (!section || !section.tableName) {
-      logger.error(`Invalid section ID or missing tableName: ${sectionId}`);
-      return null;
+    // Get the API URL
+    const airtableApiUrl = getAirtableApiUrl(sectionId);
+    
+    if (!airtableApiUrl) {
+      throw new Error(`Could not generate API URL for section ${sectionId}`);
     }
 
-    const airtableApiUrl = getAirtableApiUrl(sectionId);
-
     // Check for required Airtable configuration
-    if (!config.airtable.baseId || !config.airtable.personalAccessToken) {
-      logger.error(
-        'Missing Airtable configuration (baseId or personalAccessToken)'
-      );
-      return null;
+    const actualToken = config.airtable?.personalAccessToken || apiToken;
+    
+    if (!actualToken) {
+      throw new Error('Missing Airtable API token');
     }
 
     // Add section ID to each record and ensure all required fields are present
     const validRecords = records.filter((record) => {
       // Ensure record has fields
       if (!record.fields) {
-        logger.warn('Skipping record with no fields');
-        return false;
+        logger.warn('Skipping record with no fields')
+        return false
       }
 
-      // Add section ID
-      record.fields.section = sectionId;
+      // Only add section if it's not already present
+      if (!record.fields.section) {
+        // Map section IDs to their corresponding dropdown values
+        let sectionValue = 'Politica' // Default
+
+        if (sectionId === 'economia') {
+          sectionValue = 'Economia'
+        } else if (sectionId === 'agro') {
+          sectionValue = 'Agro'
+        }
+
+        record.fields.section = sectionValue
+      }
 
       // Ensure fields meet Airtable requirements (no undefined values)
       Object.keys(record.fields).forEach((key) => {
         if (record.fields[key] === undefined) {
-          delete record.fields[key];
+          delete record.fields[key]
         }
-      });
+      })
 
-      return true;
+      return true
     });
 
     if (validRecords.length === 0) {
@@ -71,8 +106,15 @@ async function insertRecords(records, sectionId = 'test') {
       return null;
     }
 
+    // Log the first record for debugging
+    console.log(`Sample record being sent to Airtable:`, {
+      url: validRecords[0].fields.url,
+      title: validRecords[0].fields.title,
+      fieldCount: Object.keys(validRecords[0].fields).length
+    });
+
     logger.info(
-      `Attempting to insert ${validRecords.length} records into ${sectionId} Airtable table (${section.tableName})`
+      `Attempting to insert ${validRecords.length} records into ${sectionId} table via ${airtableApiUrl}`
     );
 
     const response = await axios.post(
@@ -80,20 +122,20 @@ async function insertRecords(records, sectionId = 'test') {
       { records: validRecords },
       {
         headers: {
-          Authorization: `Bearer ${config.airtable.personalAccessToken}`,
+          Authorization: `Bearer ${actualToken}`,
           'Content-Type': 'application/json',
         },
       }
     );
 
     logger.info(
-      `Inserted ${records.length} records into ${sectionId} Airtable table`
+      `Success! Inserted ${validRecords.length} records into ${sectionId} Airtable table`
     );
     return response.data;
   } catch (error) {
     logger.error(
       `Error inserting records into ${sectionId} Airtable table:`,
-      error
+      error.message
     );
 
     // Log detailed error information
@@ -130,8 +172,9 @@ async function insertRecords(records, sectionId = 'test') {
     } else {
       logger.error(`Error message: ${error.message}`);
     }
-
-    return null;
+    
+    // Re-throw the error so the calling function can handle it
+    throw error;
   }
 }
 

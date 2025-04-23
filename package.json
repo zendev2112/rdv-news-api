@@ -11,6 +11,7 @@
     "fetch:all": "node fetch-to-airtable.js --all",
     "fetch:limited": "node fetch-to-airtable.js --all --limit 10",
     "fetch:primera-plana": "node fetch-to-airtable.js primera-plana",
+    "fetch:primera-plana:limited": "node fetch-to-airtable.js primera-plana --limit 10",
     "fetch:agro": "node fetch-to-airtable.js agro",
     "fetch:deportes": "node fetch-to-airtable.js deportes",
     "fetch:economia": "node fetch-to-airtable.js economia",
@@ -25,9 +26,18 @@
     "system:limited": "npm run fetch:complete:limited && npm run process:all",
     "social:limited": "npm run fetch:instituciones:limited && npm run process:social",
     "social:full": "npm run fetch:instituciones && npm run process:social",
+    "sync:primera-plana": "node src/scripts/sync-primera-plana.js",
+    "sync:primera-plana:all": "node src/scripts/sync-primera-plana.js --all",
+    "sync:primera-plana:limited": "node src/scripts/sync-primera-plana.js --limit 10",
+    "system:full:with-sync": "npm run system:full && npm run sync:primera-plana",
+    "test:publish": "node test-publication.js",
+    "test:draft": "node test-publication.js --draft",
     "check-airtable": "node check-airtable.js",
     "schedule": "node scheduler.js",
-    "vercel-build": "echo 'Build step completed'"
+    "vercel-build": "echo 'Build step completed'",
+    "supabase:db:diff": "npx supabase db diff --schema public",
+    "supabase:db:push": "npx supabase db push",
+    "supabase:db:pull": "npx supabase db pull"
   },
   "engines": {
     "node": ">=18.x"
