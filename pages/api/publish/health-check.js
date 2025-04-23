@@ -6,16 +6,10 @@ export default function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
-  // Handle OPTIONS request (CORS preflight)
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
   // Return simple health status
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    message: 'API is online and reachable from Airtable',
-    environment: process.env.NODE_ENV || 'development'
+    message: 'API is online and reachable from Airtable'
   });
 }
