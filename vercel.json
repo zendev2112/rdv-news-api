@@ -1,4 +1,15 @@
 {
   "version": 2,
-  "framework": "nextjs"
+  "builds": [
+    {
+      "src": "src/server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "src/server.js"
+    }
+  ]
 }
