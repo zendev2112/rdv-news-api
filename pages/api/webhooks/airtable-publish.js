@@ -1,5 +1,9 @@
-// Absolute minimum version - no imports, no functions, just a basic handler
-
+// Minimal API handler without any imports
 export default function handler(req, res) {
-  res.status(200).json({ status: 'ok' });
+  // Basic CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  
+  // Simple response
+  res.status(200).json({ status: 'ok', message: 'Webhook endpoint ready' });
 }
