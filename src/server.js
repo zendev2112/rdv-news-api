@@ -22,6 +22,21 @@ app.use(
 app.use(morgan('dev'))
 app.use(express.json())
 
+// Root route handler
+app.get('/', (req, res) => {
+  res.json({
+    name: 'RDV News API',
+    status: 'online',
+    version: '1.0.0',
+    endpoints: {
+      api: '/api',
+      webhooks: '/webhooks',
+      health: '/health'
+    },
+    timestamp: new Date().toISOString()
+  })
+})
+
 // Routes
 app.use('/api', publishRoutes)
 app.use('/webhooks', webhookRoutes)
