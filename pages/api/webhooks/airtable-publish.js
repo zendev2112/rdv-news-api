@@ -1,14 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
-import Airtable from 'airtable';
-
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-// Initialize Airtable
-const airtable = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY });
+// REMOVE THESE IMPORTS FOR NOW - we'll add them back later
+// import { createClient } from '@supabase/supabase-js';
+// import Airtable from 'airtable';
 
 /**
  * Map section to section_id
