@@ -103,7 +103,25 @@ function getField(fields, name, defaultValue = '') {
   return defaultValue;
 }
 
+// Handler for CORS preflight requests
+export const config = {
+  api: {
+    bodyParser: true,
+    externalResolver: true,
+  },
+};
+
 export default async function handler(req, res) {
+  // Add CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  // Handle OPTIONS request (preflight CORS check)
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   // Handle GET requests for testing/debugging
   if (req.method === 'GET') {
     return res.status(200).json({
@@ -123,12 +141,30 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' })
   }
-  
+
+  // Use secret key from environment variable with fallback
   const SECRET_KEY = process.env.PUBLISH_SECRET_KEY || '62f33d10f05777d89c0318e51409836475db969e40c203b273c139469ab39b65'
   
   // Verify secret key
   if (req.body.secretKey !== SECRET_KEY) {
     return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  // Ensure we have the required environment variables
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('Missing required environment variables for Supabase');
+    return res.status(500).json({
+      error: 'Server Configuration Error',
+      message: 'Missing Supabase environment variables'
+    });
+  }
+
+  if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+    console.error('Missing required environment variables for Airtable');
+    return res.status(500).json({
+      error: 'Server Configuration Error',
+      message: 'Missing Airtable environment variables'
+    });
   }
   
   try {
