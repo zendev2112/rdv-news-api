@@ -88,24 +88,18 @@ function extractSourceName(url) {
 
 // Add this helper function at the top of your file (after imports)
 function getField(fields, name, defaultValue = '') {
-  // Try exact match first
+  // Direct match for expected field name
   if (fields[name] !== undefined && fields[name] !== null && fields[name] !== '') {
     return fields[name];
   }
   
-  // Try capitalized version (e.g., "Title" instead of "title")
-  const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
-  if (fields[capitalized] !== undefined && fields[capitalized] !== null && fields[capitalized] !== '') {
-    return fields[capitalized];
+  // Handle special cases for image URL
+  if (name === 'imgUrl') {
+    if (fields['image'] !== undefined && fields['image'] !== null && fields['image'] !== '') {
+      return fields['image'];
+    }
   }
   
-  // Try all uppercase version (e.g., "URL" instead of "url")
-  const uppercase = name.toUpperCase();
-  if (fields[uppercase] !== undefined && fields[uppercase] !== null && fields[uppercase] !== '') {
-    return fields[uppercase];
-  }
-  
-  // Return default if no match found
   return defaultValue;
 }
 
@@ -167,27 +161,31 @@ export default async function handler(req, res) {
     console.log('source directly:', fields.source);
     console.log('==========================================');
     
-    // Use the helper function to extract fields
+    // Add detailed logging for field names
+    console.log('Available fields:', Object.keys(fields));
+    console.log('Section value:', fields.section);
+    console.log('Image values:', fields.imgUrl, fields.image);
+
+    // Get section value and map to section_id
     const sectionValue = getField(fields, 'section', 'Politica');
     const sectionId = mapSectionToId(sectionValue);
-    
+
     // Create slug from title
-    const title = getField(fields, 'title', 'untitled');
+    const title = getField(fields, 'title', 'Untitled');
     const slug = createSlug(title);
-    
-    // Get or extract source name
-    let sourceName = getField(fields, 'source', '');
-    const url = getField(fields, 'url', '');
-    
-    if (!sourceName && url) {
-      sourceName = extractSourceName(url);
-      console.log(`Extracted source name: ${sourceName} from URL: ${url}`);
+
+    // Get source name
+    const sourceValue = getField(fields, 'source', '');
+    const urlValue = getField(fields, 'url', '');
+    let sourceName = sourceValue;
+
+    if (!sourceName && urlValue) {
+      sourceName = extractSourceName(urlValue);
     }
-    
+
     // Handle article images
     let articleImages = [];
     const articleImagesField = getField(fields, 'article-images', '');
-    
     if (articleImagesField) {
       if (typeof articleImagesField === 'string') {
         articleImages = articleImagesField
@@ -198,7 +196,7 @@ export default async function handler(req, res) {
         articleImages = articleImagesField;
       }
     }
-    
+
     // Prepare social media as JSON
     const socialMedia = {
       instagram: getField(fields, 'ig-post', ''),
@@ -206,8 +204,8 @@ export default async function handler(req, res) {
       twitter: getField(fields, 'tw-post', ''),
       youtube: getField(fields, 'yt-video', '')
     };
-    
-    // Prepare article data for Supabase with all fields
+
+    // Prepare article data for Supabase with exact field mappings
     const articleData = {
       airtable_id: recordId,
       title: title,
@@ -215,11 +213,11 @@ export default async function handler(req, res) {
       content: getField(fields, 'article', ''),
       excerpt: getField(fields, 'excerpt', ''),
       overline: getField(fields, 'overline', ''),
-      image_url: getField(fields, 'imgUrl', ''),
+      image_url: getField(fields, 'imgUrl', getField(fields, 'image', '')),
       article_images: articleImages,
-      url: url,
+      url: urlValue,
       source: sourceName,
-      source_url: url,
+      source_url: urlValue,
       instagram_post: getField(fields, 'ig-post', ''),
       facebook_post: getField(fields, 'fb-post', ''),
       twitter_post: getField(fields, 'tw-post', ''),
@@ -230,8 +228,9 @@ export default async function handler(req, res) {
       status: getField(fields, 'status', 'draft'),
       updated_at: new Date().toISOString()
     };
-    
-    console.log('Final data being sent to Supabase:', articleData);
+
+    // Log the data we're about to send
+    console.log('Final data being sent to Supabase:', JSON.stringify(articleData, null, 2));
     
     console.log(`Mapped Airtable record to Supabase schema`)
     
