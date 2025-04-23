@@ -4,7 +4,7 @@
   "framework": null,
   "builds": [
     {
-      "src": "api/**/*.js",
+      "src": "api/**/*.{js,cjs}",
       "use": "@vercel/node"
     }
   ],
@@ -15,7 +15,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/api/index.js"
+      "dest": "/api/index.cjs"
     }
   ]
 }

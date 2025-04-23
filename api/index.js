@@ -1,7 +1,7 @@
-const express = require('express');
-const cors = require('cors');
-const { createClient } = require('@supabase/supabase-js');
-const Airtable = require('airtable');
+import express from 'express';
+import cors from 'cors';
+import { createClient } from '@supabase/supabase-js';
+import Airtable from 'airtable';
 
 // Initialize
 require('dotenv').config();
@@ -117,4 +117,4 @@ app.get('/health', (req, res) => {
 });
 
 // Export for Vercel
-module.exports = app;
+export default app;
