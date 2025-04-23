@@ -67,6 +67,7 @@
     "react-icons": "^5.5.0",
     "react-youtube": "^10.1.0",
     "sharp": "^0.33.5",
+    "slugify": "^1.6.6",
     "supabase": "^2.20.3",
     "workbox-window": "^7.3.0",
     "yargs": "^17.7.2"

@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import Airtable from 'airtable'
 import slugify from 'slugify'
 
+
+
 // Initialize Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,

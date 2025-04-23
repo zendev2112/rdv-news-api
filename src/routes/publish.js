@@ -7,14 +7,25 @@ dotenv.config();
 
 // Initialize Airtable
 const airtableBase = new Airtable({
-  apiKey: process.env.AIRTABLE_TOKEN
+  apiKey: process.env.AIRTABLE_TOKEN || process.env.AIRTABLE_API_KEY
 }).base(process.env.AIRTABLE_BASE_ID);
 
-// Initialize Supabase
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
+// Check if Supabase environment variables are available
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// Validate Supabase configuration
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Missing Supabase configuration. Please check your environment variables:');
+  console.error('- SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL must be set');
+  console.error('- SUPABASE_KEY or SUPABASE_SERVICE_ROLE_KEY must be set');
+  // We'll continue anyway, but Supabase operations will fail
+}
+
+// Initialize Supabase with safety checks
+const supabase = supabaseUrl && supabaseKey 
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
 
 const router = express.Router();
 
@@ -24,6 +35,14 @@ const router = express.Router();
  */
 router.post('/publish', async (req, res) => {
   try {
+    // Check if Supabase is properly configured
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        error: 'Supabase is not properly configured. Check server logs for details.'
+      });
+    }
+    
     const { recordId, tableName } = req.body;
     
     if (!recordId || !tableName) {
