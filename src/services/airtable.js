@@ -264,38 +264,128 @@ async function getRecords(sectionId = 'test', params = {}) {
 }
 
 /**
- * Gets a single record from Airtable
- * @param {string} recordId - Record ID
- * @param {string} sectionId - Section ID
- * @returns {Promise<Object|null>} - Record data or null if failed
+ * Fetches a single record from any Airtable table by ID
+ * @param {string} recordId - The Airtable record ID
+ * @param {string} sectionId - Section ID or table name
+ * @returns {Object} - The Airtable record or null if not found
  */
-async function getRecord(recordId, sectionId = 'test') {
+async function getRecord(recordId, sectionId = 'primera-plana') {
   try {
-    const tableName = encodeURIComponent(sectionId);
-    const url = `https://api.airtable.com/v0/${baseId}/${tableName}/${recordId}`;
+    // Get the API URL for the section
+    const airtableApiUrl = getAirtableApiUrl(sectionId);
+    if (!airtableApiUrl) {
+      logger.error(`Could not generate API URL for section ${sectionId}`);
+      return null;
+    }
 
-    console.log(
-      `[INFO] Getting record ${recordId} from ${sectionId} Airtable table`
-    );
+    // Build the URL to fetch a single record
+    const url = `${airtableApiUrl}/${recordId}`;
+    
+    logger.info(`Fetching record ${recordId} from Airtable section '${sectionId}'`);
 
+    // Make the API request
     const response = await axios.get(url, {
       headers: {
-        Authorization: `Bearer ${apiToken}`,
+        Authorization: `Bearer ${config.airtable.personalAccessToken || apiToken}`,
       },
     });
 
-    console.log(
-      `[INFO] Got record ${recordId} from ${sectionId} Airtable table`
-    );
+    if (!response.data) {
+      logger.warn(`No data found for record ${recordId} in ${sectionId}`);
+      return null;
+    }
 
+    logger.info(`Successfully retrieved record ${recordId} from ${sectionId}`);
     return response.data;
   } catch (error) {
-    console.error(
-      `[ERROR] Error getting Airtable record:`,
-      error.response?.status,
-      error.response?.data || error.message
-    );
+    logger.error(`Error fetching record ${recordId} from ${sectionId}:`, error.message);
+
+    if (error.response) {
+      logger.error(`Status: ${error.response.status}`);
+      logger.error(`Response: ${JSON.stringify(error.response.data)}`);
+    }
+
     throw error;
+  }
+}
+
+/**
+ * Fetches records from any Airtable table with optional filtering and parameters
+ * @param {string} sectionId - Section ID or table name
+ * @param {Object} params - Query parameters including:
+ *   - maxRecords: Maximum number of records to retrieve
+ *   - view: The name of the view to use
+ *   - filterByFormula: Airtable formula to filter records
+ *   - sort: Array of sort objects with field and direction
+ * @returns {Array} - Array of Airtable records
+ */
+async function fetchRecords(sectionId = 'primera-plana', params = {}) {
+  try {
+    // Get the API URL for the section
+    const airtableApiUrl = getAirtableApiUrl(sectionId);
+    if (!airtableApiUrl) {
+      logger.error(`Could not generate API URL for section ${sectionId}`);
+      return [];
+    }
+
+    // Build query string with all parameters
+    const queryParams = new URLSearchParams();
+
+    if (params.maxRecords) {
+      queryParams.append('maxRecords', params.maxRecords);
+    }
+
+    if (params.view) {
+      queryParams.append('view', params.view);
+    }
+    
+    if (params.filterByFormula) {
+      queryParams.append('filterByFormula', params.filterByFormula);
+    }
+
+    if (params.sort) {
+      // Handle sort parameters as in your existing getRecords function
+      if (Array.isArray(params.sort)) {
+        params.sort.forEach((sortItem, index) => {
+          if (sortItem.field) {
+            queryParams.append(`sort[${index}][field]`, sortItem.field);
+            if (sortItem.direction) {
+              queryParams.append(`sort[${index}][direction]`, sortItem.direction);
+            }
+          }
+        });
+      } else {
+        logger.warn('Sort parameter is not an array, skipping sort');
+      }
+    }
+
+    const queryString = queryParams.toString();
+    const url = queryString ? `${airtableApiUrl}?${queryString}` : airtableApiUrl;
+
+    logger.info(`Fetching records from ${url}`);
+
+    const response = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${config.airtable.personalAccessToken || apiToken}`,
+      },
+    });
+
+    if (!response.data || !response.data.records) {
+      logger.warn(`No records found or invalid response format from ${sectionId} Airtable table`);
+      return [];
+    }
+
+    logger.info(`Retrieved ${response.data.records.length} records from ${sectionId}`);
+    return response.data.records;
+  } catch (error) {
+    logger.error(`Error fetching records from ${sectionId}:`, error.message);
+
+    if (error.response) {
+      logger.error(`Status: ${error.response.status}`);
+      logger.error(`Response: ${JSON.stringify(error.response.data)}`);
+    }
+
+    return []; // Return empty array instead of null to avoid further errors
   }
 }
 
@@ -344,6 +434,7 @@ const airtableService = {
   getRecords,
   getRecord,
   updateRecord,
+  fetchRecords, // Add the new function
 };
 
 export default airtableService;

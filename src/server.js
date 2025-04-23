@@ -3,6 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import publishRoutes from './routes/publish.js';
+import webhookRoutes from './routes/webhook.js'; // Import webhook routes
 import './scripts/poll-sync-requests.js'; // Import the polling script
 
 // Initialize
@@ -20,6 +21,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api', publishRoutes);
+app.use('/webhooks', webhookRoutes); // Add webhook routes
 
 // Health check endpoint
 app.get('/health', (req, res) => {
