@@ -1,5 +1,9 @@
-const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config();
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+import logger from '../utils/logger.js';
+
+// Initialize dotenv
+dotenv.config();
 
 // Create a single supabase client for interacting with your database
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -17,9 +21,6 @@ function decodeJwt(token) {
   try {
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(Buffer.from(base64, 'base64').toString().split('').map(function(c) {
-      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(''));
     return JSON.parse(jsonPayload);
   } catch (e) {
     return { error: 'Invalid token format' };
@@ -167,9 +168,12 @@ async function getArticleById(id) {
   }
 }
 
-module.exports = {
+// Create a default export for the service
+const supabaseService = {
   supabase,
   publishArticle,
   getArticles,
   getArticleById
 };
+
+export default supabaseService;
