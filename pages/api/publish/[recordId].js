@@ -110,6 +110,21 @@ function getField(fields, name, defaultValue = '') {
 }
 
 export default async function handler(req, res) {
+  // Handle GET requests for testing/debugging
+  if (req.method === 'GET') {
+    return res.status(200).json({
+      message: 'API endpoint is working, but requires a POST request for actual publishing',
+      info: 'This endpoint publishes records from Airtable to Supabase',
+      usage: {
+        method: 'POST',
+        body: {
+          tableName: 'Required: The name of your Airtable table',
+          secretKey: 'Required: Your secret key for authentication'
+        }
+      }
+    });
+  }
+  
   // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' })
@@ -142,6 +157,15 @@ export default async function handler(req, res) {
     console.log('API called:', new Date().toISOString());
     console.log('Record ID:', req.query.recordId);
     console.log('Airtable fields available:', Object.keys(fields));
+    
+    // Check specific field values directly from Airtable
+    console.log('==== DIRECT FIELD VALUES FROM AIRTABLE ====');
+    console.log('Section directly:', fields.Section);
+    console.log('Overline directly:', fields.Overline);
+    console.log('URL directly:', fields.URL);
+    console.log('Image URL directly:', fields['Image URL']);
+    console.log('source directly:', fields.source);
+    console.log('==========================================');
     
     // Use the helper function to extract fields
     const sectionValue = getField(fields, 'section', 'Politica');
