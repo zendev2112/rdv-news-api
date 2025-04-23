@@ -1,6 +1,21 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
   "devCommand": "npm run dev",
-  "framework": "nextjs"
+  "framework": null,
+  "builds": [
+    {
+      "src": "api/**/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.js"
+    }
+  ]
 }
