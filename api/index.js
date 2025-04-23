@@ -2,9 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import Airtable from 'airtable';
+import dotenv from 'dotenv';
 
 // Initialize
-require('dotenv').config();
+dotenv.config();
 const app = express();
 
 // Middleware

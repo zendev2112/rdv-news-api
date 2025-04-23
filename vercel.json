@@ -1,21 +1,4 @@
 {
   "version": 2,
-  "devCommand": "npm run dev",
-  "framework": "nextjs",
-  "builds": [
-    {
-      "src": "pages/**/*.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/pages/api/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/pages/index.js"
-    }
-  ]
+  "framework": "nextjs"
 }
