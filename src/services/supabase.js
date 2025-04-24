@@ -73,9 +73,8 @@ async function publishArticle(airtableRecord) {
       yt_video: airtableRecord.fields['yt-video'] || '',
       status: airtableRecord.fields.status || 'draft',
       section: section,
-      section_id: section_id,
-      // Special fields for Instituciones
-      is_instituciones: airtableRecord.isInstituciones ? true : false
+      section_id: section_id
+      // REMOVED: is_instituciones field that doesn't exist in schema
     };
 
     // For Instituciones, add additional fields if they exist
@@ -86,10 +85,22 @@ async function publishArticle(airtableRecord) {
       if (airtableRecord.fields.sectionColor) {
         articleData.section_color = airtableRecord.fields.sectionColor;
       }
+      
+      // Add a flag in the metadata or other allowed field if you need to track this
+      // Only if these fields exist in your schema
+      if (articleData.metadata === undefined) {
+        articleData.metadata = {};
+      }
+      
+      // You could add a metadata field if your schema has it
+      // articleData.metadata = { 
+      //   ...articleData.metadata,
+      //   is_instituciones: true 
+      // };
     }
 
     logger.info('Prepared article data for Supabase');
-    logger.debug('Article data:', articleData);
+    logger.debug('Article data keys:', Object.keys(articleData));
 
     // Insert or update in Supabase
     const { data, error } = await supabase
