@@ -1203,13 +1203,15 @@ async function processSection(section) {
           const recordFields = {
             title: title,
             url: sourceUrl,
-            excerpt: cleanDescription, // Using excerpt instead of bajada
+            excerpt: cleanDescription, // This is correct
             imgUrl: imageUrl || '',
-            overline: sourceName, // Using overline instead of volanta
+            overline: sourceName, // This is correct
             section: section.id,
             status: 'Ready',
             processingStatus: 'needs_extraction',
-            isOcrNeeded: true, // Flag for OCR processing
+            isOcrNeeded: true, // Flag for OCR processing,
+            bajada: cleanDescription, // ADDED: duplicate excerpt as bajada 
+            volanta: sourceName, // ADDED: duplicate overline as volanta
           }
 
           // Use your existing airtableService instead of direct airtableBase

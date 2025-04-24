@@ -78,6 +78,17 @@ async function insertRecords(records, sectionId = 'test') {
         return false
       }
 
+      // CRITICAL: Make sure overline and excerpt are properly handled
+      // Map volanta to overline if needed
+      if (!record.fields.overline && record.fields.volanta) {
+        record.fields.overline = record.fields.volanta;
+      }
+      
+      // Map bajada to excerpt if needed
+      if (!record.fields.excerpt && record.fields.bajada) {
+        record.fields.excerpt = record.fields.bajada;
+      }
+
       // Only add section if it's not already present
       if (!record.fields.section) {
         // Map section IDs to their corresponding dropdown values
@@ -111,6 +122,8 @@ async function insertRecords(records, sectionId = 'test') {
     console.log(`Sample record being sent to Airtable:`, {
       url: validRecords[0].fields.url,
       title: validRecords[0].fields.title,
+      overline: validRecords[0].fields.overline, // Show overline in logs
+      excerpt: validRecords[0].fields.excerpt,    // Show excerpt in logs
       fieldCount: Object.keys(validRecords[0].fields).length
     });
 
