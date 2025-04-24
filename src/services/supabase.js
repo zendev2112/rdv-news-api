@@ -45,6 +45,31 @@ async function publishArticle(airtableRecord) {
   try {
     logger.info('Publishing article to Supabase:', airtableRecord.id);
 
+    // Ensure section value passes the check constraint 
+    // Get section value from forceSection or from fields.section
+    let sectionValue = airtableRecord.forceSection || airtableRecord.fields.section || '';
+    
+    // Log the original section
+    logger.info(`Original section value: "${sectionValue}"`);
+    
+    // Valid sections in Supabase - these match your check constraint
+    const validSections = ['primera-plana', 'politica', 'economia', 'agro', 'deportes', 'lifestyle', 'turismo'];
+    
+    // Normalize section value
+    if (sectionValue) {
+      sectionValue = sectionValue.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")  // Remove accents
+        .replace(/[^a-z0-9]+/g, '-'); // Replace non-alphanumeric with hyphens
+    }
+    
+    // Check if normalized section is valid, otherwise default to 'lifestyle'
+    if (!validSections.includes(sectionValue)) {
+      logger.info(`Section "${sectionValue}" is not valid, defaulting to "lifestyle"`);
+      sectionValue = 'lifestyle';
+    }
+    
+    logger.info(`Final section value: "${sectionValue}"`);
+
     // Map all Airtable fields to Supabase schema
     const articleData = {
       id: airtableRecord.id,
@@ -63,23 +88,15 @@ async function publishArticle(airtableRecord) {
       tw_post: airtableRecord.fields['tw-post'] || '',
       yt_video: airtableRecord.fields['yt-video'] || '',
       status: airtableRecord.fields.status || 'draft',
-      section: airtableRecord.forceSection || airtableRecord.fields.section || '',
-      section_id: airtableRecord.forceSectionId || 
-                (airtableRecord.fields.section ? airtableRecord.fields.section.toLowerCase().replace(/\s+/g, '-') : '')
-      // REMOVE any metadata field reference here
-      // metadata: { ... } <- This line is causing the error and should be removed
+      // Use the validated section value
+      section: sectionValue,
+      section_id: airtableRecord.forceSectionId || sectionValue
     };
     
-    // REMOVE code that tries to add institutional info to metadata
-    // If institutional info needs to be tracked, use existing fields
-    
     // Check for optional fields that might exist in some tables
-    // Only include if they exist in the Supabase schema
     const optionalFields = ['section_name', 'section_color'];
     optionalFields.forEach(field => {
       if (airtableRecord.fields[field]) {
-        // Check if this field exists in your Supabase schema before adding
-        // Remove this condition if you're sure these fields exist in Supabase
         articleData[field] = airtableRecord.fields[field];
       }
     });
