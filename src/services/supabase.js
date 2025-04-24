@@ -45,6 +45,17 @@ async function publishArticle(airtableRecord) {
   try {
     logger.info('Publishing article to Supabase:', airtableRecord.id);
 
+    // Special handling for Instituciones table
+    if (airtableRecord.sourceSectionId === 'Instituciones' || 
+        airtableRecord.isInstituciones === true) {
+      logger.info('Special handling for Instituciones table');
+      
+      // For Instituciones table, force one of the valid section values
+      // that matches exactly what's in the database constraint
+      airtableRecord.forceSection = 'Politica';  // Use exactly what's in your DB constraint
+      logger.info(`Forced section for Instituciones to "Politica"`);
+    }
+
     // Ensure section value passes the check constraint 
     // Get section value from forceSection or from fields.section
     let sectionValue = airtableRecord.forceSection || airtableRecord.fields.section || '';
@@ -64,8 +75,14 @@ async function publishArticle(airtableRecord) {
     
     // Check if normalized section is valid, otherwise default to 'primera-plana'
     if (!validSections.includes(sectionValue)) {
-      logger.info(`Section "${sectionValue}" is not valid, defaulting to "primera-plana"`);
-      sectionValue = 'primera-plana';
+      // Special case for Instituciones: use exact DB constraint value
+      if (airtableRecord.sourceSectionId === 'Instituciones' || airtableRecord.isInstituciones === true) {
+        logger.info(`For Instituciones table, using "Politica" (exact DB value)`);
+        sectionValue = 'Politica'; // Exact match for DB constraint
+      } else {
+        logger.info(`Section "${sectionValue}" is not valid, defaulting to "primera-plana"`);
+        sectionValue = 'primera-plana';
+      }
     }
     
     logger.info(`Final section value: "${sectionValue}"`);
