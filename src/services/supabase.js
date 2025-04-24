@@ -45,15 +45,28 @@ async function publishArticle(airtableRecord) {
   try {
     logger.info('Publishing article to Supabase:', airtableRecord.id);
 
-    // Map section to section_id
+    // Dynamic section handling - multiple fallbacks to get the right section_id
     let section_id = null;
+    let section = '';
+
+    // Option 1: Use the section field from Airtable if available
     if (airtableRecord.fields.section) {
-      const sectionMapping = {
-        'Politica': 'politica',
-        'Economia': 'economia',
-        'Agro': 'agro'
-      };
-      section_id = sectionMapping[airtableRecord.fields.section] || null;
+      section = airtableRecord.fields.section;
+      // Convert to kebab-case for section_id 
+      section_id = section.toLowerCase().replace(/\s+/g, '-');
+    }
+
+    // Option 2: Use the sourceSectionId (table name) if passed from the webhook
+    if (!section_id && airtableRecord.sourceSectionId) {
+      section_id = airtableRecord.sourceSectionId.toLowerCase().replace(/\s+/g, '-');
+      // Also use it for section if section is empty
+      if (!section) {
+        // Convert kebab-case to Title Case for display
+        section = airtableRecord.sourceSectionId
+          .split(/[-_]/)
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ');
+      }
     }
 
     // Map all Airtable fields to Supabase schema
@@ -73,7 +86,7 @@ async function publishArticle(airtableRecord) {
       tw_post: airtableRecord.fields['tw-post'] || '',
       yt_video: airtableRecord.fields['yt-video'] || '',
       status: airtableRecord.fields.status || 'draft',
-      section: airtableRecord.fields.section || '',
+      section: section,
       section_id: section_id,
     };
 
@@ -93,9 +106,19 @@ async function publishArticle(airtableRecord) {
       throw error;
     }
 
+    // If no data is returned, use our article data
     if (!data || data.length === 0) {
-      logger.error('No data returned from Supabase upsert');
-      throw new Error('No data returned from database operation');
+      logger.warn('No data returned from Supabase upsert, using input data');
+      return {
+        success: true,
+        data: {
+          id: articleData.id,
+          title: articleData.title,
+          section: articleData.section,
+          section_id: articleData.section_id,
+          status: articleData.status,
+        },
+      };
     }
 
     logger.info('Successfully published to Supabase with ID:', data[0].id);
