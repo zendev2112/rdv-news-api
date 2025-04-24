@@ -35,117 +35,6 @@ if (!fs.existsSync(TEMP_DIR)) {
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Get available fields for a table
- * @param {string} tableName - Name of the table
- * @returns {Promise<string[]>} - Array of field names
- */
-let tableFieldsCache = {};
-async function getTableFields(tableName) {
-  // Use cached fields if available
-  if (tableFieldsCache[tableName]) {
-    return tableFieldsCache[tableName];
-  }
-
-  try {
-    // Get a sample record from the table to determine field structure
-    const sampleRecords = await airtableBase(tableName)
-      .select({ maxRecords: 1 })
-      .all();
-    
-    if (sampleRecords.length > 0) {
-      // Get all field names from the first record
-      const fields = Object.keys(sampleRecords[0].fields);
-      tableFieldsCache[tableName] = fields;
-      return fields;
-    }
-    return [];
-  } catch (error) {
-    console.error(`Error fetching fields for table ${tableName}:`, error.message);
-    return [];
-  }
-}
-
-/**
- * Get field mapping for a specific table
- * @param {string} tableName - Name of the table
- * @param {Object} standardFields - Standard field names to map
- * @returns {Promise<Object>} - Field mapping object
- */
-async function getFieldMapping(tableName, standardFields) {
-  const availableFields = await getTableFields(tableName);
-  const mapping = {};
-  
-  console.log(`Available fields in ${tableName}:`, availableFields);
-  
-  // Special handling for bajada field - we'll check if this caused the error
-  if (standardFields.bajada !== undefined) {
-    console.log('Found bajada field in input - need to map to excerpt or remove');
-    if (availableFields.includes('excerpt')) {
-      mapping.excerpt = standardFields.bajada;
-      console.log('Mapped bajada → excerpt');
-    } else {
-      console.log('No suitable field for bajada found, will be skipped');
-    }
-    // Don't include bajada field directly
-  } else if (standardFields.excerpt !== undefined) {
-    // If excerpt is provided, use it directly if available
-    if (availableFields.includes('excerpt')) {
-      mapping.excerpt = standardFields.excerpt;
-    }
-  }
-  
-  // Define potential alternative names for each standard field
-  const fieldAlternatives = {
-    title: ['title', 'name', 'heading'],
-    overline: ['overline', 'volanta', 'kicker', 'eyebrow'],
-    article: ['article', 'content', 'body', 'text'],
-    status: ['status', 'state', 'publication_status'],
-    section: ['section', 'category', 'topic'],
-    source: ['source', 'origin', 'platform'],
-    processingNotes: ['processingNotes', 'notes', 'comments', 'processing_notes']
-    // Removed excerpt/bajada as we handle it separately above
-  };
-  
-  // For each standard field, find the best match in available fields
-  for (const [stdField, fieldValue] of Object.entries(standardFields)) {
-    // Skip fields we've already handled and empty/undefined values
-    if (stdField === 'bajada' || stdField === 'excerpt' || 
-        fieldValue === undefined || fieldValue === null || fieldValue === '') {
-      continue;
-    }
-    
-    // If the exact field exists, use it
-    if (availableFields.includes(stdField)) {
-      mapping[stdField] = fieldValue;
-      continue;
-    }
-    
-    // Try alternative field names
-    const alternatives = fieldAlternatives[stdField] || [stdField];
-    for (const alt of alternatives) {
-      if (availableFields.includes(alt)) {
-        mapping[alt] = fieldValue;
-        console.log(`Mapped ${stdField} → ${alt}`);
-        break;
-      }
-    }
-  }
-  
-  // Final safety check - only include fields that actually exist
-  const finalMapping = {};
-  for (const [field, value] of Object.entries(mapping)) {
-    if (availableFields.includes(field)) {
-      finalMapping[field] = value;
-    } else {
-      console.log(`Skipping field ${field} as it doesn't exist in table ${tableName}`);
-    }
-  }
-  
-  console.log(`Final field mapping for ${tableName}:`, finalMapping);
-  return finalMapping;
-}
-
-/**
  * Main function to process social media content
  * @param {Object} options - Processing options
  * @param {string} options.tableName - Name of the Airtable table to process
@@ -154,7 +43,7 @@ async function getFieldMapping(tableName, standardFields) {
  */
 async function processSocialMediaContent(options = {}) {
   const {
-    tableName = process.env.AIRTABLE_DEFAULT_TABLE || 'Primera Plana',
+    tableName = process.env.AIRTABLE_DEFAULT_TABLE || 'Instituciones',
     limit = 20,
     forceProcess = false
   } = options;
@@ -177,7 +66,7 @@ Force Processing: ${forceProcess ? 'Yes' : 'No'}
         sort: [{ field: '_createdTime', direction: 'desc' }],
         filterByFormula: forceProcess 
           ? '' 
-          : "OR({status} = 'draft', {status} = '')"
+          : "OR({processingStatus} = 'needs_extraction', {processingStatus} = '')"
       })
       .all();
 
@@ -185,27 +74,6 @@ Force Processing: ${forceProcess ? 'Yes' : 'No'}
     
     if (allRecords.length === 0) {
       console.log('No records to process');
-      return { processed: 0, success: 0, failed: 0 };
-    }
-
-    // Determine which records have social media content to process
-    const recordsToProcess = allRecords.filter(record => {
-      const fields = record.fields;
-      
-      // Check if this record has any social media content
-      const hasSocialContent = 
-        fields['ig-post'] || 
-        fields['fb-post'] || 
-        fields['tw-post'] || 
-        fields['yt-video'];
-        
-      return hasSocialContent;
-    });
-
-    console.log(`Found ${recordsToProcess.length} records with social media content`);
-    
-    if (recordsToProcess.length === 0) {
-      console.log('No social media content to process');
       return { processed: 0, success: 0, failed: 0 };
     }
 
@@ -217,7 +85,7 @@ Force Processing: ${forceProcess ? 'Yes' : 'No'}
     };
 
     // Process each record
-    for (const record of recordsToProcess) {
+    for (const record of allRecords) {
       try {
         console.log(`\nProcessing record: ${record.id} - "${record.fields.title || 'Untitled'}"`);
         const success = await processRecord(record, tableName);
@@ -252,136 +120,114 @@ Force Processing: ${forceProcess ? 'Yes' : 'No'}
  */
 async function processRecord(record, tableName) {
   try {
-    const fields = record.fields
-    console.log('Available fields:', Object.keys(fields))
-
+    const fields = record.fields;
+    console.log('Available fields:', Object.keys(fields));
+    
     // Extract content from different social media sources
     const socialContent = {
       instagram: fields['ig-post'] || null,
       facebook: fields['fb-post'] || null,
       twitter: fields['tw-post'] || null,
-      youtube: fields['yt-video'] || null,
-    }
-
-    console.log(
-      'Social media sources found:',
+      youtube: fields['yt-video'] || null
+    };
+    
+    console.log('Social media sources found:', 
       Object.entries(socialContent)
         .filter(([_, value]) => !!value)
         .map(([key]) => key)
         .join(', ')
-    )
-
+    );
+    
     // Extract content from each social media source
-    let contentPieces = []
-    let source = ''
-
+    let contentPieces = [];
+    let source = '';
+    
     // Process Instagram
     if (socialContent.instagram) {
-      console.log('Processing Instagram content...')
-      source = 'Instagram'
-      const instagramContent = await extractSocialContent(
-        'instagram',
-        socialContent.instagram
-      )
-      if (instagramContent) contentPieces.push(instagramContent)
+      console.log('Processing Instagram content...');
+      source = 'Instagram';
+      const instagramContent = await extractSocialContent('instagram', socialContent.instagram);
+      if (instagramContent) contentPieces.push(instagramContent);
     }
-
+    
     // Process Facebook
     if (socialContent.facebook) {
-      console.log('Processing Facebook content...')
-      source = source || 'Facebook'
-      const facebookContent = await extractSocialContent(
-        'facebook',
-        socialContent.facebook
-      )
-      if (facebookContent) contentPieces.push(facebookContent)
+      console.log('Processing Facebook content...');
+      source = source || 'Facebook';
+      const facebookContent = await extractSocialContent('facebook', socialContent.facebook);
+      if (facebookContent) contentPieces.push(facebookContent);
     }
-
+    
     // Process Twitter
     if (socialContent.twitter) {
-      console.log('Processing Twitter content...')
-      source = source || 'Twitter'
-      const twitterContent = await extractSocialContent(
-        'twitter',
-        socialContent.twitter
-      )
-      if (twitterContent) contentPieces.push(twitterContent)
+      console.log('Processing Twitter content...');
+      source = source || 'Twitter';
+      const twitterContent = await extractSocialContent('twitter', socialContent.twitter);
+      if (twitterContent) contentPieces.push(twitterContent);
     }
-
+    
     // Process YouTube
     if (socialContent.youtube) {
-      console.log('Processing YouTube content...')
-      source = source || 'YouTube'
-      const youtubeContent = await extractSocialContent(
-        'youtube',
-        socialContent.youtube
-      )
-      if (youtubeContent) contentPieces.push(youtubeContent)
+      console.log('Processing YouTube content...');
+      source = source || 'YouTube';
+      const youtubeContent = await extractSocialContent('youtube', socialContent.youtube);
+      if (youtubeContent) contentPieces.push(youtubeContent);
     }
-
+    
     // If no content was extracted, check if we need to process an image
     if (contentPieces.length === 0 && fields.imgUrl) {
-      console.log(
-        'No text content found, attempting to extract text from image...'
-      )
-      const imageText = await extractTextFromImageUrl(fields.imgUrl)
-      if (imageText) contentPieces.push(imageText)
+      console.log('No text content found, attempting to extract text from image...');
+      const imageText = await extractTextFromImageUrl(fields.imgUrl);
+      if (imageText) contentPieces.push(imageText);
     }
-
+    
     // Combine all extracted content
-    const combinedContent = contentPieces.join('\n\n')
-
+    const combinedContent = contentPieces.join('\n\n');
+    
     if (!combinedContent) {
-      console.log('No content extracted from any source')
-      await updateRecord(record.id, tableName, {
-        status: 'draft',
-        processingNotes:
-          'No content could be extracted from social media sources',
-      })
-      return false
+      console.log('No content extracted from any source');
+      
+      // Update using only fields that exist in the table
+      await airtableBase(tableName).update(record.id, {
+        processingStatus: 'failed',
+        processingNotes: 'No content could be extracted from social media sources'
+      });
+      
+      return false;
     }
-
-    console.log(`Extracted ${combinedContent.length} characters of content`)
-
+    
+    console.log(`Extracted ${combinedContent.length} characters of content`);
+    
     // Generate structured content
-    const structuredContent = await generateStructuredContent(
-      combinedContent,
-      fields,
-      source
-    )
-
-    // Create standard fields object (not table-specific yet)
-    const standardFields = {
+    const structuredContent = await generateStructuredContent(combinedContent, fields, source);
+    
+    // Create update fields object that matches exactly to the table schema
+    const updateFields = {
       title: structuredContent.title || fields.title || 'Social Media Content',
-      overline: source || fields.overline || fields.volanta || 'Social Media',
-      // Use only excerpt, not bajada - let the field mapping handle it
+      overline: source || fields.overline || 'Social Media',
       excerpt: structuredContent.summary || fields.excerpt || '',
       article: structuredContent.article || combinedContent,
-      source: source || fields.source || 'Social Media',
-      status: fields.status || 'published',
+      status: 'Published',
+      processingStatus: 'completed'
     };
-
-    // Only set section if it's not already set and we have a recommended one
-    if (!fields.section && structuredContent.recommendedSection) {
-      standardFields.section = structuredContent.recommendedSection;
+    
+    // Only set section if we have a recommended one and the field exists
+    if (structuredContent.recommendedSection) {
+      updateFields.section = structuredContent.recommendedSection;
     }
-
-    // Add processing notes if we have them
-    if (fields.processingNotes) {
-      standardFields.processingNotes = fields.processingNotes;
-    }
-
-    console.log('Updating record with structured content...')
-    await updateRecord(record.id, tableName, standardFields)
-
-    console.log(`Successfully processed record ${record.id}`)
-    return true
+    
+    console.log('Updating record with structured content...');
+    await airtableBase(tableName).update(record.id, updateFields);
+    
+    console.log(`Successfully processed record ${record.id}`);
+    return true;
   } catch (error) {
     console.error(`Error processing record:`, error.message);
     
     // Update record with error status
     try {
-      await updateRecord(record.id, tableName, {
+      await airtableBase(tableName).update(record.id, {
+        processingStatus: 'error',
         processingNotes: `Error during processing: ${error.message.substring(0, 500)}`
       });
     } catch (e) {
@@ -395,7 +241,7 @@ async function processRecord(record, tableName) {
 /**
  * Extract content from social media source
  * @param {string} platform - Social media platform
- * @param {string} url - URL or content
+ * @param {string} content - URL or content
  */
 async function extractSocialContent(platform, content) {
   try {
@@ -615,35 +461,12 @@ async function generateStructuredContent(rawContent, fields, source) {
   }
 }
 
-/**
- * Update an Airtable record with proper field mapping
- * @param {string} recordId - Record ID
- * @param {string} tableName - Table name
- * @param {Object} fields - Fields to update
- */
-async function updateRecord(recordId, tableName, fields) {
-  try {
-    // Get field mapping for this specific table
-    const mappedFields = await getFieldMapping(tableName, fields);
-    
-    console.log(`Updating record ${recordId} in table ${tableName} with fields:`, 
-      Object.keys(mappedFields).join(', '));
-    
-    await airtableBase(tableName).update(recordId, mappedFields);
-    console.log(`Successfully updated record ${recordId}`);
-    return true;
-  } catch (error) {
-    console.error(`Failed to update record ${recordId}:`, error.message);
-    throw error;
-  }
-}
-
 // Allow command-line arguments to control behavior
 if (import.meta.url === `file://${process.argv[1]}`) {
   // Parse command line arguments
   const args = process.argv.slice(2);
   const options = {
-    tableName: args.find(arg => !arg.startsWith('--')) || process.env.AIRTABLE_DEFAULT_TABLE || 'Primera Plana',
+    tableName: args.find(arg => !arg.startsWith('--')) || process.env.AIRTABLE_DEFAULT_TABLE || 'Instituciones',
     limit: parseInt(args.find(arg => arg.startsWith('--limit='))?.split('=')[1] || '20'),
     forceProcess: args.includes('--force')
   };

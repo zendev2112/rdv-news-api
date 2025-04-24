@@ -633,31 +633,31 @@ function generateFallbackMetadata(extractedText) {
 
     // Use second paragraph as bajada (up to 200 chars)
     const secondPara = paragraphs[1] || paragraphs[0] || ''
-    const bajada = secondPara.trim().substring(0, 200)
+    const excerpt = secondPara.trim().substring(0, 200)
 
     // Simple volanta based on content
-    let volanta = ''
+    let overline = ''
 
     // Try to detect a category from the text
-    if (extractedText.match(/deport[eias]/i)) volanta = 'Deportes'
-    else if (extractedText.match(/econom[íia]/i)) volanta = 'Economía'
-    else if (extractedText.match(/politic[ao]/i)) volanta = 'Política'
+    if (extractedText.match(/deport[eias]/i)) overline = 'Deportes'
+    else if (extractedText.match(/econom[íia]/i)) overline = 'Economía'
+    else if (extractedText.match(/politic[ao]/i)) overline = 'Política'
     else if (extractedText.match(/entreten|espectácul|celebr|artista/i))
-      volanta = 'Espectáculos'
-    else if (extractedText.match(/tecnolog[íia]/i)) volanta = 'Tecnología'
-    else volanta = 'Noticias'
+      overline = 'Espectáculos'
+    else if (extractedText.match(/tecnolog[íia]/i)) overline = 'Tecnología'
+    else overline = 'Noticias'
 
     return {
       title: title || 'Artículo sin título',
-      bajada: bajada || 'Sin descripción disponible',
-      volanta: volanta,
+      excerpt: excerpt || 'Sin descripción disponible',
+      overline: overline,
     }
   } catch (error) {
     console.error('Error in fallback metadata generation:', error.message)
     return {
       title: 'Artículo sin título',
-      bajada: 'Sin descripción disponible',
-      volanta: 'Noticias',
+      excerpt: 'Sin descripción disponible',
+      overline: 'Noticias',
     }
   }
 }
@@ -1020,8 +1020,8 @@ async function processArticle(item, sectionId) {
     
     const recordFields = {
       title: metadata ? metadata.title : item.title,
-      overline: metadata ? metadata.volanta : 'No overline available.',
-      excerpt: metadata ? metadata.bajada : 'No summary available.',
+      overline: metadata ? metadata.overline : 'No overline available.',
+      excerpt: metadata ? metadata.excerpt : 'No summary available.',
       article: processedText,
       image: imageAttachments, // Array of attachment objects for Airtable
       imgUrl: imgUrl || (images.length > 0 ? images[0] : ''),
@@ -1033,7 +1033,7 @@ async function processArticle(item, sectionId) {
       'tw-post': twitterContent || '',
       'yt-video': youtubeContent || '',
       section: sectionValue, // Using exact dropdown value from Airtable options
-      status: 'draft'  // Using exact dropdown value 'draft' instead of 'Borrador'
+      status: 'draft', // Using exact dropdown value 'draft' instead of 'Borrador'
     }
 
     console.log(
@@ -1203,15 +1203,12 @@ async function processSection(section) {
           const recordFields = {
             title: title,
             url: sourceUrl,
-            bajada: cleanDescription,
+            excerpt: cleanDescription, // Using excerpt instead of bajada
             imgUrl: imageUrl || '',
-            volanta: sourceName, // Using source name as volanta
+            overline: sourceName, // Using overline instead of volanta
             section: section.id,
-            sectionName: section.name,
-            sectionColor: section.color,
             status: 'Ready',
             processingStatus: 'needs_extraction',
-            //publishedDate: item.pubDate || item.published || new Date().toISOString(),
             isOcrNeeded: true, // Flag for OCR processing
           }
 

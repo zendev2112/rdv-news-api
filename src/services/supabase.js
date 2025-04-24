@@ -45,15 +45,6 @@ async function publishArticle(airtableRecord) {
   try {
     logger.info('Publishing article to Supabase:', airtableRecord.id);
 
-    // Use forced section values if they exist (for Instituciones)
-    const section = airtableRecord.forceSection || 
-                   airtableRecord.fields.section || 
-                   (airtableRecord.isInstituciones ? 'lifestyle' : '');
-                   
-    const section_id = airtableRecord.forceSectionId || 
-                      (airtableRecord.fields.section ? airtableRecord.fields.section.toLowerCase().replace(/\s+/g, '-') : '') ||
-                      (airtableRecord.isInstituciones ? 'lifestyle' : '');
-
     // Map all Airtable fields to Supabase schema
     const articleData = {
       id: airtableRecord.id,
@@ -72,32 +63,26 @@ async function publishArticle(airtableRecord) {
       tw_post: airtableRecord.fields['tw-post'] || '',
       yt_video: airtableRecord.fields['yt-video'] || '',
       status: airtableRecord.fields.status || 'draft',
-      section: section,
-      section_id: section_id
-      // REMOVED: is_instituciones field that doesn't exist in schema
+      section: airtableRecord.forceSection || airtableRecord.fields.section || '',
+      section_id: airtableRecord.forceSectionId || 
+                (airtableRecord.fields.section ? airtableRecord.fields.section.toLowerCase().replace(/\s+/g, '-') : '')
+      // REMOVE any metadata field reference here
+      // metadata: { ... } <- This line is causing the error and should be removed
     };
-
-    // For Instituciones, add additional fields if they exist
-    if (airtableRecord.isInstituciones) {
-      if (airtableRecord.fields.sectionName) {
-        articleData.section_name = airtableRecord.fields.sectionName;
+    
+    // REMOVE code that tries to add institutional info to metadata
+    // If institutional info needs to be tracked, use existing fields
+    
+    // Check for optional fields that might exist in some tables
+    // Only include if they exist in the Supabase schema
+    const optionalFields = ['section_name', 'section_color'];
+    optionalFields.forEach(field => {
+      if (airtableRecord.fields[field]) {
+        // Check if this field exists in your Supabase schema before adding
+        // Remove this condition if you're sure these fields exist in Supabase
+        articleData[field] = airtableRecord.fields[field];
       }
-      if (airtableRecord.fields.sectionColor) {
-        articleData.section_color = airtableRecord.fields.sectionColor;
-      }
-      
-      // Add a flag in the metadata or other allowed field if you need to track this
-      // Only if these fields exist in your schema
-      if (articleData.metadata === undefined) {
-        articleData.metadata = {};
-      }
-      
-      // You could add a metadata field if your schema has it
-      // articleData.metadata = { 
-      //   ...articleData.metadata,
-      //   is_instituciones: true 
-      // };
-    }
+    });
 
     logger.info('Prepared article data for Supabase');
     logger.debug('Article data keys:', Object.keys(articleData));
@@ -107,7 +92,7 @@ async function publishArticle(airtableRecord) {
       .from('articles')
       .upsert(articleData, {
         onConflict: 'id',
-        returning: 'representation',
+        returning: 'minimal', // Use 'representation' if you need the returned data
       });
 
     if (error) {
@@ -115,31 +100,16 @@ async function publishArticle(airtableRecord) {
       throw error;
     }
 
-    // If no data is returned, use our article data
-    if (!data || data.length === 0) {
-      logger.warn('No data returned from Supabase upsert, using input data');
-      return {
-        success: true,
-        data: {
-          id: articleData.id,
-          title: articleData.title,
-          section: articleData.section,
-          section_id: articleData.section_id,
-          status: articleData.status,
-        },
-      };
-    }
-
-    logger.info('Successfully published to Supabase with ID:', data[0].id);
+    logger.info('Successfully published to Supabase with ID:', airtableRecord.id);
 
     return {
       success: true,
       data: {
-        id: data[0].id,
-        title: data[0].title,
-        section: data[0].section,
-        section_id: data[0].section_id,
-        status: data[0].status,
+        id: airtableRecord.id,
+        title: articleData.title,
+        section: articleData.section,
+        section_id: articleData.section_id,
+        status: articleData.status,
       },
     };
   } catch (error) {
