@@ -56,6 +56,9 @@ router.post('/airtable/publish', async (req, res) => {
     
     logger.info(`Fetching Airtable record ${recordId} from section ${sectionId}`);
     
+    // Log the received table name for debugging
+    logger.debug(`Received tableName/sectionId: ${sectionId}`);
+    
     // Get the record from Airtable
     const record = await airtableService.getRecord(recordId, sectionId);
     
@@ -80,7 +83,11 @@ router.post('/airtable/publish', async (req, res) => {
     return res.json(result);
     
   } catch (error) {
-    logger.error('Error in webhook handler:', error);
+    // Add more detailed error logging
+    logger.error(`Error processing webhook: ${error.message}`);
+    if (error.message.includes('Record not found')) {
+      logger.error(`Could not find record ${recordId} in table ${sectionId}`);
+    }
     return res.status(500).json({ success: false, error: error.message });
   }
 });

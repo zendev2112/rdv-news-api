@@ -14,6 +14,8 @@
     "fetch:primera-plana:limited": "node fetch-to-airtable.js primera-plana --limit 10",
     "fetch:agro": "node fetch-to-airtable.js agro",
     "fetch:deportes": "node fetch-to-airtable.js deportes",
+    "fetch:politica": "node fetch-to-airtable.js politica",
+    "fetch:turismo": "node fetch-to-airtable.js turismo",
     "fetch:economia": "node fetch-to-airtable.js economia",
     "fetch:lifestyle": "node fetch-to-airtable.js lifestyle",
     "fetch:instituciones": "node fetch-to-airtable.js instituciones",

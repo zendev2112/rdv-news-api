@@ -271,40 +271,73 @@ async function getRecords(sectionId = 'test', params = {}) {
  */
 async function getRecord(recordId, sectionId = 'primera-plana') {
   try {
-    // Get the API URL for the section
-    const airtableApiUrl = getAirtableApiUrl(sectionId);
-    if (!airtableApiUrl) {
-      logger.error(`Could not generate API URL for section ${sectionId}`);
-      return null;
-    }
-
-    // Build the URL to fetch a single record
-    const url = `${airtableApiUrl}/${recordId}`;
+    logger.info(`Fetching record ${recordId} from section ${sectionId}`);
     
-    logger.info(`Fetching record ${recordId} from Airtable section '${sectionId}'`);
-
-    // Make the API request
-    const response = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${config.airtable.personalAccessToken || apiToken}`,
-      },
-    });
-
-    if (!response.data) {
-      logger.warn(`No data found for record ${recordId} in ${sectionId}`);
-      return null;
+    // Ensure we have a valid Airtable base
+    const base = new Airtable({
+      apiKey: process.env.AIRTABLE_API_KEY
+    }).base(process.env.AIRTABLE_BASE_ID);
+    
+    // Check if the table exists or use a fallback approach
+    let table;
+    
+    try {
+      // Try to access the table directly by name
+      table = base(sectionId);
+      
+      // Test if the table is accessible
+      logger.debug(`Attempting to access table: ${sectionId}`);
+      
+      // Fetch the record
+      const record = await table.find(recordId);
+      
+      logger.info(`Successfully retrieved record ${recordId} from ${sectionId}`);
+      return record;
+      
+    } catch (tableError) {
+      // If the table doesn't exist by that name, try with alternative formats
+      logger.warn(`Table "${sectionId}" not found, trying alternative formats...`);
+      
+      // Try with Title Case
+      const titleCaseTable = sectionId
+        .split(/[-_]/)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+        
+      try {
+        table = base(titleCaseTable);
+        const record = await table.find(recordId);
+        logger.info(`Found record in table with Title Case: "${titleCaseTable}"`);
+        return record;
+      } catch (titleCaseError) {
+        // Try with all lowercase
+        try {
+          const lowercaseTable = sectionId.toLowerCase();
+          table = base(lowercaseTable);
+          const record = await table.find(recordId);
+          logger.info(`Found record in table with lowercase: "${lowercaseTable}"`);
+          return record;
+        } catch (lowercaseError) {
+          // Try with uppercase first letter
+          try {
+            const capitalizedTable = 
+              sectionId.charAt(0).toUpperCase() + 
+              sectionId.slice(1);
+            table = base(capitalizedTable);
+            const record = await table.find(recordId);
+            logger.info(`Found record in table with capitalized first letter: "${capitalizedTable}"`);
+            return record;
+          } catch (capitalizedError) {
+            // If we've tried all formats and none work, log the error
+            logger.error(`Cannot find table for section: ${sectionId}`);
+            logger.error(`Tried formats: "${sectionId}", "${titleCaseTable}", "${sectionId.toLowerCase()}", "${sectionId.charAt(0).toUpperCase() + sectionId.slice(1)}"`);
+            throw new Error(`Table not found for section: ${sectionId}`);
+          }
+        }
+      }
     }
-
-    logger.info(`Successfully retrieved record ${recordId} from ${sectionId}`);
-    return response.data;
   } catch (error) {
-    logger.error(`Error fetching record ${recordId} from ${sectionId}:`, error.message);
-
-    if (error.response) {
-      logger.error(`Status: ${error.response.status}`);
-      logger.error(`Response: ${JSON.stringify(error.response.data)}`);
-    }
-
+    logger.error(`Error fetching record ${recordId} from section ${sectionId}:`, error);
     throw error;
   }
 }

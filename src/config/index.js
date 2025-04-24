@@ -56,7 +56,25 @@ const NEWS_SECTIONS = [
     icon: 'public',
     priority: 6,
   },
-];
+  {
+    id: 'politica',
+    name: 'Politica',
+    tableName: 'Politica',
+    rssUrl: 'https://rss.app/feeds/v1.1/_mGLr9iAOQjf9o3S6.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 7,
+  },
+  {
+    id: 'turismo',
+    name: 'Turismo',
+    tableName: 'Turismo',
+    rssUrl: 'https://rss.app/feeds/v1.1/_Fl3IYhnnTrOHPafk.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 8,
+  },
+]
 
 const config = {
   port: process.env.PORT || 3001,
