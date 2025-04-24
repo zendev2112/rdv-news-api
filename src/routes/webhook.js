@@ -6,6 +6,25 @@ import logger from '../utils/logger.js';
 const router = express.Router();
 
 /**
+ * GET handler for webhook endpoint - for testing/documentation purposes
+ */
+router.get('/airtable/publish', (req, res) => {
+  logger.info('GET request received on webhook endpoint');
+  res.json({
+    status: 'online',
+    message: 'Webhook endpoint is ready for POST requests',
+    usage: {
+      method: 'POST',
+      contentType: 'application/json',
+      body: {
+        recordId: 'required - Airtable record ID',
+        sectionId: 'optional - defaults to primera-plana'
+      }
+    }
+  });
+});
+
+/**
  * Webhook endpoint to receive publish events from Airtable
  * This is triggered when the "publish" button is clicked in Airtable
  */

@@ -17,12 +17,17 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Decode JWT to log role type
+// Decode JWT to log role type
 function decodeJwt(token) {
   try {
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(Buffer.from(base64, 'base64').toString().split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
     return JSON.parse(jsonPayload);
   } catch (e) {
+    console.error('Error decoding JWT:', e);
     return { error: 'Invalid token format' };
   }
 }
@@ -88,6 +93,11 @@ async function publishArticle(airtableRecord) {
       throw error;
     }
 
+    if (!data || data.length === 0) {
+      logger.error('No data returned from Supabase upsert');
+      throw new Error('No data returned from database operation');
+    }
+
     logger.info('Successfully published to Supabase with ID:', data[0].id);
 
     return {
@@ -108,7 +118,6 @@ async function publishArticle(airtableRecord) {
     };
   }
 }
-
 /**
  * Gets all published articles
  */
