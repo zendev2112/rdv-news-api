@@ -62,10 +62,10 @@ async function publishArticle(airtableRecord) {
         .replace(/[^a-z0-9]+/g, '-'); // Replace non-alphanumeric with hyphens
     }
     
-    // Check if normalized section is valid, otherwise default to 'lifestyle'
+    // Check if normalized section is valid, otherwise default to 'primera-plana'
     if (!validSections.includes(sectionValue)) {
-      logger.info(`Section "${sectionValue}" is not valid, defaulting to "lifestyle"`);
-      sectionValue = 'lifestyle';
+      logger.info(`Section "${sectionValue}" is not valid, defaulting to "primera-plana"`);
+      sectionValue = 'primera-plana';
     }
     
     logger.info(`Final section value: "${sectionValue}"`);
