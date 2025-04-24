@@ -18,9 +18,30 @@ CREATE INDEX IF NOT EXISTS idx_sections_slug ON sections(slug);
 -- Create index for active sections
 CREATE INDEX IF NOT EXISTS idx_sections_active ON sections(is_active);
 
--- Add foreign key to articles table pointing to sections
-ALTER TABLE articles 
-ADD COLUMN section_id TEXT REFERENCES sections(id);
+-- Only add foreign key constraint if section_id exists
+DO $$
+BEGIN
+    -- Check if section_id column exists
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'articles' AND column_name = 'section_id'
+    ) THEN
+        -- If column exists, just add or update the foreign key constraint
+        -- First drop if exists to avoid errors
+        ALTER TABLE articles
+        DROP CONSTRAINT IF EXISTS fk_section_id_sections;
+        
+        -- Then add the constraint
+        ALTER TABLE articles
+        ADD CONSTRAINT fk_section_id_sections
+        FOREIGN KEY (section_id) REFERENCES sections(id);
+    ELSE
+        -- If column doesn't exist, add it with the foreign key
+        ALTER TABLE articles
+        ADD COLUMN section_id TEXT REFERENCES sections(id);
+    END IF;
+END $$;
 
 -- Update the trigger for the sections table
 CREATE OR REPLACE FUNCTION update_sections_modified_column()
@@ -30,6 +51,9 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Drop the trigger if it exists before creating it
+DROP TRIGGER IF EXISTS set_sections_updated_at ON sections;
 
 -- Create trigger to update the timestamp when a section is modified
 CREATE TRIGGER set_sections_updated_at
