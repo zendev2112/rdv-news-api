@@ -3,6 +3,11 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import fs from 'fs';
 import path from 'path';
+import axios from 'axios';
+import Airtable from 'airtable';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import config from '../config/index.js';
+import sharp from 'sharp';
 
 // Configure environment variables
 dotenv.config();
@@ -11,430 +16,344 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Import services
-import Airtable from 'airtable';
-import config from '../config/index.js';
-import sharp from 'sharp';
-import axios from 'axios';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-// Initialize services
+// Initialize Airtable
 const airtableBase = new Airtable({
   apiKey: process.env.AIRTABLE_TOKEN,
 }).base(process.env.AIRTABLE_BASE_ID);
 
-// Initialize Gemini API
+// Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 const model = genAI.getGenerativeModel({ model: config.gemini.model });
 
-// Create temp directory for image downloads
+// Create temp directory for image processing (only used if absolutely necessary)
 const TEMP_DIR = path.join(__dirname, '../../temp');
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
 // Helper function to create a delay
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Main function to process social media content with OCR
+ * Main function to process social media content
+ * @param {Object} options - Processing options
+ * @param {string} options.tableName - Name of the Airtable table to process
+ * @param {number} options.limit - Maximum number of records to process
+ * @param {boolean} options.forceProcess - Process all records regardless of status
  */
-async function processSocialMediaContent() {
-  console.log('Looking for social media content that needs processing...');
+async function processSocialMediaContent(options = {}) {
+  const {
+    tableName = process.env.AIRTABLE_DEFAULT_TABLE || 'Primera Plana',
+    limit = 20,
+    forceProcess = false
+  } = options;
+  
+  console.log(`
+================================
+SOCIAL MEDIA CONTENT PROCESSOR
+================================
+Table: ${tableName}
+Limit: ${limit} records
+Force Processing: ${forceProcess ? 'Yes' : 'No'}
+  `);
 
   try {
-    // Verify Airtable credentials
-    console.log('Checking Airtable connection...');
-    console.log(`Using Base ID: ${process.env.AIRTABLE_BASE_ID}`);
-    console.log(`Token available: ${process.env.AIRTABLE_TOKEN ? 'Yes (length: ' + process.env.AIRTABLE_TOKEN.length + ')' : 'No'}`);
+    // Fetch records from specified table
+    console.log(`Fetching records from "${tableName}" table...`);
+    const allRecords = await airtableBase(tableName)
+      .select({
+        maxRecords: limit,
+        sort: [{ field: '_createdTime', direction: 'desc' }],
+        filterByFormula: forceProcess 
+          ? '' 
+          : "OR({status} = 'draft', {status} = '')"
+      })
+      .all();
+
+    console.log(`Found ${allRecords.length} records in "${tableName}" table`);
     
-    // Get all records without sorting by creation time
-    console.log('Getting records from Instituciones table...');
-    try {
-      const allRecords = await airtableBase('Instituciones')
-        .select({
-          maxRecords: 20
-        })
-        .all();
-      
-      console.log(`Found ${allRecords.length} total records in Instituciones table`);
-      
-      if (allRecords.length === 0) {
-        console.log('No records found in the table');
-        return;
-      }
-      
-      // Rest of your code...
-      // Log the first record to inspect what fields actually exist
-      if (allRecords.length > 0) {
-        console.log('First record field names:', Object.keys(allRecords[0].fields));
-        console.log('First record sample data:', JSON.stringify({
-          title: allRecords[0].fields.title,
-          url: allRecords[0].fields.url,
-          imgUrl: allRecords[0].fields.imgUrl,
-          processingStatus: allRecords[0].fields.processingStatus
-        }, null, 2));
-      }
-      
-      // Now filter manually to find records that need processing
-      let recordsToProcess = allRecords.filter(record => 
-        record.fields.processingStatus === 'needs_extraction' || 
-        !record.fields.processingStatus
-      );
-      
-      console.log(`Found ${recordsToProcess.length} records that need processing`);
-      
-      // If no records found with needs_extraction, just grab a recent unprocessed one
-      if (recordsToProcess.length === 0 && allRecords.length > 0) {
-        recordsToProcess = [allRecords[0]];
-        console.log('No records explicitly need processing, but processing first record as test');
-      }
-      
-      if (recordsToProcess.length === 0) {
-        console.log('No records to process');
-        return;
-      }
-      
-      // Process each record
-      for (const record of recordsToProcess) {
-        try {
-          console.log(`\nProcessing record: ${record.id}`);
-          console.log('Image URL:', record.fields.imgUrl);
-          await processRecord(record);
-          await delay(3000);
-        } catch (error) {
-          console.error(`Error processing record ${record.id}:`, error.message);
-        }
-      }
-    } catch (airtableError) {
-      // Improved error handling for Airtable connection issues
-      console.error('Airtable API error:', airtableError.message);
-      
-      if (airtableError.statusCode) {
-        console.error(`Status code: ${airtableError.statusCode}`);
-      }
-      
-      // Try to access error details if available
-      if (airtableError.response) {
-        console.error('Error response:', airtableError.response.data || airtableError.response);
-      }
-      
-      // Manual API test using axios directly
-      console.log('\nTrying direct API test with axios...');
-      try {
-        const testResponse = await axios({
-          method: 'GET',
-          url: `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Instituciones?maxRecords=1`,
-          headers: {
-            'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        console.log('Direct API test succeeded! Status:', testResponse.status);
-      } catch (axiosError) {
-        console.error('Direct API test failed:', axiosError.message);
-        if (axiosError.response) {
-          console.error('Status:', axiosError.response.status);
-          console.error('Data:', axiosError.response.data);
-        }
-      }
-      
-      throw airtableError;
+    if (allRecords.length === 0) {
+      console.log('No records to process');
+      return { processed: 0, success: 0, failed: 0 };
     }
+
+    // Determine which records have social media content to process
+    const recordsToProcess = allRecords.filter(record => {
+      const fields = record.fields;
+      
+      // Check if this record has any social media content
+      const hasSocialContent = 
+        fields['ig-post'] || 
+        fields['fb-post'] || 
+        fields['tw-post'] || 
+        fields['yt-video'];
+        
+      return hasSocialContent;
+    });
+
+    console.log(`Found ${recordsToProcess.length} records with social media content`);
     
-    console.log('Completed processing social media content');
+    if (recordsToProcess.length === 0) {
+      console.log('No social media content to process');
+      return { processed: 0, success: 0, failed: 0 };
+    }
+
+    // Process statistics
+    const stats = {
+      processed: 0,
+      success: 0,
+      failed: 0
+    };
+
+    // Process each record
+    for (const record of recordsToProcess) {
+      try {
+        console.log(`\nProcessing record: ${record.id} - "${record.fields.title || 'Untitled'}"`);
+        const success = await processRecord(record, tableName);
+        
+        stats.processed++;
+        if (success) {
+          stats.success++;
+        } else {
+          stats.failed++;
+        }
+        
+        // Avoid rate limiting
+        await delay(2000);
+      } catch (error) {
+        console.error(`Error processing record ${record.id}:`, error.message);
+        stats.processed++;
+        stats.failed++;
+      }
+    }
+
+    return stats;
   } catch (error) {
-    console.error('Error processing social media content:', error.message);
+    console.error('Error in social media content processing:', error.message);
+    return { processed: 0, success: 0, failed: 0, error: error.message };
   }
 }
 
 /**
- * Process a single record
+ * Process a single record with social media content
+ * @param {Object} record - The Airtable record
+ * @param {string} tableName - The table name
  */
-async function processRecord(record) {
+async function processRecord(record, tableName) {
   try {
     const fields = record.fields;
-
-    // Skip if no imgUrl
-    if (!fields.imgUrl) {
-      console.log(`No image found for record ${record.id}`);
-      await airtableBase('Instituciones').update(record.id, {
-        processingStatus: 'no_image',
-        processingNotes: 'No image URL found in record',
-        status: 'Published', // Mark as published anyway
+    console.log('Available fields:', Object.keys(fields));
+    
+    // Extract content from different social media sources
+    const socialContent = {
+      instagram: fields['ig-post'] || null,
+      facebook: fields['fb-post'] || null,
+      twitter: fields['tw-post'] || null,
+      youtube: fields['yt-video'] || null
+    };
+    
+    console.log('Social media sources found:', 
+      Object.entries(socialContent)
+        .filter(([_, value]) => !!value)
+        .map(([key]) => key)
+        .join(', ')
+    );
+    
+    // Extract content from each social media source
+    let contentPieces = [];
+    let source = '';
+    
+    // Process Instagram
+    if (socialContent.instagram) {
+      console.log('Processing Instagram content...');
+      source = 'Instagram';
+      const instagramContent = await extractSocialContent('instagram', socialContent.instagram);
+      if (instagramContent) contentPieces.push(instagramContent);
+    }
+    
+    // Process Facebook
+    if (socialContent.facebook) {
+      console.log('Processing Facebook content...');
+      source = source || 'Facebook';
+      const facebookContent = await extractSocialContent('facebook', socialContent.facebook);
+      if (facebookContent) contentPieces.push(facebookContent);
+    }
+    
+    // Process Twitter
+    if (socialContent.twitter) {
+      console.log('Processing Twitter content...');
+      source = source || 'Twitter';
+      const twitterContent = await extractSocialContent('twitter', socialContent.twitter);
+      if (twitterContent) contentPieces.push(twitterContent);
+    }
+    
+    // Process YouTube
+    if (socialContent.youtube) {
+      console.log('Processing YouTube content...');
+      source = source || 'YouTube';
+      const youtubeContent = await extractSocialContent('youtube', socialContent.youtube);
+      if (youtubeContent) contentPieces.push(youtubeContent);
+    }
+    
+    // If no content was extracted, check if we need to process an image
+    if (contentPieces.length === 0 && fields.imgUrl) {
+      console.log('No text content found, attempting to extract text from image...');
+      const imageText = await extractTextFromImageUrl(fields.imgUrl);
+      if (imageText) contentPieces.push(imageText);
+    }
+    
+    // Combine all extracted content
+    const combinedContent = contentPieces.join('\n\n');
+    
+    if (!combinedContent) {
+      console.log('No content extracted from any source');
+      await updateRecord(record.id, tableName, {
+        status: 'draft',
+        processingNotes: 'No content could be extracted from social media sources'
       });
-      return;
+      return false;
     }
-
-    // Download the image
-    console.log(`Downloading image: ${fields.imgUrl}`);
-    const imagePath = await downloadImage(fields.imgUrl);
-
-    if (!imagePath) {
-      console.error(`Failed to download image: ${fields.imgUrl}`);
-      await airtableBase('Instituciones').update(record.id, {
-        processingStatus: 'error',
-        processingNotes: `Failed to download image: ${fields.imgUrl}`,
-      });
-      return;
+    
+    console.log(`Extracted ${combinedContent.length} characters of content`);
+    
+    // Generate structured content
+    const structuredContent = await generateStructuredContent(combinedContent, fields, source);
+    
+    // Update the record with generated content
+    const updateFields = {
+      title: structuredContent.title || fields.title || 'Social Media Content',
+      overline: source || fields.overline || 'Social Media',
+      excerpt: structuredContent.summary || fields.excerpt || '',
+      article: structuredContent.article || combinedContent,
+      source: source || fields.source || 'Social Media',
+      status: 'published'
+    };
+    
+    // Only set section if it's not already set and we have a recommended one
+    if (!fields.section && structuredContent.recommendedSection) {
+      updateFields.section = structuredContent.recommendedSection;
     }
-
-    // Extract text from image using Gemini
-    console.log('Extracting text from image...');
-    const extractedText = await extractTextFromImage(imagePath);
-
-    // Generate structured content from extracted text
-    let content = {};
-    if (extractedText) {
-      console.log(`Extracted ${extractedText.length} characters of text`);
-      content = await generateContent(extractedText, fields);
-    } else {
-      console.log('No text extracted from image');
-      content = {
-        title: fields.title || 'Publicación de Redes Sociales',
-        summary: fields.bajada || 'No se pudo extraer texto de la imagen',
-        article: `## ${fields.title || 'Publicación de Redes Sociales'}\n\n${
-          fields.bajada || ''
-        }\n\n**Fuente:** ${fields.volanta || 'Redes Sociales'}`,
-      };
-    }
-
-    // Update the record with the extracted content
-    console.log('Updating record with extracted content');
-    await airtableBase('Instituciones').update(record.id, {
-      title: content.title,
-      bajada: content.summary,
-      article: content.article,
-      processingStatus: 'completed',
-      processingNotes: 'Successfully processed with title and summary',
-      status: 'Published',
-    });
-
-    console.log(`Record ${record.id} updated successfully`);
-
-    // Clean up temporary file
-    if (fs.existsSync(imagePath)) {
-      fs.unlinkSync(imagePath);
-    }
+    
+    console.log('Updating record with structured content...');
+    await updateRecord(record.id, tableName, updateFields);
+    
+    console.log(`Successfully processed record ${record.id}`);
+    return true;
   } catch (error) {
     console.error(`Error processing record:`, error.message);
-
-    // Update record with error status - using a predefined option
+    
+    // Update record with error status
     try {
-      await airtableBase('Instituciones').update(record.id, {
-        processingStatus: 'error',
-        processingNotes: `Error during processing: ${error.message.substring(
-          0,
-          500
-        )}`,
+      await updateRecord(record.id, tableName, {
+        processingNotes: `Error during processing: ${error.message.substring(0, 500)}`
       });
     } catch (e) {
       console.error('Failed to update record error status:', e.message);
     }
+    
+    return false;
   }
 }
 
 /**
- * Download an image from a URL with better error handling and URL normalization
+ * Extract content from social media source
+ * @param {string} platform - Social media platform
+ * @param {string} url - URL or content
  */
-async function downloadImage(imageUrl) {
+async function extractSocialContent(platform, content) {
   try {
-    if (!imageUrl) {
-      console.error('No image URL provided');
-      return null;
+    // If content is a URL with an image embed
+    if (content.match(/\.(jpeg|jpg|png|gif|webp)/i)) {
+      return await extractTextFromImageUrl(content);
     }
     
-    console.log(`Downloading image from: ${imageUrl}`);
+    // For embedded content or plain URLs, we'll use AI to extract useful information
+    const prompt = `
+      Analyze this ${platform} content and extract all meaningful text:
+      
+      ${content}
+      
+      Return ONLY the extracted text content without any analysis or prefacing.
+      If this is a URL or embed code with no extractable text, respond with EMPTY.
+    `;
     
-    // Simple URL cleanup
-    const normalizedUrl = imageUrl.trim();
+    const result = await model.generateContent(prompt);
+    const extractedText = (await result.response).text().trim();
     
-    try {
-      // Try a simpler download approach
-      const response = await axios({
-        url: normalizedUrl,
-        method: 'GET',
-        responseType: 'arraybuffer',
-        timeout: 15000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
-      
-      // Create a unique filename
-      const filename = `image-${Date.now()}.jpg`;
-      const filepath = path.join(TEMP_DIR, filename);
-      
-      // Write the file
-      fs.writeFileSync(filepath, response.data);
-      console.log(`Image saved to: ${filepath}`);
-      
-      // Check file size
-      const stats = fs.statSync(filepath);
-      if (stats.size > 0) {
-        console.log(`Download successful: ${stats.size} bytes`);
-        return filepath;
-      } else {
-        console.error('Downloaded file is empty');
-        fs.unlinkSync(filepath);
-        return null;
-      }
-    } catch (downloadError) {
-      console.error(`Download error: ${downloadError.message}`);
-      
-      // Try an alternative download method using a stream
-      console.log('Trying alternative download method...');
-      return await downloadImageAsStream(normalizedUrl);
-    }
+    return extractedText === 'EMPTY' ? '' : extractedText;
   } catch (error) {
-    console.error(`Image download failed: ${error.message}`);
-    return null;
+    console.error(`Error extracting content from ${platform}:`, error.message);
+    return '';
   }
 }
 
-// Add this new helper function for stream-based downloads
-async function downloadImageAsStream(url) {
+/**
+ * Extract text from an image URL (without downloading if possible)
+ * @param {string} imageUrl - URL of the image
+ */
+async function extractTextFromImageUrl(imageUrl) {
   try {
-    const filename = `stream-image-${Date.now()}.jpg`;
-    const filepath = path.join(TEMP_DIR, filename);
-    const writer = fs.createWriteStream(filepath);
+    if (!imageUrl) return '';
     
+    console.log(`Extracting text from image URL: ${imageUrl}`);
+    
+    // Option 1: Try to extract without downloading by passing URL directly to AI
+    // This works for public images from major platforms
+    try {
+      console.log('Attempting direct URL analysis without download...');
+      
+      const prompt = `
+        Analyze this image URL and extract all visible text from the image:
+        ${imageUrl}
+        
+        Return ONLY the extracted text with appropriate formatting.
+        If you cannot access or analyze this image, respond with CANNOT_ACCESS_IMAGE.
+      `;
+      
+      const result = await model.generateContent(prompt);
+      const extractedText = (await result.response).text().trim();
+      
+      // If successful, return the extracted text
+      if (extractedText && extractedText !== 'CANNOT_ACCESS_IMAGE') {
+        console.log(`Successfully extracted text directly: ${extractedText.length} characters`);
+        return extractedText;
+      }
+      
+      console.log('Direct extraction failed, will attempt download...');
+    } catch (e) {
+      console.log(`Direct URL extraction failed: ${e.message}`);
+    }
+    
+    // Option 2: If direct URL analysis fails, download and process the image
+    // This is used as a fallback and should happen less frequently
+    console.log('Downloading image for processing...');
+    
+    // Create a temporary file path
+    const tempFile = path.join(TEMP_DIR, `temp-${Date.now()}.jpg`);
+    
+    // Download the image
     const response = await axios({
-      url,
+      url: imageUrl,
       method: 'GET',
-      responseType: 'stream',
+      responseType: 'arraybuffer',
       timeout: 15000
     });
     
-    response.data.pipe(writer);
+    // Write to temporary file
+    fs.writeFileSync(tempFile, response.data);
     
-    return new Promise((resolve, reject) => {
-      writer.on('finish', () => {
-        console.log(`Stream download completed: ${filepath}`);
-        resolve(filepath);
-      });
-      writer.on('error', err => {
-        console.error(`Stream download failed: ${err.message}`);
-        reject(err);
-      });
-    });
-  } catch (error) {
-    console.error(`Stream download error: ${error.message}`);
-    return null;
-  }
-}
-
-/**
- * Extract text from an image using Gemini Vision with enhanced preprocessing
- */
-async function extractTextFromImage(imagePath) {
-  try {
-    console.log('Starting image preprocessing for better OCR...');
-    
-    // Read the original image
-    let imageBuffer = fs.readFileSync(imagePath);
-    
-    // Create a preprocessed version with enhanced readability
-    const enhancedImageBuffer = await sharp(imageBuffer)
-      // Resize to reasonable dimensions while maintaining aspect ratio
-      .resize({ width: 1500, height: 1500, fit: 'inside' })
-      // Increase contrast to make text more visible
-      .normalize()
-      // Sharpen the image to improve text edges
-      .sharpen({ sigma: 1.2 })
-      // Reduce noise which can interfere with text recognition
-      .median(1)
-      // Force output format to be high quality
-      .jpeg({ quality: 90 })
-      .toBuffer();
-    
-    // Save enhanced image for inspection if needed
-    const enhancedPath = `${imagePath.replace(/\.[^/.]+$/, '')}-enhanced.jpg`;
-    fs.writeFileSync(enhancedPath, enhancedImageBuffer);
-    console.log(`Enhanced image saved to: ${enhancedPath}`);
-    
-    // Also create a high-contrast version optimized for text
-    const bwImageBuffer = await sharp(imageBuffer)
-      .resize({ width: 1500, height: 1500, fit: 'inside' })
-      // Apply grayscale 
-      .grayscale()
-      // Increase contrast dramatically
-      .normalize()
-      // Make black and white with threshold
-      .threshold(128)
-      // Sharpen the text
-      .sharpen({ sigma: 1.5 })
-      .jpeg({ quality: 90 })
-      .toBuffer();
-      
-    // Save B&W image for inspection
-    const bwPath = `${imagePath.replace(/\.[^/.]+$/, '')}-bw.jpg`;
-    fs.writeFileSync(bwPath, bwImageBuffer);
-    console.log(`B&W image saved to: ${bwPath}`);
-    
-    // Convert to base64 for both versions
-    const normalBase64 = enhancedImageBuffer.toString('base64');
-    const bwBase64 = bwImageBuffer.toString('base64');
-    
-    // Try to extract text from both the enhanced color version and B&W version
-    console.log('Attempting text extraction with enhanced color image...');
-    const colorResult = await model.generateContent([
-      "Extract all visible text from this image. The image may be a flyer, social media post, or other content with text. Return ONLY the extracted text with appropriate formatting (paragraphs, etc.). Don't include any explanations or descriptions, just the extracted text.",
-      {
-        inlineData: {
-          data: normalBase64,
-          mimeType: 'image/jpeg',
-        },
-      },
-    ]);
-    
-    const colorText = (await colorResult.response).text().trim();
-    console.log(`Extracted ${colorText.length} characters from color image`);
-    
-    // If we got substantial text from the color version, use that
-    if (colorText.length > 100) {
-      console.log('Using color image extraction result');
-      return colorText;
-    }
-    
-    // Otherwise try the B&W high-contrast version
-    console.log('Attempting text extraction with B&W high-contrast image...');
-    const bwResult = await model.generateContent([
-      "Extract all visible text from this black and white image. Focus on reading any text visible in the image, including small text. Return ONLY the extracted text with appropriate formatting (paragraphs, etc.). Don't include any explanations or descriptions.",
-      {
-        inlineData: {
-          data: bwBase64,
-          mimeType: 'image/jpeg',
-        },
-      },
-    ]);
-    
-    const bwText = (await bwResult.response).text().trim();
-    console.log(`Extracted ${bwText.length} characters from B&W image`);
-    
-    // Use the longer extraction result
-    if (bwText.length > colorText.length) {
-      console.log('Using B&W image extraction (better result)');
-      return bwText;
-    } else {
-      console.log('Using color image extraction (better result)');
-      return colorText;
-    }
-  } catch (error) {
-    console.error('Error extracting text from image:', error.message);
-    // If an error occurred with the enhanced version, try the basic approach
     try {
-      console.log('Falling back to basic image processing...');
-      const imageBuffer = await sharp(fs.readFileSync(imagePath))
-        .resize({ width: 1200, fit: 'inside' })
+      // Convert to base64
+      const imageBuffer = await sharp(tempFile)
+        .resize({ width: 1500, height: 1500, fit: 'inside' })
+        .jpeg({ quality: 90 })
         .toBuffer();
       
       const base64Image = imageBuffer.toString('base64');
       
+      // Extract text using Gemini API
       const result = await model.generateContent([
-        "Extract all visible text from this image. Return ONLY the text.",
+        "Extract all visible text from this image. Return ONLY the extracted text.",
         {
           inlineData: {
             data: base64Image,
@@ -444,114 +363,157 @@ async function extractTextFromImage(imagePath) {
       ]);
       
       const extractedText = (await result.response).text().trim();
+      console.log(`Extracted ${extractedText.length} characters from downloaded image`);
+      
+      // Clean up
+      fs.unlinkSync(tempFile);
+      
       return extractedText;
-    } catch (fallbackError) {
-      console.error('Fallback extraction also failed:', fallbackError.message);
+    } catch (error) {
+      console.error('Error extracting text from downloaded image:', error.message);
+      
+      // Clean up on error
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+      
       return '';
     }
-  } finally {
-    // Clean up temporary enhanced images
-    const enhancedPath = `${imagePath.replace(/\.[^/.]+$/, '')}-enhanced.jpg`;
-    const bwPath = `${imagePath.replace(/\.[^/.]+$/, '')}-bw.jpg`;
-    
-    // Only delete if not in debug mode
-    const debugMode = process.env.DEBUG === 'true';
-    if (!debugMode) {
-      if (fs.existsSync(enhancedPath)) fs.unlinkSync(enhancedPath);
-      if (fs.existsSync(bwPath)) fs.unlinkSync(bwPath);
-    }
+  } catch (error) {
+    console.error('Image processing error:', error.message);
+    return '';
   }
 }
 
 /**
- * Generate structured content from extracted text
+ * Generate structured content from raw text
+ * @param {string} rawContent - Raw content extracted from social media
+ * @param {Object} fields - Original record fields
+ * @param {string} source - Source platform name
  */
-async function generateContent(extractedText, fields) {
+async function generateStructuredContent(rawContent, fields, source) {
   try {
-    // Build prompt for content generation with title and summary
+    // Get existing values to use as context
+    const existingTitle = fields.title || '';
+    const existingExcerpt = fields.excerpt || '';
+    const existingOverline = fields.overline || '';
+    
+    // Build the prompt
     const prompt = `
-      Tengo un texto extraído de una imagen publicada en redes sociales que necesito estructurar:
+      Tengo contenido extraído de ${source} que necesito estructurar para un artículo periodístico:
       
-      Fuente: ${fields.volanta || 'Social Media'}
-      Título original: ${fields.title || 'Publicación de Redes Sociales'}
-      Descripción original: ${fields.bajada || ''}
+      ${rawContent}
       
-      Texto extraído de la imagen:
-      "${extractedText}"
+      Genera los siguientes elementos para un sitio de noticias:
       
-      Genera los siguientes elementos basados en este texto:
+      1. TÍTULO: Un título conciso y atractivo de máximo 12 palabras.
+      ${existingTitle ? `Título actual (mejorar si es posible): "${existingTitle}"` : ''}
       
-      1. TÍTULO: Un título conciso y atractivo de máximo 10 palabras.
-      
-      2. RESUMEN: Un resumen de 40-50 palabras que capture la esencia del contenido.
+      2. RESUMEN: Un resumen de 40-60 palabras que capture la esencia del contenido.
+      ${existingExcerpt ? `Resumen actual (mejorar si es posible): "${existingExcerpt}"` : ''}
       
       3. ARTÍCULO COMPLETO: Un artículo estructurado siguiendo estas pautas:
-         - Usa un título claro en formato H2 (## Título)
+         - Usa un título claro (no repetir el título principal)
          - Organiza la información en párrafos lógicos y concisos
-         - Incluye al menos una lista con viñetas (- Elemento) con los puntos clave
+         - Incluye los puntos clave del contenido original
          - Usa **negritas** para destacar información importante
          - Si hay fechas, horarios o lugares de eventos, destácalos claramente
-         - No inventes información que no esté en el texto original
+         - No inventes información que no esté en el contenido original
          - Usa formato markdown adecuado: subtítulos con ##, listas con -, negritas con **
-         - La variedad lingüistica a utilizar es español rioplatense FORMAL.
-         - No utilizar signos de exclamacion
-         - No apelar al lector
-      
-      Responde con estos tres elementos claramente separados por las etiquetas [TÍTULO], [RESUMEN] y [ARTÍCULO], sin incluir estas etiquetas en el contenido.
+         - Estilo: español rioplatense formal
+         
+      4. SECCIÓN RECOMENDADA: Considerando el contenido, ¿en qué sección del diario encajaría mejor?
+         Opciones: Politica, Economia, Agro
+         
+      Responde con estos elementos claramente separados por las etiquetas [TÍTULO], [RESUMEN], [ARTÍCULO] y [SECCIÓN], sin incluir estas etiquetas en el contenido.
     `;
 
+    // Generate content
     const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const fullText = response.text().trim();
+    const fullText = (await result.response).text().trim();
     
-    // Parse the returned content
+    // Extract each component
     const titleMatch = fullText.match(/\[TÍTULO\]([\s\S]*?)\[RESUMEN\]/i);
     const summaryMatch = fullText.match(/\[RESUMEN\]([\s\S]*?)\[ARTÍCULO\]/i);
-    const articleMatch = fullText.match(/\[ARTÍCULO\]([\s\S]*)/i);
+    const articleMatch = fullText.match(/\[ARTÍCULO\]([\s\S]*?)(\[SECCIÓN\]|$)/i);
+    const sectionMatch = fullText.match(/\[SECCIÓN\]([\s\S]*?)$/i);
     
-    // Extract each part or use fallbacks
-    const title = titleMatch ? titleMatch[1].trim() : fields.title || 'Publicación de Redes Sociales';
-    const summary = summaryMatch ? summaryMatch[1].trim() : fields.bajada || 'Resumen no disponible';
-    const article = articleMatch ? articleMatch[1].trim() : fullText;
+    // Extract and format each part
+    const title = titleMatch ? titleMatch[1].trim() : existingTitle || 'Contenido de Redes Sociales';
+    const summary = summaryMatch ? summaryMatch[1].trim() : existingExcerpt || '';
     
-    console.log('Generated title:', title);
-    console.log('Generated summary:', summary);
-    console.log('Generated article length:', article.length, 'characters');
+    let article = '';
+    if (articleMatch && articleMatch[1].trim()) {
+      article = articleMatch[1].trim();
+    } else {
+      // Default article format if generation fails
+      article = `## ${title}\n\n${summary}\n\n${rawContent}\n\n**Fuente:** ${source || 'Redes Sociales'}`;
+    }
     
-    // Return all components
+    // Extract recommended section if any
+    let recommendedSection = null;
+    if (sectionMatch && sectionMatch[1].trim()) {
+      const sectionText = sectionMatch[1].trim().toLowerCase();
+      
+      if (sectionText.includes('polit')) recommendedSection = 'Politica';
+      else if (sectionText.includes('econom')) recommendedSection = 'Economia';
+      else if (sectionText.includes('agro')) recommendedSection = 'Agro';
+    }
+    
     return {
       title,
       summary,
-      article
+      article,
+      recommendedSection
     };
   } catch (error) {
-    console.error('Error generating content:', error.message);
-
+    console.error('Error generating structured content:', error.message);
+    
     // Return simple formatted content as fallback
     return {
-      title: fields.title || 'Publicación de Redes Sociales',
-      summary: fields.bajada || 'Resumen no disponible',
-      article: `
-## ${fields.title || 'Publicación de Redes Sociales'}
-
-${extractedText}
-
-**Información extraída de una publicación en ${fields.volanta || 'redes sociales'}**
-      `
+      title: fields.title || 'Contenido de Redes Sociales',
+      summary: fields.excerpt || '',
+      article: `## ${fields.title || 'Contenido de Redes Sociales'}\n\n${rawContent}\n\n**Fuente:** ${source || 'Redes Sociales'}`
     };
   }
 }
 
-// Check if this is the main module
-const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+/**
+ * Update an Airtable record
+ * @param {string} recordId - Record ID
+ * @param {string} tableName - Table name
+ * @param {Object} fields - Fields to update
+ */
+async function updateRecord(recordId, tableName, fields) {
+  try {
+    await airtableBase(tableName).update(recordId, fields);
+    console.log(`Updated record ${recordId} in table ${tableName}`);
+    return true;
+  } catch (error) {
+    console.error(`Failed to update record ${recordId}:`, error.message);
+    throw error;
+  }
+}
 
-if (isMainModule) {
-  processSocialMediaContent()
-    .then(() => {
-      console.log('Script completed successfully');
+// Allow command-line arguments to control behavior
+if (import.meta.url === `file://${process.argv[1]}`) {
+  // Parse command line arguments
+  const args = process.argv.slice(2);
+  const options = {
+    tableName: args.find(arg => !arg.startsWith('--')) || process.env.AIRTABLE_DEFAULT_TABLE || 'Primera Plana',
+    limit: parseInt(args.find(arg => arg.startsWith('--limit='))?.split('=')[1] || '20'),
+    forceProcess: args.includes('--force')
+  };
+  
+  processSocialMediaContent(options)
+    .then(stats => {
+      console.log('\n=== Processing Complete ===');
+      console.log(`Processed: ${stats.processed} records`);
+      console.log(`Successful: ${stats.success} records`);
+      console.log(`Failed: ${stats.failed} records`);
       process.exit(0);
     })
-    .catch((error) => {
+    .catch(error => {
       console.error('Script failed:', error);
       process.exit(1);
     });
