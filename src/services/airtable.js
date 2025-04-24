@@ -274,71 +274,54 @@ async function getRecord(recordId, sectionId = 'primera-plana') {
   try {
     logger.info(`Fetching record ${recordId} from section ${sectionId}`);
     
-    // Ensure we have a valid Airtable base
+    // Use the apiToken variable that's already defined at the top of the file
+    // instead of process.env.AIRTABLE_API_KEY
+    if (!apiToken) {
+      throw new Error('Airtable API token is missing');
+    }
+    
+    // Initialize Airtable with the correct API key
     const base = new Airtable({
-      apiKey: apiToken
-    }).base(baseId);
+      apiKey: apiToken  // Use apiToken instead of process.env.AIRTABLE_API_KEY
+    }).base(baseId);    // Use baseId instead of process.env.AIRTABLE_BASE_ID
     
-    // Check if the table exists or use a fallback approach
-    let table;
+    // Special handling for the Instituciones table
+    if (sectionId.toLowerCase() === 'instituciones') {
+      try {
+        // Try to access the table directly with the exact name
+        const record = await base('Instituciones').find(recordId);
+        logger.info(`Successfully retrieved record ${recordId} from Instituciones`);
+        return record;
+      } catch (error) {
+        logger.error(`Error fetching record from Instituciones: ${error.message}`);
+        throw error;
+      }
+    }
     
+    // For other tables, try the original section ID first
     try {
-      // Try to access the table directly by name
-      table = base(sectionId);
-      
-      // Test if the table is accessible
-      logger.debug(`Attempting to access table: ${sectionId}`);
-      
-      // Fetch the record
-      const record = await table.find(recordId);
-      
+      const record = await base(sectionId).find(recordId);
       logger.info(`Successfully retrieved record ${recordId} from ${sectionId}`);
       return record;
-      
     } catch (tableError) {
-      // If the table doesn't exist by that name, try with alternative formats
-      logger.warn(`Table "${sectionId}" not found, trying alternative formats...`);
-      
-      // Try with Title Case
+      // If the exact name fails, try with Title Case
       const titleCaseTable = sectionId
         .split(/[-_]/)
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ');
-        
+      
       try {
-        table = base(titleCaseTable);
-        const record = await table.find(recordId);
+        const record = await base(titleCaseTable).find(recordId);
         logger.info(`Found record in table with Title Case: "${titleCaseTable}"`);
         return record;
-      } catch (titleCaseError) {
-        // Try with all lowercase
-        try {
-          const lowercaseTable = sectionId.toLowerCase();
-          table = base(lowercaseTable);
-          const record = await table.find(recordId);
-          logger.info(`Found record in table with lowercase: "${lowercaseTable}"`);
-          return record;
-        } catch (lowercaseError) {
-          // Try with uppercase first letter
-          try {
-            const capitalizedTable = 
-              sectionId.charAt(0).toUpperCase() + 
-              sectionId.slice(1);
-            table = base(capitalizedTable);
-            const record = await table.find(recordId);
-            logger.info(`Found record in table with capitalized first letter: "${capitalizedTable}"`);
-            return record;
-          } catch (capitalizedError) {
-            // If we've tried all formats and none work, log the error
-            logger.error(`Cannot find table for section: ${sectionId}`);
-            logger.error(`Tried formats: "${sectionId}", "${titleCaseTable}", "${sectionId.toLowerCase()}", "${sectionId.charAt(0).toUpperCase() + sectionId.slice(1)}"`);
-            throw new Error(`Table not found for section: ${sectionId}`);
-          }
-        }
+      } catch (error) {
+        // If both attempts fail, log error and throw
+        logger.error(`Cannot find record ${recordId} in table ${sectionId} or ${titleCaseTable}`);
+        throw new Error(`Record not found: ${recordId} in section ${sectionId}`);
       }
     }
   } catch (error) {
-    logger.error(`Error fetching record ${recordId} from section ${sectionId}:`, error);
+    logger.error(`Error fetching record: ${error.message}`);
     throw error;
   }
 }

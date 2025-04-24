@@ -33,15 +33,13 @@ router.post('/airtable/publish', async (req, res) => {
     logger.info('Received publish webhook from Airtable');
     
     // Extract record ID and section ID from the webhook payload
-    const recordId = req.body.recordId || 
-                    (req.body.record && req.body.record.id) || 
-                    (req.body.payload && req.body.payload.recordId);
+    const recordId = req.body.recordId;
+    const sectionId = req.body.tableName || req.body.sectionId;
     
-    // Get sectionId from request, with multiple fallback options
-    const sectionId = req.body.sectionId || 
-                     req.body.tableName ||
-                     (req.body.payload && req.body.payload.sectionId) || 
-                     (req.body.payload && req.body.payload.tableName);
+    // Special handling for forced section (used for Instituciones)
+    const forceSection = req.body.forceSection;
+    const forceSectionId = req.body.forceSectionId;
+    const isInstituciones = req.body.isInstituciones;
     
     // Validate input
     if (!recordId) {
@@ -56,15 +54,23 @@ router.post('/airtable/publish', async (req, res) => {
     
     logger.info(`Fetching Airtable record ${recordId} from section ${sectionId}`);
     
-    // Log the received table name for debugging
-    logger.debug(`Received tableName/sectionId: ${sectionId}`);
-    
     // Get the record from Airtable
     const record = await airtableService.getRecord(recordId, sectionId);
     
     if (!record) {
       logger.error(`Record not found: ${recordId}`);
       return res.status(404).json({ success: false, error: 'Record not found' });
+    }
+    
+    // Add section overrides if forced
+    if (forceSection) {
+      record.forceSection = forceSection;
+    }
+    if (forceSectionId) {
+      record.forceSectionId = forceSectionId;
+    }
+    if (isInstituciones) {
+      record.isInstituciones = true;
     }
     
     // Add source section ID to the record for reference
@@ -83,11 +89,7 @@ router.post('/airtable/publish', async (req, res) => {
     return res.json(result);
     
   } catch (error) {
-    // Add more detailed error logging
-    logger.error(`Error processing webhook: ${error.message}`);
-    if (error.message.includes('Record not found')) {
-      logger.error(`Could not find record ${recordId} in table ${sectionId}`);
-    }
+    logger.error('Error in webhook handler:', error);
     return res.status(500).json({ success: false, error: error.message });
   }
 });

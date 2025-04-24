@@ -45,40 +45,26 @@ async function publishArticle(airtableRecord) {
   try {
     logger.info('Publishing article to Supabase:', airtableRecord.id);
 
-    // Dynamic section handling - multiple fallbacks to get the right section_id
-    let section_id = null;
-    let section = '';
-
-    // Option 1: Use the section field from Airtable if available
-    if (airtableRecord.fields.section) {
-      section = airtableRecord.fields.section;
-      // Convert to kebab-case for section_id 
-      section_id = section.toLowerCase().replace(/\s+/g, '-');
-    }
-
-    // Option 2: Use the sourceSectionId (table name) if passed from the webhook
-    if (!section_id && airtableRecord.sourceSectionId) {
-      section_id = airtableRecord.sourceSectionId.toLowerCase().replace(/\s+/g, '-');
-      // Also use it for section if section is empty
-      if (!section) {
-        // Convert kebab-case to Title Case for display
-        section = airtableRecord.sourceSectionId
-          .split(/[-_]/)
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ');
-      }
-    }
+    // Use forced section values if they exist (for Instituciones)
+    const section = airtableRecord.forceSection || 
+                   airtableRecord.fields.section || 
+                   (airtableRecord.isInstituciones ? 'lifestyle' : '');
+                   
+    const section_id = airtableRecord.forceSectionId || 
+                      (airtableRecord.fields.section ? airtableRecord.fields.section.toLowerCase().replace(/\s+/g, '-') : '') ||
+                      (airtableRecord.isInstituciones ? 'lifestyle' : '');
 
     // Map all Airtable fields to Supabase schema
     const articleData = {
       id: airtableRecord.id,
       title: airtableRecord.fields.title || '',
-      overline: airtableRecord.fields.overline || '',
-      excerpt: airtableRecord.fields.excerpt || '',
+      overline: airtableRecord.fields.overline || airtableRecord.fields.volanta || '',
+      excerpt: airtableRecord.fields.excerpt || airtableRecord.fields.bajada || '',
       article: airtableRecord.fields.article || '',
       url: airtableRecord.fields.url || '',
       source: airtableRecord.fields.source || '',
-      image: airtableRecord.fields.image ? JSON.stringify(airtableRecord.fields.image) : null,
+      image: airtableRecord.fields.imagen || airtableRecord.fields.image ? 
+             JSON.stringify(airtableRecord.fields.imagen || airtableRecord.fields.image) : null,
       img_url: airtableRecord.fields.imgUrl || '',
       article_images: airtableRecord.fields['article-images'] || '',
       ig_post: airtableRecord.fields['ig-post'] || '',
@@ -88,10 +74,22 @@ async function publishArticle(airtableRecord) {
       status: airtableRecord.fields.status || 'draft',
       section: section,
       section_id: section_id,
+      // Special fields for Instituciones
+      is_instituciones: airtableRecord.isInstituciones ? true : false
     };
 
+    // For Instituciones, add additional fields if they exist
+    if (airtableRecord.isInstituciones) {
+      if (airtableRecord.fields.sectionName) {
+        articleData.section_name = airtableRecord.fields.sectionName;
+      }
+      if (airtableRecord.fields.sectionColor) {
+        articleData.section_color = airtableRecord.fields.sectionColor;
+      }
+    }
+
     logger.info('Prepared article data for Supabase');
-    logger.debug('Article data fields:', Object.keys(articleData));
+    logger.debug('Article data:', articleData);
 
     // Insert or update in Supabase
     const { data, error } = await supabase
@@ -141,6 +139,7 @@ async function publishArticle(airtableRecord) {
     };
   }
 }
+
 /**
  * Gets all published articles
  */
