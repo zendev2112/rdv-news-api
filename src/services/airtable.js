@@ -276,8 +276,8 @@ async function getRecord(recordId, sectionId = 'primera-plana') {
     
     // Ensure we have a valid Airtable base
     const base = new Airtable({
-      apiKey: process.env.AIRTABLE_API_KEY
-    }).base(process.env.AIRTABLE_BASE_ID);
+      apiKey: apiToken
+    }).base(baseId);
     
     // Check if the table exists or use a fallback approach
     let table;
