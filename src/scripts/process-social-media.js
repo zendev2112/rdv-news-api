@@ -75,22 +75,42 @@ async function getFieldMapping(tableName, standardFields) {
   const availableFields = await getTableFields(tableName);
   const mapping = {};
   
+  console.log(`Available fields in ${tableName}:`, availableFields);
+  
+  // Special handling for bajada field - we'll check if this caused the error
+  if (standardFields.bajada !== undefined) {
+    console.log('Found bajada field in input - need to map to excerpt or remove');
+    if (availableFields.includes('excerpt')) {
+      mapping.excerpt = standardFields.bajada;
+      console.log('Mapped bajada → excerpt');
+    } else {
+      console.log('No suitable field for bajada found, will be skipped');
+    }
+    // Don't include bajada field directly
+  } else if (standardFields.excerpt !== undefined) {
+    // If excerpt is provided, use it directly if available
+    if (availableFields.includes('excerpt')) {
+      mapping.excerpt = standardFields.excerpt;
+    }
+  }
+  
   // Define potential alternative names for each standard field
   const fieldAlternatives = {
     title: ['title', 'name', 'heading'],
-    excerpt: ['excerpt', 'summary', 'bajada', 'description'],
     overline: ['overline', 'volanta', 'kicker', 'eyebrow'],
     article: ['article', 'content', 'body', 'text'],
     status: ['status', 'state', 'publication_status'],
     section: ['section', 'category', 'topic'],
     source: ['source', 'origin', 'platform'],
     processingNotes: ['processingNotes', 'notes', 'comments', 'processing_notes']
+    // Removed excerpt/bajada as we handle it separately above
   };
   
   // For each standard field, find the best match in available fields
   for (const [stdField, fieldValue] of Object.entries(standardFields)) {
-    // Skip empty/undefined values
-    if (fieldValue === undefined || fieldValue === null || fieldValue === '') {
+    // Skip fields we've already handled and empty/undefined values
+    if (stdField === 'bajada' || stdField === 'excerpt' || 
+        fieldValue === undefined || fieldValue === null || fieldValue === '') {
       continue;
     }
     
@@ -105,13 +125,24 @@ async function getFieldMapping(tableName, standardFields) {
     for (const alt of alternatives) {
       if (availableFields.includes(alt)) {
         mapping[alt] = fieldValue;
+        console.log(`Mapped ${stdField} → ${alt}`);
         break;
       }
     }
   }
   
-  console.log(`Field mapping for ${tableName}:`, mapping);
-  return mapping;
+  // Final safety check - only include fields that actually exist
+  const finalMapping = {};
+  for (const [field, value] of Object.entries(mapping)) {
+    if (availableFields.includes(field)) {
+      finalMapping[field] = value;
+    } else {
+      console.log(`Skipping field ${field} as it doesn't exist in table ${tableName}`);
+    }
+  }
+  
+  console.log(`Final field mapping for ${tableName}:`, finalMapping);
+  return finalMapping;
 }
 
 /**
@@ -323,21 +354,21 @@ async function processRecord(record, tableName) {
     const standardFields = {
       title: structuredContent.title || fields.title || 'Social Media Content',
       overline: source || fields.overline || fields.volanta || 'Social Media',
-      excerpt:
-        structuredContent.summary || fields.excerpt || fields.bajada || '',
+      // Use only excerpt, not bajada - let the field mapping handle it
+      excerpt: structuredContent.summary || fields.excerpt || '',
       article: structuredContent.article || combinedContent,
       source: source || fields.source || 'Social Media',
-      status: 'published',
-    }
+      status: fields.status || 'published',
+    };
 
     // Only set section if it's not already set and we have a recommended one
     if (!fields.section && structuredContent.recommendedSection) {
-      standardFields.section = structuredContent.recommendedSection
+      standardFields.section = structuredContent.recommendedSection;
     }
 
     // Add processing notes if we have them
     if (fields.processingNotes) {
-      standardFields.processingNotes = fields.processingNotes
+      standardFields.processingNotes = fields.processingNotes;
     }
 
     console.log('Updating record with structured content...')
