@@ -63,34 +63,12 @@ async function publishArticle(airtableRecord) {
       tw_post: airtableRecord.fields['tw-post'] || '',
       yt_video: airtableRecord.fields['yt-video'] || '',
       status: airtableRecord.fields.status || 'draft',
+      section: airtableRecord.forceSection || airtableRecord.fields.section || '',
+      section_id: airtableRecord.forceSectionId || 
+                (airtableRecord.fields.section ? airtableRecord.fields.section.toLowerCase().replace(/\s+/g, '-') : '')
+      // REMOVE any metadata field reference here
+      // metadata: { ... } <- This line is causing the error and should be removed
     };
-
-    // Handle section with valid values based on your database constraint
-    // Add this code to ensure section values match your constraint
-    const validSections = ['primera-plana', 'politica', 'economia', 'agro', 'deportes', 'lifestyle', 'turismo'];
-
-    // Get the raw section value
-    let sectionValue = airtableRecord.forceSection || airtableRecord.fields.section || '';
-
-    // Convert to lowercase and normalize
-    if (sectionValue) {
-      sectionValue = sectionValue.toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
-        .replace(/[^a-z0-9]+/g, '-'); // Replace non-alphanumeric with hyphens
-    }
-
-    // If section value is not valid, default to "lifestyle" (or another default)
-    if (!validSections.includes(sectionValue)) {
-      logger.warn(`Invalid section "${sectionValue}", defaulting to "lifestyle"`);
-      sectionValue = 'lifestyle';
-    }
-
-    // Set the normalized valid section
-    articleData.section = sectionValue;
-
-    // Generate section_id 
-    articleData.section_id = airtableRecord.forceSectionId || 
-      (sectionValue ? sectionValue.toLowerCase().replace(/\s+/g, '-') : '');
     
     // REMOVE code that tries to add institutional info to metadata
     // If institutional info needs to be tracked, use existing fields
