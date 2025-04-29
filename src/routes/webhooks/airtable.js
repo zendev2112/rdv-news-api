@@ -1,0 +1,123 @@
+import { addArticleToSections, getSection } from '../../utils/sections.js';
+import { createClient } from '@supabase/supabase-js';
+import slugify from 'slugify';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+/**
+ * Generate a slug from a title
+ */
+function generateSlug(title) {
+  return slugify(title, {
+    lower: true,
+    strict: true,
+    trim: true
+  });
+}
+
+/**
+ * Handle webhooks from Airtable for publishing content
+ */
+export async function handlePublishWebhook(req, res) {
+  const { recordId, tableName, forceSectionId, status = 'published' } = req.body;
+  
+  if (!recordId || !tableName) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing required fields: recordId and tableName'
+    });
+  }
+  
+  try {
+    // Get record from Airtable (your existing code)
+    const record = await getAirtableRecord(tableName, recordId);
+    
+    if (!record || !record.fields) {
+      return res.status(404).json({
+        success: false,
+        error: 'Record not found in Airtable'
+      });
+    }
+    
+    const { title, excerpt, article: content, image_url } = record.fields;
+    
+    if (!title) {
+      return res.status(400).json({
+        success: false,
+        error: 'Record is missing a title'
+      });
+    }
+    
+    // Check if the section exists
+    const sectionId = forceSectionId || 'primera-plana';
+    const section = await getSection(sectionId);
+    
+    if (!section) {
+      return res.status(400).json({
+        success: false,
+        error: `Section not found: ${sectionId}`
+      });
+    }
+    
+    // Create or update the article
+    const slug = generateSlug(title);
+    
+    const { data: article, error: articleError } = await supabase
+      .from('articles')
+      .upsert({
+        title,
+        excerpt,
+        content,
+        slug,
+        status,
+        image_url,
+        published_at: status === 'published' ? new Date().toISOString() : null,
+        airtable_id: recordId
+      }, {
+        onConflict: 'airtable_id',
+        returning: true
+      })
+      .select()
+      .single();
+      
+    if (articleError) {
+      console.error('Error creating/updating article:', articleError);
+      return res.status(500).json({
+        success: false,
+        error: articleError.message
+      });
+    }
+    
+    // Add the article to the specified section
+    try {
+      await addArticleToSections(article.id, sectionId);
+    } catch (sectionError) {
+      console.error('Error adding article to section:', sectionError);
+      return res.status(500).json({
+        success: false,
+        error: `Article created but failed to add to section: ${sectionError.message}`
+      });
+    }
+    
+    return res.json({
+      success: true,
+      article: {
+        id: article.id,
+        title: article.title,
+        slug: article.slug,
+        status: article.status,
+        section: section.name
+      }
+    });
+    
+  } catch (error) {
+    console.error('Webhook handler error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+}

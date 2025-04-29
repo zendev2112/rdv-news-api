@@ -1,7 +1,4 @@
--- First reset the path values for existing sections
-UPDATE sections SET path = NULL;
-
--- Then insert/update the main top-level sections
+-- Insert main top-level sections
 INSERT INTO sections (id, name, position, slug, parent_id) 
 VALUES 
     ('primera-plana', 'Primera Plana', 1, 'primera-plana', NULL),
@@ -26,7 +23,7 @@ ON CONFLICT (id) DO UPDATE SET
     slug = EXCLUDED.slug,
     parent_id = EXCLUDED.parent_id;
 
--- Now insert the child sections for Pueblos Alemanes
+-- Child sections for Pueblos Alemanes
 INSERT INTO sections (id, name, position, slug, parent_id) 
 VALUES 
     ('santa-trinidad', 'Santa Trinidad', 1, 'santa-trinidad', 'pueblos-alemanes'),
@@ -41,7 +38,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- Child sections for Economia
 INSERT INTO sections (id, name, position, slug, parent_id) 
 VALUES 
-    ('actualidad', 'Actualidad', 1, 'actualidad', 'economia'),
+    ('iactualidad', 'IActualidad', 1, 'iactualidad', 'economia'),
     ('dolar', 'Dólar', 2, 'dolar', 'economia'),
     ('propiedades', 'Propiedades', 3, 'propiedades', 'economia'),
     ('pymes-emprendimientos', 'Pymes y Emprendimientos', 4, 'pymes-emprendimientos', 'economia')
@@ -116,6 +113,5 @@ ON CONFLICT (id) DO UPDATE SET
     slug = EXCLUDED.slug,
     parent_id = EXCLUDED.parent_id;
 
--- Force update of paths
-UPDATE sections SET parent_id = parent_id WHERE parent_id IS NOT NULL;
-UPDATE sections SET parent_id = NULL WHERE parent_id IS NULL;
+-- Force update paths for all sections to ensure they're calculated correctly
+UPDATE sections SET updated_at = NOW();
