@@ -1,53 +1,43 @@
-import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import fs from 'fs';
-import path from 'path';
-import axios from 'axios';
-import Airtable from 'airtable';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import config from '../config/index.js';
-import sharp from 'sharp';
+import dotenv from 'dotenv'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { dirname } from 'path'
+import Airtable from 'airtable'
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import axios from 'axios'  // Add axios for image downloading
+import config from '../config/index.js'
 
 // Configure environment variables
-dotenv.config();
+dotenv.config()
 
 // Create __dirname equivalent for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 // Initialize Airtable
 const airtableBase = new Airtable({
   apiKey: process.env.AIRTABLE_TOKEN,
-}).base(process.env.AIRTABLE_BASE_ID);
+}).base(process.env.AIRTABLE_BASE_ID)
 
 // Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
-const model = genAI.getGenerativeModel({ model: config.gemini.model });
-
-// Create temp directory for image processing (only used if absolutely necessary)
-const TEMP_DIR = path.join(__dirname, '../../temp');
-if (!fs.existsSync(TEMP_DIR)) {
-  fs.mkdirSync(TEMP_DIR, { recursive: true });
-}
+const genAI = new GoogleGenerativeAI(config.gemini.apiKey)
+const model = genAI.getGenerativeModel({ model: config.gemini.model })
+const visionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) // Add vision model
 
 // Helper function to create a delay
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
  * Main function to process social media content
- * @param {Object} options - Processing options
- * @param {string} options.tableName - Name of the Airtable table to process
- * @param {number} options.limit - Maximum number of records to process
- * @param {boolean} options.forceProcess - Process all records regardless of status
  */
 async function processSocialMediaContent(options = {}) {
   const {
-    tableName = process.env.AIRTABLE_DEFAULT_TABLE || 'Instituciones',
+    tableName = 'Instituciones',
     limit = 20,
-    forceProcess = false
-  } = options;
-  
+    forceProcess = false,
+  } = options
+
   console.log(`
 ================================
 SOCIAL MEDIA CONTENT PROCESSOR
@@ -55,25 +45,41 @@ SOCIAL MEDIA CONTENT PROCESSOR
 Table: ${tableName}
 Limit: ${limit} records
 Force Processing: ${forceProcess ? 'Yes' : 'No'}
-  `);
+  `)
 
   try {
-    // Fetch records from specified table
-    console.log(`Fetching records from "${tableName}" table...`);
-    const allRecords = await airtableBase(tableName)
+    // IMPROVED: Include records that need OCR in the filter formula 
+    let filterFormula = forceProcess 
+      ? "" 
+      : "OR({processingStatus} = 'needs_extraction', {isOcrNeeded} = 1)";
+    
+    console.log(`Fetching records from "${tableName}" with filter: ${filterFormula || 'ALL RECORDS'}`);
+
+    // Get records from Airtable
+    const records = await airtableBase(tableName)
       .select({
         maxRecords: limit,
-        sort: [{ field: '_createdTime', direction: 'desc' }],
-        filterByFormula: forceProcess 
-          ? '' 
-          : "OR({processingStatus} = 'needs_extraction', {processingStatus} = '')"
+        filterByFormula: filterFormula
       })
       .all();
 
-    console.log(`Found ${allRecords.length} records in "${tableName}" table`);
-    
-    if (allRecords.length === 0) {
-      console.log('No records to process');
+    console.log(`Found ${records.length} records to process`);
+
+    // If no records found, check if table has any records
+    if (records.length === 0) {
+      console.log("No records match the criteria. Checking if table has any records...");
+      
+      const checkRecords = await airtableBase(tableName)
+        .select({ maxRecords: 5 })
+        .all();
+      
+      if (checkRecords.length > 0) {
+        console.log(`Table contains records but none match the filter criteria.`);
+        console.log(`Try running with --force to process all records.`);
+      } else {
+        console.log(`Table "${tableName}" appears to be empty.`);
+      }
+      
       return { processed: 0, success: 0, failed: 0 };
     }
 
@@ -85,22 +91,25 @@ Force Processing: ${forceProcess ? 'Yes' : 'No'}
     };
 
     // Process each record
-    for (const record of allRecords) {
+    for (const record of records) {
       try {
-        console.log(`\nProcessing record: ${record.id} - "${record.fields.title || 'Untitled'}"`);
-        const success = await processRecord(record, tableName);
+        console.log(`\nProcessing record: ${record.id} - ${record.fields.title || 'Untitled'}`);
         
+        const result = await processRecord(record, tableName);
         stats.processed++;
-        if (success) {
+        
+        if (result) {
           stats.success++;
+          console.log(`Successfully processed record ${record.id}`);
         } else {
           stats.failed++;
+          console.log(`Failed to process record ${record.id}`);
         }
         
-        // Avoid rate limiting
-        await delay(2000);
+        // Add delay to avoid rate limiting
+        await delay(1000);
       } catch (error) {
-        console.error(`Error processing record ${record.id}:`, error.message);
+        console.error(`Error processing record ${record.id}:`, error);
         stats.processed++;
         stats.failed++;
       }
@@ -108,130 +117,201 @@ Force Processing: ${forceProcess ? 'Yes' : 'No'}
 
     return stats;
   } catch (error) {
-    console.error('Error in social media content processing:', error.message);
+    console.error('Error in social media processing:', error);
     return { processed: 0, success: 0, failed: 0, error: error.message };
   }
 }
 
 /**
- * Process a single record with social media content
- * @param {Object} record - The Airtable record
- * @param {string} tableName - The table name
+ * Process a single record
  */
 async function processRecord(record, tableName) {
   try {
     const fields = record.fields;
-    console.log('Available fields:', Object.keys(fields));
+    console.log(`Processing record ${record.id}`);
     
-    // Extract content from different social media sources
-    const socialContent = {
-      instagram: fields['ig-post'] || null,
-      facebook: fields['fb-post'] || null,
-      twitter: fields['tw-post'] || null,
-      youtube: fields['yt-video'] || null
-    };
+    // Check if OCR is needed for this record
+    const needsOcr = fields.isOcrNeeded === true;
     
-    console.log('Social media sources found:', 
-      Object.entries(socialContent)
-        .filter(([_, value]) => !!value)
-        .map(([key]) => key)
-        .join(', ')
-    );
-    
-    // Extract content from each social media source
-    let contentPieces = [];
-    let source = '';
-    
-    // Process Instagram
-    if (socialContent.instagram) {
-      console.log('Processing Instagram content...');
-      source = 'Instagram';
-      const instagramContent = await extractSocialContent('instagram', socialContent.instagram);
-      if (instagramContent) contentPieces.push(instagramContent);
+    if (needsOcr) {
+      console.log('Record is marked for OCR processing');
     }
     
-    // Process Facebook
-    if (socialContent.facebook) {
-      console.log('Processing Facebook content...');
-      source = source || 'Facebook';
-      const facebookContent = await extractSocialContent('facebook', socialContent.facebook);
-      if (facebookContent) contentPieces.push(facebookContent);
-    }
-    
-    // Process Twitter
-    if (socialContent.twitter) {
-      console.log('Processing Twitter content...');
-      source = source || 'Twitter';
-      const twitterContent = await extractSocialContent('twitter', socialContent.twitter);
-      if (twitterContent) contentPieces.push(twitterContent);
-    }
-    
-    // Process YouTube
-    if (socialContent.youtube) {
-      console.log('Processing YouTube content...');
-      source = source || 'YouTube';
-      const youtubeContent = await extractSocialContent('youtube', socialContent.youtube);
-      if (youtubeContent) contentPieces.push(youtubeContent);
-    }
-    
-    // If no content was extracted, check if we need to process an image
-    if (contentPieces.length === 0 && fields.imgUrl) {
-      console.log('No text content found, attempting to extract text from image...');
-      const imageText = await extractTextFromImageUrl(fields.imgUrl);
-      if (imageText) contentPieces.push(imageText);
-    }
-    
-    // Combine all extracted content
-    const combinedContent = contentPieces.join('\n\n');
-    
-    if (!combinedContent) {
-      console.log('No content extracted from any source');
-      
-      // Update using only fields that exist in the table
+    // Update processing status
+    try {
       await airtableBase(tableName).update(record.id, {
-        processingStatus: 'failed',
-        processingNotes: 'No content could be extracted from social media sources'
+        processingStatus: 'needs_extraction',
+        processingNotes: needsOcr ? 'Starting OCR and content generation' : 'Starting content generation'
       });
+    } catch (updateErr) {
+      console.error(`Couldn't update processing status: ${updateErr.message}`);
+    }
+    
+    // Get content from article or contentHtml (prioritize article)
+    let rawContent = '';
+    
+    if (fields.article && fields.article.trim()) {
+      console.log('Using existing article content');
+      rawContent = fields.article;
+    }
+    else if (fields.contentHtml) {
+      console.log('Extracting text from HTML content');
+      // Simple HTML to text conversion
+      rawContent = fields.contentHtml
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+    
+    // If no content was found, try to get it from social fields
+    if (!rawContent) {
+      console.log('No article or HTML content found, checking social media fields');
       
+      // Check all social media fields
+      const socialFields = ['ig-post', 'fb-post', 'tw-post', 'yt-video'];
+      
+      for (const fieldName of socialFields) {
+        if (fields[fieldName] && typeof fields[fieldName] === 'string') {
+          // If it's a URL, log it but don't use it as content
+          if (fields[fieldName].startsWith('http')) {
+            console.log(`Field ${fieldName} contains URL: ${fields[fieldName]}`);
+            continue;
+          }
+          
+          rawContent = fields[fieldName];
+          console.log(`Found content in ${fieldName} field (${rawContent.length} chars)`);
+          break;
+        }
+      }
+    }
+    
+    // Check for OCR needs - either explicitly set or we have no content but have an image
+    if (needsOcr || (!rawContent && fields.imgUrl)) {
+      console.log('Attempting to extract text from image...');
+      
+      if (fields.imgUrl) {
+        try {
+          const imageText = await extractTextFromImage(fields.imgUrl);
+          
+          if (imageText && imageText.trim().length > 10) { // Ensure we got meaningful text
+            console.log(`Successfully extracted ${imageText.length} characters from image`);
+            
+            // If we already have content, append the image text
+            if (rawContent) {
+              rawContent += "\n\n[Texto extraído de la imagen:]\n" + imageText;
+            } else {
+              rawContent = imageText;
+            }
+            
+            // Reset OCR flag since we've now processed it
+            try {
+              await airtableBase(tableName).update(record.id, {
+                isOcrNeeded: false
+              });
+              console.log('Reset isOcrNeeded flag');
+            } catch (resetErr) {
+              console.error(`Failed to reset OCR flag: ${resetErr.message}`);
+            }
+          } else {
+            console.log('No significant text found in image');
+          }
+        } catch (ocrError) {
+          console.error(`OCR failed: ${ocrError.message}`);
+          // Continue with whatever content we have
+        }
+      } else {
+        console.log('OCR requested but no image URL found');
+      }
+    }
+    
+    // Still no content, mark as failed
+    if (!rawContent) {
+      console.log('No content found in record');
+      try {
+        await airtableBase(tableName).update(record.id, {
+          processingStatus: 'failed',
+          processingNotes: 'No content found in record or image'
+        });
+      } catch (err) {
+        console.error(`Failed to update status: ${err.message}`);
+      }
       return false;
     }
     
-    console.log(`Extracted ${combinedContent.length} characters of content`);
+    console.log(`Raw content length: ${rawContent.length} characters`);
     
-    // Generate structured content
-    const structuredContent = await generateStructuredContent(combinedContent, fields, source);
+    // Determine source
+    const source = fields.source || getSourceFromFields(fields);
     
-    // Create update fields object that matches exactly to the table schema
-    const updateFields = {
-      title: structuredContent.title || fields.title || 'Social Media Content',
-      overline: source || fields.overline || 'Social Media',
-      excerpt: structuredContent.summary || fields.excerpt || '',
-      article: structuredContent.article || combinedContent,
-      status: 'Published',
-      processingStatus: 'completed'
-    };
-    
-    // Only set section if we have a recommended one and the field exists
-    if (structuredContent.recommendedSection) {
-      updateFields.section = structuredContent.recommendedSection;
+    // Generate title, overline, excerpt, and formatted article
+    try {
+      const generatedContent = await generateAllContentElements(rawContent, source);
+      
+      // Update record with ALL generated content
+      const updateFields = {
+        processingStatus: 'completed',
+        processingNotes: needsOcr ? 'Successfully processed with OCR' : 'Successfully processed'
+      };
+      
+      // Always update these fields with fresh content
+      updateFields.title = generatedContent.title;
+      updateFields.overline = generatedContent.overline;
+      updateFields.excerpt = generatedContent.excerpt;
+      updateFields.article = generatedContent.article;
+      
+      // Only set source if not already present
+      if (!fields.source) {
+        updateFields.source = source;
+      }
+      
+      console.log('Updating record with all generated content...');
+      
+      try {
+        await airtableBase(tableName).update(record.id, updateFields);
+        console.log('Record updated successfully with title, excerpt, article and overline');
+        return true;
+      } catch (airtableError) {
+        console.error(`Airtable update failed: ${airtableError.message}`);
+        
+        // If the update fails, try updating just the core fields
+        try {
+          console.log('Trying to update with minimal fields...');
+          await airtableBase(tableName).update(record.id, {
+            title: generatedContent.title,
+            excerpt: generatedContent.excerpt,
+            processingStatus: 'completed'
+          });
+          console.log('Minimal update succeeded');
+          return true;
+        } catch (minimalError) {
+          console.error(`Even minimal update failed: ${minimalError.message}`);
+          return false;
+        }
+      }
+    } catch (contentGenError) {
+      console.error(`Content generation failed: ${contentGenError.message}`);
+      
+      try {
+        await airtableBase(tableName).update(record.id, {
+          processingStatus: 'error',
+          processingNotes: `Content generation failed: ${contentGenError.message.substring(0, 500)}`
+        });
+      } catch (e) {
+        console.error(`Failed to update error status: ${e.message}`);
+      }
+      
+      return false;
     }
-    
-    console.log('Updating record with structured content...');
-    await airtableBase(tableName).update(record.id, updateFields);
-    
-    console.log(`Successfully processed record ${record.id}`);
-    return true;
   } catch (error) {
-    console.error(`Error processing record:`, error.message);
+    console.error(`Error processing record:`, error);
     
-    // Update record with error status
     try {
       await airtableBase(tableName).update(record.id, {
         processingStatus: 'error',
-        processingNotes: `Error during processing: ${error.message.substring(0, 500)}`
+        processingNotes: `Error: ${error.message.substring(0, 500)}`
       });
     } catch (e) {
-      console.error('Failed to update record error status:', e.message);
+      console.error('Failed to update error status:', e);
     }
     
     return false;
@@ -239,238 +319,194 @@ async function processRecord(record, tableName) {
 }
 
 /**
- * Extract content from social media source
- * @param {string} platform - Social media platform
- * @param {string} content - URL or content
+ * Extract text from an image using Gemini Vision
  */
-async function extractSocialContent(platform, content) {
+async function extractTextFromImage(imageUrl) {
   try {
-    // If content is a URL with an image embed
-    if (content.match(/\.(jpeg|jpg|png|gif|webp)/i)) {
-      return await extractTextFromImageUrl(content);
-    }
-    
-    // For embedded content or plain URLs, we'll use AI to extract useful information
-    const prompt = `
-      Analyze this ${platform} content and extract all meaningful text:
-      
-      ${content}
-      
-      Return ONLY the extracted text content without any analysis or prefacing.
-      If this is a URL or embed code with no extractable text, respond with EMPTY.
-    `;
-    
-    const result = await model.generateContent(prompt);
-    const extractedText = (await result.response).text().trim();
-    
-    return extractedText === 'EMPTY' ? '' : extractedText;
-  } catch (error) {
-    console.error(`Error extracting content from ${platform}:`, error.message);
-    return '';
-  }
-}
-
-/**
- * Extract text from an image URL (without downloading if possible)
- * @param {string} imageUrl - URL of the image
- */
-async function extractTextFromImageUrl(imageUrl) {
-  try {
-    if (!imageUrl) return '';
-    
-    console.log(`Extracting text from image URL: ${imageUrl}`);
-    
-    // Option 1: Try to extract without downloading by passing URL directly to AI
-    // This works for public images from major platforms
-    try {
-      console.log('Attempting direct URL analysis without download...');
-      
-      const prompt = `
-        Analyze this image URL and extract all visible text from the image:
-        ${imageUrl}
-        
-        Return ONLY the extracted text with appropriate formatting.
-        If you cannot access or analyze this image, respond with CANNOT_ACCESS_IMAGE.
-      `;
-      
-      const result = await model.generateContent(prompt);
-      const extractedText = (await result.response).text().trim();
-      
-      // If successful, return the extracted text
-      if (extractedText && extractedText !== 'CANNOT_ACCESS_IMAGE') {
-        console.log(`Successfully extracted text directly: ${extractedText.length} characters`);
-        return extractedText;
-      }
-      
-      console.log('Direct extraction failed, will attempt download...');
-    } catch (e) {
-      console.log(`Direct URL extraction failed: ${e.message}`);
-    }
-    
-    // Option 2: If direct URL analysis fails, download and process the image
-    // This is used as a fallback and should happen less frequently
-    console.log('Downloading image for processing...');
-    
-    // Create a temporary file path
-    const tempFile = path.join(TEMP_DIR, `temp-${Date.now()}.jpg`);
+    console.log(`Extracting text from image: ${imageUrl}`);
     
     // Download the image
-    const response = await axios({
-      url: imageUrl,
-      method: 'GET',
+    const response = await axios.get(imageUrl, { 
       responseType: 'arraybuffer',
-      timeout: 15000
+      timeout: 10000 // 10 second timeout
     });
+    const imageData = Buffer.from(response.data).toString('base64');
     
-    // Write to temporary file
-    fs.writeFileSync(tempFile, response.data);
+    // Use Vision model for image processing
+    const prompt = "Extrae todo el texto visible en esta imagen. Si la imagen contiene una publicación de redes sociales, incluye todo el texto del post. Devuelve solo el texto, sin explicaciones ni descripciones adicionales.";
     
-    try {
-      // Convert to base64
-      const imageBuffer = await sharp(tempFile)
-        .resize({ width: 1500, height: 1500, fit: 'inside' })
-        .jpeg({ quality: 90 })
-        .toBuffer();
-      
-      const base64Image = imageBuffer.toString('base64');
-      
-      // Extract text using Gemini API
-      const result = await model.generateContent([
-        "Extract all visible text from this image. Return ONLY the extracted text.",
-        {
-          inlineData: {
-            data: base64Image,
-            mimeType: 'image/jpeg',
-          },
-        },
-      ]);
-      
-      const extractedText = (await result.response).text().trim();
-      console.log(`Extracted ${extractedText.length} characters from downloaded image`);
-      
-      // Clean up
-      fs.unlinkSync(tempFile);
-      
-      return extractedText;
-    } catch (error) {
-      console.error('Error extracting text from downloaded image:', error.message);
-      
-      // Clean up on error
-      if (fs.existsSync(tempFile)) {
-        fs.unlinkSync(tempFile);
+    // Process the image
+    const result = await visionModel.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: imageData,
+          mimeType: "image/jpeg" 
+        }
       }
-      
-      return '';
-    }
+    ]);
+    
+    const responseText = (await result.response).text();
+    return responseText.trim();
   } catch (error) {
-    console.error('Image processing error:', error.message);
-    return '';
+    console.error(`Image text extraction failed: ${error.message}`);
+    throw new Error(`OCR failed: ${error.message}`);
   }
 }
 
 /**
- * Generate structured content from raw text
- * @param {string} rawContent - Raw content extracted from social media
- * @param {Object} fields - Original record fields
- * @param {string} source - Source platform name
+ * Generate all content elements: title, overline, excerpt, and formatted article
  */
-async function generateStructuredContent(rawContent, fields, source) {
+async function generateAllContentElements(content, source) {
   try {
-    // Get existing values to use as context
-    const existingTitle = fields.title || '';
-    const existingExcerpt = fields.excerpt || '';
-    const existingOverline = fields.overline || '';
+    // If content is very long, trim it for AI processing
+    const trimmedContent = content.length > 3000 
+      ? content.substring(0, 3000) + "..." 
+      : content;
     
-    // Build the prompt
+    console.log('Generating all content elements...');
+    
+    // Create prompt for AI - MODIFIED to explicitly request plain text
     const prompt = `
-      Tengo contenido extraído de ${source} que necesito estructurar para un artículo periodístico:
-      
-      ${rawContent}
-      
-      Genera los siguientes elementos para un sitio de noticias:
-      
-      1. TÍTULO: Un título conciso y atractivo de máximo 12 palabras.
-      ${existingTitle ? `Título actual (mejorar si es posible): "${existingTitle}"` : ''}
-      
-      2. RESUMEN: Un resumen de 40-60 palabras que capture la esencia del contenido.
-      ${existingExcerpt ? `Resumen actual (mejorar si es posible): "${existingExcerpt}"` : ''}
-      
-      3. ARTÍCULO COMPLETO: Un artículo estructurado siguiendo estas pautas:
-         - Usa un título claro (no repetir el título principal)
-         - Organiza la información en párrafos lógicos y concisos
-         - Incluye los puntos clave del contenido original
-         - Usa **negritas** para destacar información importante
-         - Si hay fechas, horarios o lugares de eventos, destácalos claramente
-         - No inventes información que no esté en el contenido original
-         - Usa formato markdown adecuado: subtítulos con ##, listas con -, negritas con **
-         - Estilo: español rioplatense formal
-         
-      4. SECCIÓN RECOMENDADA: Considerando el contenido, ¿en qué sección del diario encajaría mejor?
-         Opciones: Politica, Economia, Agro
-         
-      Responde con estos elementos claramente separados por las etiquetas [TÍTULO], [RESUMEN], [ARTÍCULO] y [SECCIÓN], sin incluir estas etiquetas en el contenido.
-    `;
+    Analiza el siguiente contenido de ${source || 'redes sociales'} y genera:
 
-    // Generate content
-    const result = await model.generateContent(prompt);
-    const fullText = (await result.response).text().trim();
+    Contenido:
+    ${trimmedContent}
+
+    Genera:
+    1. TÍTULO: Un título periodístico conciso y atractivo de máximo 10 palabras.
+    2. OVERLINE: Una palabra o frase muy corta que indique el tema (ej. "Política", "Economía", "Deportes", etc.)
+    3. EXTRACTO: Un resumen breve de 15-20 palabras que capture la esencia del contenido.
+    4. ARTÍCULO: Una versión formateada y mejorada del contenido original, que conserve todos los datos importantes pero tenga mejor estructura, como un artículo periodístico profesional.
+
+    MUY IMPORTANTE: No uses formato markdown como ** para negritas o * para cursivas. Responde solo con texto plano.
+    Responde usando estos encabezados exactos: TÍTULO, OVERLINE, EXTRACTO, ARTÍCULO
+    `;
     
-    // Extract each component
-    const titleMatch = fullText.match(/\[TÍTULO\]([\s\S]*?)\[RESUMEN\]/i);
-    const summaryMatch = fullText.match(/\[RESUMEN\]([\s\S]*?)\[ARTÍCULO\]/i);
-    const articleMatch = fullText.match(/\[ARTÍCULO\]([\s\S]*?)(\[SECCIÓN\]|$)/i);
-    const sectionMatch = fullText.match(/\[SECCIÓN\]([\s\S]*?)$/i);
-    
-    // Extract and format each part
-    const title = titleMatch ? titleMatch[1].trim() : existingTitle || 'Contenido de Redes Sociales';
-    const summary = summaryMatch ? summaryMatch[1].trim() : existingExcerpt || '';
-    
-    let article = '';
-    if (articleMatch && articleMatch[1].trim()) {
-      article = articleMatch[1].trim();
-    } else {
-      // Default article format if generation fails
-      article = `## ${title}\n\n${summary}\n\n${rawContent}\n\n**Fuente:** ${source || 'Redes Sociales'}`;
-    }
-    
-    // Extract recommended section if any
-    let recommendedSection = null;
-    if (sectionMatch && sectionMatch[1].trim()) {
-      const sectionText = sectionMatch[1].trim().toLowerCase();
+    // ADDED: AI timeout and error handling
+    try {
+      // Call AI model with timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("AI request timeout")), 30000);
+      });
       
-      if (sectionText.includes('polit')) recommendedSection = 'Politica';
-      else if (sectionText.includes('econom')) recommendedSection = 'Economia';
-      else if (sectionText.includes('agro')) recommendedSection = 'Agro';
+      const resultPromise = model.generateContent(prompt);
+      const result = await Promise.race([resultPromise, timeoutPromise]);
+      
+      const responseText = (await result.response).text();
+      
+      // Parse response
+      const titleMatch = responseText.match(/TÍTULO:?\s*(.*?)(?=OVERLINE|$)/si);
+      const overlineMatch = responseText.match(/OVERLINE:?\s*(.*?)(?=EXTRACTO|$)/si);
+      const extractMatch = responseText.match(/EXTRACTO:?\s*(.*?)(?=ARTÍCULO|$)/si);
+      const articleMatch = responseText.match(/ARTÍCULO:?\s*([\s\S]*)/si);
+      
+      // Format the article content with the original content if AI formatting fails
+      let formattedArticle = content;
+      if (articleMatch && articleMatch[1].trim()) {
+        formattedArticle = articleMatch[1].trim();
+      } else {
+        // Basic formatting if AI didn't produce an article
+        formattedArticle = formatRawContent(content, source);
+      }
+      
+      // ADDED: Remove Markdown formatting from all content
+      const removeMarkdown = (text) => {
+        if (!text) return text;
+        return text
+          .replace(/\*\*/g, '')  // Remove bold
+          .replace(/\*/g, '')    // Remove italics
+          .replace(/\_\_/g, '')  // Remove underline
+          .replace(/\_/g, '')    // Remove single underscores
+          .replace(/\`\`\`[a-z]*\n([\s\S]*?)\n\`\`\`/g, '$1')  // Remove code blocks
+          .replace(/\`(.*?)\`/g, '$1');  // Remove inline code
+      };
+      
+      return {
+        title: removeMarkdown(titleMatch ? titleMatch[1].trim() : createBasicTitle(content, source)),
+        overline: removeMarkdown(overlineMatch ? overlineMatch[1].trim() : source || "Redes Sociales"),
+        excerpt: removeMarkdown(extractMatch ? extractMatch[1].trim() : content.substring(0, 150) + "..."),
+        article: removeMarkdown(formattedArticle)
+      };
+    } catch (aiError) {
+      console.error(`AI processing failed: ${aiError.message}`);
+      throw new Error(`AI processing failed: ${aiError.message}`);
     }
-    
-    return {
-      title,
-      summary,
-      article,
-      recommendedSection
-    };
   } catch (error) {
-    console.error('Error generating structured content:', error.message);
+    console.error('Error generating content elements:', error);
     
-    // Return simple formatted content as fallback
+    // Fallback to basic extraction
     return {
-      title: fields.title || 'Contenido de Redes Sociales',
-      summary: fields.excerpt || '',
-      article: `## ${fields.title || 'Contenido de Redes Sociales'}\n\n${rawContent}\n\n**Fuente:** ${source || 'Redes Sociales'}`
+      title: createBasicTitle(content, source),
+      overline: source || "Redes Sociales",
+      excerpt: content.substring(0, 150) + "...",
+      article: formatRawContent(content, source)
     };
   }
 }
 
-// Allow command-line arguments to control behavior
+/**
+ * Create a basic title from content when AI fails
+ */
+function createBasicTitle(content, source) {
+  try {
+    // Get first sentence or line
+    const firstLine = content.split(/[\n\r.!?]+/)[0].trim();
+    
+    if (firstLine.length <= 80) {
+      return firstLine;
+    } else {
+      // Use first 8 words
+      return firstLine
+        .split(/\s+/)
+        .slice(0, 8)
+        .join(' ') + '...';
+    }
+  } catch (e) {
+    return `Publicación de ${source || 'Redes Sociales'}`;
+  }
+}
+
+/**
+ * Format raw content into a presentable article when AI fails
+ */
+function formatRawContent(content, source) {
+  // Add basic structure to the content
+  const dateStr = new Date().toLocaleDateString('es-AR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+  
+  return `${content}
+
+---
+
+Fuente: ${source || 'Redes Sociales'}
+Fecha de publicación: ${dateStr}`;
+}
+
+/**
+ * Get source from social media fields
+ */
+function getSourceFromFields(fields) {
+  if (fields.source) return fields.source;
+  if (fields['ig-post']) return 'Instagram';
+  if (fields['fb-post']) return 'Facebook';
+  if (fields['tw-post']) return 'Twitter';
+  if (fields['yt-video']) return 'YouTube';
+  return 'Redes Sociales';
+}
+
+// Run the script if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  // Parse command line arguments
   const args = process.argv.slice(2);
   const options = {
-    tableName: args.find(arg => !arg.startsWith('--')) || process.env.AIRTABLE_DEFAULT_TABLE || 'Instituciones',
+    tableName: args.find(arg => !arg.startsWith('--')) || 'Instituciones',
     limit: parseInt(args.find(arg => arg.startsWith('--limit='))?.split('=')[1] || '20'),
     forceProcess: args.includes('--force')
   };
-  
+
   processSocialMediaContent(options)
     .then(stats => {
       console.log('\n=== Processing Complete ===');
@@ -485,4 +521,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     });
 }
 
-export { processSocialMediaContent };
+export { processSocialMediaContent }

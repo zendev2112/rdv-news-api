@@ -72,7 +72,8 @@ VALUES
     ('agro', 'Agro', 4, 'agro'),
     ('deportes', 'Deportes', 5, 'deportes'),
     ('lifestyle', 'Lifestyle', 6, 'lifestyle'),
-    ('turismo', 'Turismo', 7, 'turismo')
+    ('turismo', 'Turismo', 7, 'turismo'),
+    ('espectaculos', 'Espectaculos', 7, 'espectaculos'),
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     position = EXCLUDED.position,

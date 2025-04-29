@@ -633,31 +633,31 @@ function generateFallbackMetadata(extractedText) {
 
     // Use second paragraph as bajada (up to 200 chars)
     const secondPara = paragraphs[1] || paragraphs[0] || ''
-    const excerpt = secondPara.trim().substring(0, 200)
+    const bajada = secondPara.trim().substring(0, 200)
 
     // Simple volanta based on content
-    let overline = ''
+    let volanta = ''
 
     // Try to detect a category from the text
-    if (extractedText.match(/deport[eias]/i)) overline = 'Deportes'
-    else if (extractedText.match(/econom[íia]/i)) overline = 'Economía'
-    else if (extractedText.match(/politic[ao]/i)) overline = 'Política'
+    if (extractedText.match(/deport[eias]/i)) volanta = 'Deportes'
+    else if (extractedText.match(/econom[íia]/i)) volanta = 'Economía'
+    else if (extractedText.match(/politic[ao]/i)) volanta = 'Política'
     else if (extractedText.match(/entreten|espectácul|celebr|artista/i))
-      overline = 'Espectáculos'
-    else if (extractedText.match(/tecnolog[íia]/i)) overline = 'Tecnología'
-    else overline = 'Noticias'
+      volanta = 'Espectáculos'
+    else if (extractedText.match(/tecnolog[íia]/i)) volanta = 'Tecnología'
+    else volanta = 'Noticias'
 
     return {
       title: title || 'Artículo sin título',
-      excerpt: excerpt || 'Sin descripción disponible',
-      overline: overline,
+      bajada: bajada || 'Sin descripción disponible',
+      volanta: volanta,
     }
   } catch (error) {
     console.error('Error in fallback metadata generation:', error.message)
     return {
       title: 'Artículo sin título',
-      excerpt: 'Sin descripción disponible',
-      overline: 'Noticias',
+      bajada: 'Sin descripción disponible',
+      volanta: 'Noticias',
     }
   }
 }
@@ -1020,8 +1020,8 @@ async function processArticle(item, sectionId) {
     
     const recordFields = {
       title: metadata ? metadata.title : item.title,
-      overline: metadata ? metadata.overline : 'No overline available.',
-      excerpt: metadata ? metadata.excerpt : 'No summary available.',
+      overline: metadata ? metadata.volanta : 'No overline available.',
+      excerpt: metadata ? metadata.bajada : 'No summary available.',
       article: processedText,
       image: imageAttachments, // Array of attachment objects for Airtable
       imgUrl: imgUrl || (images.length > 0 ? images[0] : ''),
@@ -1033,7 +1033,7 @@ async function processArticle(item, sectionId) {
       'tw-post': twitterContent || '',
       'yt-video': youtubeContent || '',
       section: sectionValue, // Using exact dropdown value from Airtable options
-      status: 'draft', // Using exact dropdown value 'draft' instead of 'Borrador'
+      status: 'draft'  // Using exact dropdown value 'draft' instead of 'Borrador'
     }
 
     console.log(
@@ -1152,37 +1152,53 @@ async function processSection(section) {
       // Process the limited items
       for (const item of limitedItems) {
         try {
+          const itemUrl = item.url || ''
           console.log(
-            `Processing social media item: ${item.title || 'Untitled'}`
+            `Processing social media item: ${
+              item.title || 'Untitled'
+            } (${itemUrl})`
           )
 
-          // Extract data from RSS item
-          const title = item.title || 'Social Media Post'
-          const description = item.description || ''
+          // IMPROVED: Extract all content directly from the RSS feed item structure
+          // This matches the expected format you provided
 
-          // Find image URLs - social media feeds have different image fields
-          let imageUrl = null
-          if (item.image) {
-            imageUrl = item.image
-          } else if (item.enclosure && item.enclosure.url) {
-            imageUrl = item.enclosure.url
-          } else if (item.media && item.media.url) {
-            imageUrl = item.media.url
-          } else if (item.media_content && item.media_content.length > 0) {
-            imageUrl = item.media_content[0].url
+          // Extract post text content from content_text field (primary source)
+          const postText = item.content_text || ''
+
+          // Get image URL (primary source is the image field)
+          let imageUrl = item.image || null
+
+          // If main image is missing, check attachments
+          if (!imageUrl && item.attachments && item.attachments.length > 0) {
+            imageUrl = item.attachments[0].url
           }
 
-          const sourceUrl = item.url || item.link || ''
-
-          // Extract source name from URL
+          // Determine source platform from URL
           let sourceName = 'Social Media'
+          let socialMediaType = ''
+
           try {
-            const hostname = new URL(sourceUrl).hostname
-            if (hostname.includes('facebook.com')) sourceName = 'Facebook'
-            else if (hostname.includes('instagram.com'))
+            const hostname = new URL(itemUrl).hostname
+            if (hostname.includes('facebook.com')) {
+              sourceName = 'Facebook'
+              socialMediaType = 'fb-post'
+            } else if (hostname.includes('instagram.com')) {
               sourceName = 'Instagram'
-            else {
-              // Get domain without www. prefix
+              socialMediaType = 'ig-post'
+            } else if (
+              hostname.includes('twitter.com') ||
+              hostname.includes('x.com')
+            ) {
+              sourceName = 'Twitter'
+              socialMediaType = 'tw-post'
+            } else if (
+              hostname.includes('youtube.com') ||
+              hostname.includes('youtu.be')
+            ) {
+              sourceName = 'YouTube'
+              socialMediaType = 'yt-video'
+            } else {
+              // Get domain without www. prefix for other sources
               const domain = hostname.replace(/^www\./, '')
               const parts = domain.split('.')
               if (parts.length >= 2) {
@@ -1191,40 +1207,83 @@ async function processSection(section) {
               }
             }
           } catch (e) {
-            // URL parsing failed, keep default
+            console.log(
+              `Error parsing URL: ${e.message}. Using default source name.`
+            )
+            // URL parsing failed, check if we can extract from authors
+            if (
+              item.authors &&
+              item.authors.length > 0 &&
+              item.authors[0].name
+            ) {
+              sourceName = item.authors[0].name
+            }
           }
 
-          // Clean description text (remove HTML tags)
-          const cleanDescription = description
-            .replace(/<[^>]*>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
+          // Get author information
+          const authorName =
+            item.authors && item.authors.length > 0
+              ? item.authors[0].name
+              : sourceName
 
+          // Format publication date if available
+          let pubDate = ''
+          try {
+            if (item.date_published) {
+              const date = new Date(item.date_published)
+              pubDate = date.toLocaleDateString('es-AR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })
+            }
+          } catch (e) {
+            console.log(`Error formatting date: ${e.message}`)
+          }
+
+          // Create record fields
           const recordFields = {
-            title: title,
-            url: sourceUrl,
-            excerpt: cleanDescription,
+            title: item.title || `Publicación de ${sourceName}`,
+            url: itemUrl,
+            excerpt: postText.substring(0, 200), // First 200 chars as excerpt
+            source: sourceName,
             imgUrl: imageUrl || '',
-            volanta: sourceName, // Using source name as volanta
+            article: postText, // Store the full post text
+            overline: authorName, // Use author name as volanta
             section: section.id,
-            sectionName: section.name,
-            sectionColor: section.color,
-            status: 'Ready',
-            processingStatus: 'needs_extraction',
-            //publishedDate: item.pubDate || item.published || new Date().toISOString(),
-            isOcrNeeded: true, // Flag for OCR processing
+            status: 'draft',
+            processingStatus: 'completed', // Mark as completed since we have the full text already
+            postDate: item.date_published || '',
+            postDateFormatted: pubDate,
           }
 
-          // Use your existing airtableService instead of direct airtableBase
+          // Add social media specific fields based on source type
+          if (socialMediaType) {
+            recordFields[socialMediaType] = itemUrl
+          }
+
+          // Add HTML content if available (useful for embedding or further processing)
+          if (item.content_html) {
+            recordFields.contentHtml = item.content_html
+          }
+
+          // Add post ID if available
+          if (item.id) {
+            recordFields.postId = item.id
+          }
+
+          // Insert into Airtable
           try {
             await airtableService.insertRecords(
               [{ fields: recordFields }],
               section.id
             )
-            console.log(`Added social media item to Airtable: ${title}`)
+            console.log(
+              `Added social media item to Airtable: ${recordFields.title}`
+            )
 
             // Mark URL as processed
-            processedUrls.add(item.url)
+            processedUrls.add(itemUrl)
 
             // Update section state after each item
             saveSectionState(section.id, {
