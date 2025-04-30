@@ -171,7 +171,7 @@ async function publishArticle(airtableRecord) {
       section: sectionId,
       
       // Also store the original section name in a metadata field if you want
-      section_name: airtableSection
+      // section_name: airtableSection
     };
     
     // Check for optional fields that might exist in some tables
