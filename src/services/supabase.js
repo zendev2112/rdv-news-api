@@ -49,55 +49,86 @@ function generateSlug(title) {
   });
 }
 
+// Add this section mapping at the top level of the file
+const sectionNameToId = {
+  'Coronel Suárez': 'coronel-suarez',
+  'Pueblos Alemanes': 'pueblos-alemanes',
+  'Huanguelén': 'huanguelen',
+  'La Sexta': 'la-sexta',
+  'Política': 'politica',
+  'Economía': 'economia',
+  'Agro': 'agro',
+  'Sociedad': 'sociedad',
+  'Salud': 'salud',
+  'Cultura': 'cultura',
+  'Opinión': 'opinion',
+  'Deportes': 'deportes',
+  'Lifestyle': 'lifestyle',
+  'Vinos': 'vinos',
+  'El Recetario': 'el-recetario',
+  'Santa Trinidad': 'santa-trinidad',
+  'San José': 'san-jose',
+  'Santa María': 'santa-maria',
+  'IActualidad': 'iactualidad',
+  'Dólar': 'dolar',
+  'Propiedades': 'propiedades',
+  'Pymes y Emprendimientos': 'pymes-emprendimientos',
+  'Inmuebles': 'inmuebles',
+  'Campos': 'campos',
+  'Construcción y Diseño': 'construccion-diseno',
+  'Agricultura': 'agricultura',
+  'Ganadería': 'ganaderia',
+  'Tecnologías': 'tecnologias-agro',
+  'Educación': 'educacion',
+  'Policiales': 'policiales',
+  'Efemérides': 'efemerides',
+  'Ciencia': 'ciencia',
+  'Vida en Armonía': 'vida-armonia',
+  'Nutrición y energía': 'nutricion-energia',
+  'Fitness': 'fitness',
+  'Salud mental': 'salud-mental',
+  'Turismo': 'turismo',
+  'Horóscopo': 'horoscopo',
+  'Feriados': 'feriados',
+  'Loterías y Quinielas': 'loterias-quinielas',
+  'Moda y Belleza': 'moda-belleza',
+  'Mascotas': 'mascotas'
+};
+
 /**
  * Creates article in Supabase from Airtable record
  */
 async function publishArticle(airtableRecord) {
   try {
     logger.info('Publishing article to Supabase:', airtableRecord.id);
-
-    // Special handling for Instituciones table
-    if (airtableRecord.sourceSectionId === 'Instituciones' || 
-        airtableRecord.isInstituciones === true) {
-      logger.info('Special handling for Instituciones table');
+    
+    // Extract section from Airtable record
+    const airtableSection = airtableRecord.fields.section || '';
+    logger.info(`Original Airtable section: "${airtableSection}"`);
+    
+    // Map the Airtable section name to a Supabase section ID
+    let sectionId = '';
+    if (airtableSection) {
+      // Look up the section ID from the mapping
+      sectionId = sectionNameToId[airtableSection];
       
-      // For Instituciones table, force one of the valid section values
-      // that matches exactly what's in the database constraint
-      airtableRecord.forceSection = 'Politica';  // Use exactly what's in your DB constraint
-      logger.info(`Forced section for Instituciones to "Politica"`);
-    }
-
-    // Ensure section value passes the check constraint 
-    // Get section value from forceSection or from fields.section
-    let sectionValue = airtableRecord.forceSection || airtableRecord.fields.section || '';
-    
-    // Log the original section
-    logger.info(`Original section value: "${sectionValue}"`);
-    
-    // Valid sections in Supabase - these match your check constraint
-    const validSections = ['primera-plana', 'politica', 'economia', 'agro', 'deportes', 'lifestyle', 'turismo'];
-    
-    // Normalize section value
-    if (sectionValue) {
-      sectionValue = sectionValue.toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")  // Remove accents
-        .replace(/[^a-z0-9]+/g, '-'); // Replace non-alphanumeric with hyphens
-    }
-    
-    // Check if normalized section is valid, otherwise default to 'primera-plana'
-    if (!validSections.includes(sectionValue)) {
-      // Special case for Instituciones: use exact DB constraint value
-      if (airtableRecord.sourceSectionId === 'Instituciones' || airtableRecord.isInstituciones === true) {
-        logger.info(`For Instituciones table, using "Politica" (exact DB value)`);
-        sectionValue = 'Politica'; // Exact match for DB constraint
+      if (sectionId) {
+        logger.info(`Mapped section "${airtableSection}" to ID "${sectionId}"`);
       } else {
-        logger.info(`Section "${sectionValue}" is not valid, defaulting to "primera-plana"`);
-        sectionValue = 'primera-plana';
+        // If not found in mapping, try to normalize it
+        sectionId = airtableSection.toLowerCase()
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")  // Remove accents
+          .replace(/[^a-z0-9]+/g, '-'); // Replace non-alphanumeric with hyphens
+        logger.info(`No direct mapping found, normalized to: "${sectionId}"`);
       }
     }
     
-    logger.info(`Final section value: "${sectionValue}"`);
-
+    // If we still don't have a valid section ID, use a default
+    if (!sectionId) {
+      sectionId = 'primera-plana';
+      logger.info(`No valid section found, defaulting to: "${sectionId}"`);
+    }
+    
     // Generate a slug from title or use URL if available
     let slug = '';
     if (airtableRecord.fields.url) {
@@ -135,9 +166,12 @@ async function publishArticle(airtableRecord) {
       "tw-post": airtableRecord.fields['tw-post'] || '',
       "yt-video": airtableRecord.fields['yt-video'] || '',
       status: airtableRecord.fields.status || 'draft',
-      // Use the validated section value
-      section: sectionValue,
       
+      // Use the mapped section ID
+      section: sectionId,
+      
+      // Also store the original section name in a metadata field if you want
+      section_name: airtableSection
     };
     
     // Check for optional fields that might exist in some tables
@@ -216,8 +250,8 @@ async function publishArticle(airtableRecord) {
         id: result.data[0].id || 'unknown',
         title: articleData.title,
         slug: articleData.slug,
-        section: articleData.section,
-        section_id: articleData["section-id"],
+        section: sectionId,
+        section_name: airtableSection,
         status: articleData.status,
       },
     };
