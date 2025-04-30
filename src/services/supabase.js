@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import logger from '../utils/logger.js';
+import slugify from 'slugify'; // Make sure to import this at the top
 
 // Initialize dotenv
 dotenv.config();
@@ -36,6 +37,16 @@ const decodedKey = decodeJwt(supabaseKey);
 console.log('Supabase key role:', decodedKey.role || 'unknown');
 if (decodedKey.role !== 'service_role') {
   console.warn('WARNING: Not using a service_role key. This may cause RLS policy violations.');
+}
+
+// Add this helper function to generate a slug
+function generateSlug(title) {
+  if (!title) return '';
+  return slugify(title, {
+    lower: true,      // convert to lower case
+    strict: true,     // strip special characters
+    trim: true        // trim leading and trailing spaces
+  });
 }
 
 /**
@@ -87,10 +98,29 @@ async function publishArticle(airtableRecord) {
     
     logger.info(`Final section value: "${sectionValue}"`);
 
+    // Generate a slug from title or use URL if available
+    let slug = '';
+    if (airtableRecord.fields.url) {
+      // Extract slug from URL if available
+      const urlParts = airtableRecord.fields.url.split('/');
+      slug = urlParts[urlParts.length - 1];
+    } else if (airtableRecord.fields.title) {
+      // Generate slug from title
+      slug = generateSlug(airtableRecord.fields.title);
+    }
+    
+    // Ensure slug is not empty (add timestamp if needed)
+    if (!slug) {
+      slug = `article-${Date.now()}`;
+    }
+    
+    logger.info(`Generated slug: "${slug}"`);
+
     // Map all Airtable fields to Supabase schema
     const articleData = {
-      "airtable-id": airtableRecord.id,
+      airtable_id: airtableRecord.id, // Use underscore, not hyphen
       title: airtableRecord.fields.title || '',
+      slug: slug, // Add the generated slug here
       overline: airtableRecord.fields.overline || airtableRecord.fields.volanta || '',
       excerpt: airtableRecord.fields.excerpt || airtableRecord.fields.bajada || '',
       article: airtableRecord.fields.article || '',
@@ -125,8 +155,8 @@ async function publishArticle(airtableRecord) {
     const { data, error } = await supabase
       .from('articles')
       .upsert(articleData, {
-        onConflict: 'id',
-        returning: 'minimal', // Use 'representation' if you need the returned data
+        onConflict: 'airtable_id', // Use underscore, not hyphen
+        returning: 'representation', // Use 'representation' to get the generated values back
       });
 
     if (error) {
@@ -134,15 +164,16 @@ async function publishArticle(airtableRecord) {
       throw error;
     }
 
-    logger.info('Successfully published to Supabase with ID:', airtableRecord.id);
+    logger.info('Successfully published to Supabase with ID:', data[0].id);
 
     return {
       success: true,
       data: {
-        id: airtableRecord.id,
+        id: data[0].id,
         title: articleData.title,
+        slug: articleData.slug,
         section: articleData.section,
-        section_id: articleData.section_id,
+        section_id: articleData["section-id"],
         status: articleData.status,
       },
     };
