@@ -98,7 +98,7 @@ async function publishArticle(airtableRecord) {
       source: airtableRecord.fields.source || '',
       image: airtableRecord.fields.imagen || airtableRecord.fields.image ? 
              JSON.stringify(airtableRecord.fields.imagen || airtableRecord.fields.image) : null,
-      img_url: airtableRecord.fields.imgUrl || '',
+      imgUrl: airtableRecord.fields.imgUrl || '',
       "article-images": airtableRecord.fields['article-images'] || '',
       "ig-post": airtableRecord.fields['ig-post'] || '',
       "fb-post": airtableRecord.fields['fb-post'] || '',
