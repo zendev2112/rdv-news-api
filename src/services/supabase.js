@@ -163,6 +163,12 @@ async function publishArticle(airtableRecord) {
       logger.error('Supabase error:', error);
       throw error;
     }
+    
+    // Check if data exists before trying to access it
+    if (!data || data.length === 0) {
+      logger.error('Supabase returned no data after upsert');
+      throw new Error('No data returned from database after insert/update');
+    }
 
     logger.info('Successfully published to Supabase with ID:', data[0].id);
 
