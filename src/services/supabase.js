@@ -89,7 +89,7 @@ async function publishArticle(airtableRecord) {
 
     // Map all Airtable fields to Supabase schema
     const articleData = {
-      id: airtableRecord.id,
+      "airtable-id": airtableRecord.id,
       title: airtableRecord.fields.title || '',
       overline: airtableRecord.fields.overline || airtableRecord.fields.volanta || '',
       excerpt: airtableRecord.fields.excerpt || airtableRecord.fields.bajada || '',
