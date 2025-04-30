@@ -41,7 +41,8 @@
     "vercel-build": "echo 'Build step completed'",
     "supabase:db:diff": "npx supabase db diff --schema public",
     "supabase:db:push": "npx supabase db push",
-    "supabase:db:pull": "npx supabase db pull"
+    "supabase:db:pull": "npx supabase db pull",
+    "test:sections": "node src/scripts/test-sections.js"
   },
   "engines": {
     "node": ">=18.x"

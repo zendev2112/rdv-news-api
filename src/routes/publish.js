@@ -78,7 +78,7 @@ router.post('/publish', async (req, res) => {
       article: fields.article || '',
       url: fields.url || '',
       imgUrl: fields.imgUrl || '',
-      article_images: fields['article-images'] || [],
+      "article-images": fields['article-images'] || [],
       instagram_post: fields['ig-post'] || null,
       facebook_post: fields['fb-post'] || null,
       twitter_post: fields['tw-post'] || null,

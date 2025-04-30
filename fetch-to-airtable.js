@@ -996,28 +996,70 @@ async function processArticle(item, sectionId) {
     // Format image URLs as attachment objects for Airtable
     let imageAttachments = []
     if (images.length > 0) {
-      imageAttachments = images.map(url => ({ url }))
+      imageAttachments = images.map((url) => ({ url }))
     } else if (imgUrl) {
       imageAttachments = [{ url: imgUrl }]
     }
 
-    // Map section ID to the exact dropdown values available in Airtable
-    // For Primera Plana table, the section field only accepts 'Politica', 'Economia', or 'Agro'
-    let sectionValue = 'Politica' // Default value for all sections that don't match below
-    
-    // Map specific section IDs to their corresponding dropdown values
-    if (sectionId === 'economia') {
-      sectionValue = 'Economia'
-    } else if (sectionId === 'agro') {
-      sectionValue = 'Agro'
-    } else if (sectionId === 'primera-plana') {
-      sectionValue = 'Politica' // Map primera-plana to Politica by default
+    // Create a dynamic mapping of Supabase section IDs to Airtable values
+    const sectionIdToAirtableValue = {
+      'coronel-suarez': 'Coronel Suárez',
+      'pueblos-alemanes': 'Pueblos Alemanes',
+      huanguelen: 'Huanguelén',
+      'la-sexta': 'La Sexta',
+      politica: 'Política',
+      economia: 'Economía',
+      agro: 'Agro',
+      sociedad: 'Sociedad',
+      salud: 'Salud',
+      cultura: 'Cultura',
+      opinion: 'Opinión',
+      deportes: 'Deportes',
+      lifestyle: 'Lifestyle',
+      vinos: 'Vinos',
+      'el-recetario': 'El Recetario',
+      'santa-trinidad': 'Santa Trinidad',
+      'san-jose': 'San José',
+      'santa-maria': 'Santa María',
+      iactualidad: 'IActualidad',
+      dolar: 'Dólar',
+      propiedades: 'Propiedades',
+      'pymes-emprendimientos': 'Pymes y Emprendimientos',
+      inmuebles: 'Inmuebles',
+      campos: 'Campos',
+      'construccion-diseno': 'Construcción y Diseño',
+      agricultura: 'Agricultura',
+      ganaderia: 'Ganadería',
+      'tecnologias-agro': 'Tecnologías',
+      educacion: 'Educación',
+      policiales: 'Policiales',
+      efemerides: 'Efemérides',
+      ciencia: 'Ciencia',
+      'vida-armonia': 'Vida en Armonía',
+      'nutricion-energia': 'Nutrición y Energía',
+      fitness: 'Fitness',
+      'salud-mental': 'Salud Mental',
+      turismo: 'Turismo',
+      horoscopo: 'Horóscopo',
+      feriados: 'Feriados',
+      'loterias-quinielas': 'Loterías y Quinielas',
+      'moda-belleza': 'Moda y Belleza',
+      mascotas: 'Mascotas',
     }
-    
+
+    // Replace the hardcoded section mapping with this more dynamic lookup
+    // Default to empty string as requested
+    const sectionValue = sectionIdToAirtableValue[sectionId] || ''
+
+    // Look up the section in our mapping
+    if (sectionIdToAirtableValue[sectionId]) {
+      sectionValue = sectionIdToAirtableValue[sectionId]
+    }
+
     // Extract source name from the URL
-    const sourceName = extractSourceName(item.url);
-    console.log(`Extracted source name: ${sourceName} from URL: ${item.url}`);
-    
+    const sourceName = extractSourceName(item.url)
+    console.log(`Extracted source name: ${sourceName} from URL: ${item.url}`)
+
     const recordFields = {
       title: metadata ? metadata.title : item.title,
       overline: metadata ? metadata.volanta : 'No overline available.',
@@ -1033,7 +1075,7 @@ async function processArticle(item, sectionId) {
       'tw-post': twitterContent || '',
       'yt-video': youtubeContent || '',
       section: sectionValue, // Using exact dropdown value from Airtable options
-      status: 'draft'  // Using exact dropdown value 'draft' instead of 'Borrador'
+      status: 'draft', // Using exact dropdown value 'draft' instead of 'Borrador'
     }
 
     console.log(
@@ -1510,72 +1552,76 @@ processAllRequestedSections()
  */
 function extractSourceName(url) {
   try {
-    if (!url) return 'Unknown Source';
-    
+    if (!url) return 'Unknown Source'
+
     // Parse the URL to get the hostname
-    const hostname = new URL(url).hostname;
-    
+    const hostname = new URL(url).hostname
+
     // Step 1: Remove common prefixes
     let domain = hostname
       .replace(/^www\./, '')
       .replace(/^m\./, '')
       .replace(/^mobile\./, '')
       .replace(/^news\./, '')
-      .replace(/^noticias\./, '');
-    
+      .replace(/^noticias\./, '')
+
     // Step 2: Handle social media separately
-    if (domain.includes('facebook.com')) return 'Facebook';
-    if (domain.includes('instagram.com')) return 'Instagram';
-    if (domain.includes('twitter.com') || domain.includes('x.com')) return 'Twitter';
-    if (domain.includes('youtube.com') || domain.includes('youtu.be')) return 'YouTube';
-    if (domain.includes('tiktok.com')) return 'TikTok';
-    if (domain.includes('linkedin.com')) return 'LinkedIn';
-    if (domain.includes('t.co')) return 'Twitter';
-    
+    if (domain.includes('facebook.com')) return 'Facebook'
+    if (domain.includes('instagram.com')) return 'Instagram'
+    if (domain.includes('twitter.com') || domain.includes('x.com'))
+      return 'Twitter'
+    if (domain.includes('youtube.com') || domain.includes('youtu.be'))
+      return 'YouTube'
+    if (domain.includes('tiktok.com')) return 'TikTok'
+    if (domain.includes('linkedin.com')) return 'LinkedIn'
+    if (domain.includes('t.co')) return 'Twitter'
+
     // Step 3: Strip common TLDs and country codes
-    domain = domain.replace(/\.(com|co|net|org|info|ar|mx|es|cl|pe|br|uy|py|bo|ec|ve|us|io|tv|app|web|digital|news|online|press|media|blog|site)(\.[a-z]{2,3})?$/, '');
-    
+    domain = domain.replace(
+      /\.(com|co|net|org|info|ar|mx|es|cl|pe|br|uy|py|bo|ec|ve|us|io|tv|app|web|digital|news|online|press|media|blog|site)(\.[a-z]{2,3})?$/,
+      ''
+    )
+
     // Step 4: Split by dots and get the main part
-    const parts = domain.split('.');
-    let sourceName = parts[0];
-    
+    const parts = domain.split('.')
+    let sourceName = parts[0]
+
     // Step 5: Handle special cases like clarin.com.ar -> Clarín
     const domainMapping = {
-      'lanacion': 'La Nación',
-      'eldiario': 'El Diario',
-      'pagina12': 'Página 12',
-      'larazon': 'La Razón',
-      'lavoz': 'La Voz',
-      'eleconomista': 'El Economista',
-      'elpais': 'El País',
-      'ole': 'Olé',
-      'ambito': 'Ámbito',
-      'telam': 'Télam',
-      'infobae': 'Infobae',
-      'eldestape': 'El Destape',
-      'cronista': 'El Cronista',
-      'tiempoar': 'Tiempo Argentino',
-      'tn': 'Todo Noticias'
-    };
-    
-    if (domainMapping[sourceName]) {
-      return domainMapping[sourceName];
+      lanacion: 'La Nación',
+      eldiario: 'El Diario',
+      pagina12: 'Página 12',
+      larazon: 'La Razón',
+      lavoz: 'La Voz',
+      eleconomista: 'El Economista',
+      elpais: 'El País',
+      ole: 'Olé',
+      ambito: 'Ámbito',
+      telam: 'Télam',
+      infobae: 'Infobae',
+      eldestape: 'El Destape',
+      cronista: 'El Cronista',
+      tiempoar: 'Tiempo Argentino',
+      tn: 'Todo Noticias',
     }
-    
+
+    if (domainMapping[sourceName]) {
+      return domainMapping[sourceName]
+    }
+
     // Step 6: Handle compound domains (remove dashes/underscores and capitalize words)
     return sourceName
       .split(/[-_]/)
-      .map(word => {
+      .map((word) => {
         // Special case for single-letter words like "c" in "c5n"
-        if (word.length === 1) return word.toUpperCase();
-        
+        if (word.length === 1) return word.toUpperCase()
+
         // Proper capitalization for normal words
-        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
       })
-      .join(' ');
-    
+      .join(' ')
   } catch (error) {
-    console.error(`Error extracting source name from ${url}:`, error.message);
-    return 'Unknown Source';
+    console.error(`Error extracting source name from ${url}:`, error.message)
+    return 'Unknown Source'
   }
 }
