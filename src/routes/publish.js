@@ -78,17 +78,17 @@ router.post('/publish', async (req, res) => {
       article: fields.article || '',
       url: fields.url || '',
       imgUrl: fields.imgUrl || '',
-      "article-images": fields['article-images'] || [],
-      instagram_post: fields['ig-post'] || null,
-      facebook_post: fields['fb-post'] || null,
-      twitter_post: fields['tw-post'] || null,
-      youtube_video: fields['yt-video'] || null,
+      'article-images': fields['article-images'] || [],
+      "ig-post": fields['ig-post'] || null,
+      "fb-post": fields['fb-post'] || null,
+      "tw-post": fields['tw-post'] || null,
+      "yt-video": fields['yt-video'] || null,
       section: fields.section || 'primera-plana',
       status: isPublished ? 'published' : 'draft',
       published_at: publishedAt,
       airtable_id: record.id,
-      updated_at: new Date().toISOString()
-    };
+      updated_at: new Date().toISOString(),
+    }
     
     // Check if article already exists in Supabase
     const { data: existingArticle } = await supabase
