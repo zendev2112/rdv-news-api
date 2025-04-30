@@ -137,7 +137,7 @@ async function publishArticle(airtableRecord) {
       status: airtableRecord.fields.status || 'draft',
       // Use the validated section value
       section: sectionValue,
-      "section-id": airtableRecord.forceSectionId || sectionValue
+      
     };
     
     // Check for optional fields that might exist in some tables
