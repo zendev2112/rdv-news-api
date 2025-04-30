@@ -15,52 +15,32 @@ console.log('Airtable credentials available:', {
 
 /**
  * Gets the Airtable API URL for a specific section table
- * @param {string} identifier - Section ID or direct table name
+ * @param {string} sectionId - Section ID
  * @returns {string} - Airtable API URL
  */
-function getAirtableApiUrl(identifier) {
+function getAirtableApiUrl(sectionId) {
+  const section = config.getSection(sectionId);
+  
+  // Debug log to check if section and tableName exist
+  console.log(`Section data for ${sectionId}:`, { 
+    hasSection: !!section,
+    tableName: section?.tableName || 'NOT_FOUND' 
+  });
+  
   // Use explicit baseId fallback to ensure we have a value
   const actualBaseId = config.airtable?.baseId || baseId;
   
-  if (!actualBaseId) {
-    logger.error('Missing Airtable Base ID');
+  if (!section || !section.tableName) {
+    // Special handling for primera-plana
+    if (sectionId === 'primera-plana') {
+      logger.info(`Using hardcoded table name for primera-plana`);
+      return `https://api.airtable.com/v0/${actualBaseId}/Primera%20Plana`;
+    }
+    logger.error(`Missing section or tableName for ${sectionId}`);
     return null;
   }
   
-  // Check if this is a direct table name (has spaces or starts with uppercase)
-  if (identifier.includes(' ') || /^[A-Z]/.test(identifier)) {
-    logger.info(`Using "${identifier}" directly as table name`);
-    return `https://api.airtable.com/v0/${actualBaseId}/${encodeURIComponent(identifier)}`;
-  }
-  
-  // Special case for Instituciones table
-  if (identifier.toLowerCase() === 'instituciones') {
-    logger.info('Using Instituciones table directly');
-    return `https://api.airtable.com/v0/${actualBaseId}/Instituciones`;
-  }
-  
-  // Try to get section from config
-  const section = config.getSection(identifier);
-  
-  if (section && section.tableName) {
-    logger.info(`Using configured table name "${section.tableName}" for "${identifier}"`);
-    return `https://api.airtable.com/v0/${actualBaseId}/${encodeURIComponent(section.tableName)}`;
-  }
-  
-  // Special handling for primera-plana
-  if (identifier === 'primera-plana') {
-    logger.info(`Using special table name for primera-plana`);
-    return `https://api.airtable.com/v0/${actualBaseId}/Primera%20Plana`;
-  }
-  
-  // Convert section ID to Title Case as fallback
-  const titleCaseTable = identifier
-    .split(/[-_]/)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-  
-  logger.info(`Using derived table name "${titleCaseTable}" for "${identifier}"`);
-  return `https://api.airtable.com/v0/${actualBaseId}/${encodeURIComponent(titleCaseTable)}`;
+  return `https://api.airtable.com/v0/${actualBaseId}/${encodeURIComponent(section.tableName)}`;
 }
 
 /**
