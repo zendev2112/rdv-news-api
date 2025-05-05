@@ -1292,7 +1292,6 @@ async function processSection(section) {
             imgUrl: imageUrl || '',
             article: postText, // Store the full post text
             overline: authorName, // Use author name as volanta
-            //section: section.id,
             status: 'draft',
             processingStatus: 'completed', // Mark as completed since we have the full text already
             postDate: item.date_published || '',

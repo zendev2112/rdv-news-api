@@ -241,9 +241,60 @@ async function publishArticle(airtableRecord) {
       };
     }
 
+    // After successfully publishing to Supabase but before returning
     logger.info('Successfully published to Supabase');
-    
-    // Return response with the data we have
+
+    // Now create the relationship in the article_sections table
+    try {
+      // Get the article ID
+      const articleId = result.data[0].id;
+      
+      // Create relationship in junction table
+      logger.info(`Creating relationship between article ${articleId} and section ${sectionId}`);
+      
+      // First check if the relationship already exists
+      const { data: existingRelation, error: checkError } = await supabase
+        .from('article_sections')
+        .select('*')
+        .eq('article_id', articleId)
+        .eq('section_id', sectionId)
+        .maybeSingle();
+      
+      if (checkError && !checkError.message.includes('No rows found')) {
+        logger.error('Error checking for existing article-section relationship:', checkError);
+      } else if (!existingRelation) {
+        // Determine if this should be the primary section
+        // Check if this article has any sections already
+        const { data: existingSections, error: sectionsError } = await supabase
+          .from('article_sections')
+          .select('*')
+          .eq('article_id', articleId);
+        
+        const isPrimary = !sectionsError && (!existingSections || existingSections.length === 0);
+        
+        // Create the relationship
+        const { error: relationError } = await supabase
+          .from('article_sections')
+          .insert({
+            article_id: articleId,
+            section_id: sectionId,
+            is_primary: isPrimary
+          });
+        
+        if (relationError) {
+          logger.error('Error creating article-section relationship:', relationError);
+        } else {
+          logger.info(`Created article-section relationship successfully (primary: ${isPrimary})`);
+        }
+      } else {
+        logger.info('Article-section relationship already exists, skipping creation');
+      }
+    } catch (relationError) {
+      logger.error('Error managing article-section relationship:', relationError);
+      // Continue with the return even if relationship creation fails
+    }
+
+    // Return response with the data
     return {
       success: true,
       data: {
