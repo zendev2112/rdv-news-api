@@ -86,10 +86,12 @@ export async function handlePublishWebhook(req, res) {
     let sectionName = record.fields.Section || record.fields.section || '';
     let sectionId = forceSectionId || null;
 
-    // Special case for "Educación" to fix the trailing dash issue
-    if (sectionName && sectionName.toLowerCase().includes('educaci')) {
-      sectionId = 'educacion';
-      console.log('Found education section, using fixed ID:', sectionId);
+    // Explicitly fix the "educacion-" issue - direct workaround
+    if (sectionName.toLowerCase().includes('educación') || 
+        sectionName.toLowerCase().includes('educacion')) {
+      console.log('Found Education section, fixing the trailing dash issue');
+      sectionName = 'Educación';
+      sectionId = 'educacion'; // Use the correct ID directly
     } else if (!sectionId && sectionName) {
       // Regular section lookup logic
       // Clean section name
@@ -130,13 +132,17 @@ export async function handlePublishWebhook(req, res) {
       .from('articles')
       .upsert({
         title,
-        excerpt,
-        content,
         slug,
+        excerpt,
+        article: content,
         status,
-        image_url,
+        "imgUrl": image_url,
         published_at: status === 'published' ? new Date().toISOString() : null,
-        airtable_id: recordId
+        airtable_id: recordId,
+        // Clean up section name explicitly
+        section: sectionName && sectionName.toLowerCase().includes('educacion') 
+          ? 'educacion' // Use the correct ID without the dash
+          : sectionName.trim()
       }, {
         onConflict: 'airtable_id',
         returning: true
