@@ -16,20 +16,31 @@ function generateSlug(title) {
     return `article-${Date.now()}`;
   }
   
-  // First normalize text to remove accents
-  const normalized = title
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  
-  // Clean the title and generate slug directly
-  const slug = normalized
-    .toLowerCase()
+  // Clean the title before slugifying
+  const cleanTitle = title
     .trim()
-    .replace(/[^\w\s-]/g, '') // Remove special characters
+    .replace(/[^\w\s-]/g, '') // Remove special characters except hyphens and spaces
     .replace(/\s+/g, '-')     // Replace spaces with hyphens
     .replace(/-+/g, '-')      // Remove consecutive hyphens
-    .replace(/-+$/g, '');     // Remove trailing dashes
+    .toLowerCase();
     
+  // If title is empty after cleaning, generate a fallback
+  if (!cleanTitle) {
+    return `article-${Date.now()}`;
+  }
+  
+  // Use slugify with stricter settings
+  let slug = slugify(cleanTitle, {
+    lower: true,      // convert to lower case
+    strict: true,     // strip special characters
+    trim: true,       // trim leading and trailing spaces
+    replacement: '-', // replace spaces with hyphens
+    remove: /[*+~.()'"!:@]/g // Remove specific characters
+  });
+  
+  // Remove any trailing dashes
+  slug = slug.replace(/-+$/g, '');
+  
   return slug || `article-${Date.now()}`;
 }
 
@@ -81,84 +92,130 @@ export async function handlePublishWebhook(req, res) {
     const airtableData = await airtableResponse.json();
     const fieldsData = airtableData.fields;
     
-    // Use forceSectionId if provided, otherwise extract from data
-    let sectionId = forceSectionId || null;
+    // Extract section from Airtable data
     let sectionName = fieldsData.Section || fieldsData.section || '';
     
-    // Only calculate section ID if not provided
-    if (!sectionId && sectionName) {
-      // Hard-coded section mapping as fallback
-      const sectionMapping = {
-        'Educación': 'educacion',
-        'Educacion': 'educacion',
-        'Política': 'politica',
-        'Politica': 'politica',
-        'Economía': 'economia',
-        'Economia': 'economia',
-        'Coronel Suárez': 'coronel-suarez',
-        'Coronel Suarez': 'coronel-suarez',
-        'Pueblos Alemanes': 'pueblos-alemanes',
-        'Huanguelén': 'huanguelen',
-        'Huanguelen': 'huanguelen',
-        'La Sexta': 'la-sexta',
-        'Agro': 'agro',
-        'Sociedad': 'sociedad',
-        'Salud': 'salud',
-        'Cultura': 'cultura',
-        'Opinión': 'opinion',
-        'Opinion': 'opinion',
-        'Deportes': 'deportes',
-        'Lifestyle': 'lifestyle',
-        'Vinos': 'vinos',
-        'El Recetario': 'el-recetario',
-        'Santa Trinidad': 'santa-trinidad',
-        'San José': 'san-jose',
-        'San Jose': 'san-jose',
-        'Santa María': 'santa-maria',
-        'Santa Maria': 'santa-maria',
-        'IActualidad': 'iactualidad',
-        'Dólar': 'dolar',
-        'Dolar': 'dolar',
-        'Propiedades': 'propiedades',
-        'Pymes y Emprendimientos': 'pymes-emprendimientos',
-        'Inmuebles': 'inmuebles',
-        'Campos': 'campos',
-        'Construcción y Diseño': 'construccion-diseno',
-        'Construccion y Diseño': 'construccion-diseno',
-        'Construccion y Diseno': 'construccion-diseno',
-        'Agricultura': 'agricultura',
-        'Ganadería': 'ganaderia',
-        'Ganaderia': 'ganaderia',
-        'Tecnologías': 'tecnologias-agro',
-        'Tecnologias': 'tecnologias-agro',
-        'Educación': 'educacion',
-        'Educacion': 'educacion',
-        'Policiales': 'policiales',
-        'Efemérides': 'efemerides',
-        'Efemerides': 'efemerides',
-        'Ciencia': 'ciencia',
-        'Vida en Armonía': 'vida-armonia',
-        'Vida en Armonia': 'vida-armonia',
-        'Nutrición y energía': 'nutricion-energia',
-        'Nutricion y energia': 'nutricion-energia',
-        'Fitness': 'fitness',
-        'Salud mental': 'salud-mental',
-        'Turismo': 'turismo',
-        'Horóscopo': 'horoscopo',
-        'Horoscopo': 'horoscopo',
-        'Feriados': 'feriados',
-        'Loterías y Quinielas': 'loterias-quinielas',
-        'Loterias y Quinielas': 'loterias-quinielas',
-        'Moda y Belleza': 'moda-belleza',
-        'Mascotas': 'mascotas',
-        'Sin categoría': 'uncategorized',
-        'Sin categoria': 'uncategorized'
-      };
+    // DIRECT FIX FOR EDUCACIÓN
+    if (sectionName === 'Educación' || sectionName === 'Educacion') {
+      // Prepare article data
+      const title = fieldsData.Title || fieldsData.title || 'Untitled';
+      const excerpt = fieldsData.Excerpt || fieldsData.excerpt || '';
+      const content = fieldsData.Content || fieldsData.content || fieldsData.Article || fieldsData.article || '';
+      const slug = generateSlug(title);
+      const image_url = fieldsData.Image?.[0]?.url || fieldsData.image_url || null;
       
-      sectionId = sectionMapping[sectionName] || 'uncategorized';
+      // INSERT WITH HARDCODED SECTION ID
+      const { data: article, error: articleError } = await supabase
+        .from('articles')
+        .upsert({
+          title,
+          slug,
+          excerpt,
+          article: content,
+          status,
+          "imgUrl": image_url,
+          published_at: status === 'published' ? new Date().toISOString() : null,
+          airtable_id: recordId,
+          section: "educacion" // HARDCODED
+        }, {
+          onConflict: 'airtable_id',
+          returning: true
+        })
+        .select()
+        .single();
+      
+      if (articleError) {
+        console.error('Error creating article:', articleError);
+        return res.status(500).json({ success: false, error: articleError.message });
+      }
+      
+      // CREATE RELATIONSHIP WITH HARDCODED SECTION ID
+      if (article) {
+        // Delete existing primary relationships
+        await supabase
+          .from('article_sections')
+          .delete()
+          .eq('article_id', article.id)
+          .eq('is_primary', true);
+        
+        // Create new relationship
+        const { error: relationshipError } = await supabase
+          .from('article_sections')
+          .insert({
+            article_id: article.id,
+            section_id: "educacion", // HARDCODED
+            is_primary: true
+          });
+        
+        if (relationshipError) {
+          console.error('Error creating section relationship:', relationshipError);
+        }
+      }
+      
+      // Return success
+      return res.status(200).json({
+        success: true,
+        article: {
+          id: article.id,
+          title: article.title,
+          slug: article.slug,
+          status: article.status,
+          section: "educacion" // HARDCODED
+        }
+      });
     }
     
-    // Prepare article data
+    // Original section handling for non-Educación sections
+    let sectionId = forceSectionId || null;
+    
+    if (!sectionId && sectionName) {
+      // Clean section name and create slug
+      const cleanSectionName = sectionName.trim();
+      const sectionSlug = slugify(cleanSectionName, { lower: true, strict: true });
+      
+      // Check if section exists by name or slug
+      const { data: existingSection, error: sectionError } = await supabase
+        .from('sections')
+        .select('id, name')
+        .or(`name.ilike.${cleanSectionName},slug.eq.${sectionSlug}`)
+        .single();
+      
+      if (sectionError && sectionError.code !== 'PGRST116') { 
+        // PGRST116 is just "not found" error, which is expected
+        console.error('Error checking for existing section:', sectionError);
+      }
+      
+      // If section exists, use it
+      if (existingSection) {
+        sectionId = existingSection.id;
+        console.log(`Found existing section: ${existingSection.name} (${sectionId})`);
+      } else {
+        // Create new section if it doesn't exist
+        const sectionId = sectionSlug;
+        
+        const { data: newSection, error: createError } = await supabase
+          .from('sections')
+          .insert({
+            id: sectionId,
+            name: cleanSectionName,
+            slug: sectionSlug,
+            position: 100 // Default position at the end
+          })
+          .select()
+          .single();
+        
+        if (createError) {
+          console.error('Error creating section:', createError);
+          // Fall back to uncategorized
+          sectionId = 'uncategorized';
+        } else {
+          sectionId = newSection.id;
+          console.log(`Created new section: ${newSection.name} (${sectionId})`);
+        }
+      }
+    }
+    
+    // Now that we have article and section data, create or update the article
     const title = fieldsData.Title || fieldsData.title || 'Untitled';
     const excerpt = fieldsData.Excerpt || fieldsData.excerpt || '';
     const content = fieldsData.Content || fieldsData.content || fieldsData.Article || fieldsData.article || '';
@@ -177,7 +234,8 @@ export async function handlePublishWebhook(req, res) {
         "imgUrl": image_url,
         published_at: status === 'published' ? new Date().toISOString() : null,
         airtable_id: recordId,
-        section: sectionId || sectionName // Use the clean section ID if available
+        // Store raw section name in article.section field as a fallback
+        section: sectionName 
       }, {
         onConflict: 'airtable_id',
         returning: true
@@ -192,26 +250,30 @@ export async function handlePublishWebhook(req, res) {
     
     console.log(`Article ${status === 'published' ? 'published' : 'updated'}: ${article.title} (${article.id})`);
     
-    // Create the section relationship
-    if (article && sectionId) {
-      // First delete any existing primary relationships for this article
+    // Connect article to section if we have a section ID
+    if (article) {
+      // Delete existing connections
       await supabase
         .from('article_sections')
         .delete()
         .eq('article_id', article.id)
         .eq('is_primary', true);
       
-      // Then create the new relationship with the correct sectionId
-      const { error: relationshipError } = await supabase
+      // Create new primary connection - use uncategorized if no section found
+      const finalSectionId = sectionId || 'uncategorized';
+      
+      const { error: connectionError } = await supabase
         .from('article_sections')
         .insert({
           article_id: article.id,
-          section_id: sectionId,
+          section_id: finalSectionId,
           is_primary: true
         });
       
-      if (relationshipError) {
-        console.error('Error creating section relationship:', relationshipError);
+      if (connectionError) {
+        console.error('Error connecting article to section:', connectionError);
+      } else {
+        console.log(`Connected article to section: ${finalSectionId} (primary: true)`);
       }
     }
     
@@ -223,7 +285,7 @@ export async function handlePublishWebhook(req, res) {
         title: article.title,
         slug: article.slug,
         status: article.status,
-        section: sectionId || sectionName
+        section: sectionId || 'uncategorized'
       }
     });
     
