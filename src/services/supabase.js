@@ -52,13 +52,16 @@ function generateSlug(title) {
     .replace(/\s+/g, '-');  // Replace spaces with hyphens
     
   // Use slugify with improved settings
-  const slug = slugify(cleanTitle, {
+  let slug = slugify(cleanTitle, {
     lower: true,      // convert to lower case
     strict: true,     // strip special characters
     trim: true,       // trim leading and trailing spaces
     replacement: '-', // replace spaces with hyphens
     remove: /[*+~.()'"!:@]/g // Remove specific characters
   });
+  
+  // IMPORTANT: Remove any trailing dashes
+  slug = slug.replace(/-+$/g, '');
   
   // Log the generated slug for debugging
   logger.info(`Generated slug for "${title}": ${slug}`);
