@@ -8,7 +8,7 @@ const supabase = createClient(
 );
 
 /**
- * Generate a slug from a title
+ * Generate a high-quality slug from a title
  */
 function generateSlug(title) {
   if (!title || typeof title !== 'string') {
@@ -16,31 +16,39 @@ function generateSlug(title) {
     return `article-${Date.now()}`;
   }
   
-  // Clean the title before slugifying
-  const cleanTitle = title
-    .trim()
-    .replace(/[^\w\s-]/g, '') // Remove special characters except hyphens and spaces
-    .replace(/\s+/g, '-')     // Replace spaces with hyphens
-    .replace(/-+/g, '-')      // Remove consecutive hyphens
-    .toLowerCase();
-    
-  // If title is empty after cleaning, generate a fallback
-  if (!cleanTitle) {
-    return `article-${Date.now()}`;
-  }
+  // Step 1: Normalize the text to remove accents
+  const normalized = title
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
   
-  // Use slugify with stricter settings
-  let slug = slugify(cleanTitle, {
-    lower: true,      // convert to lower case
-    strict: true,     // strip special characters
-    trim: true,       // trim leading and trailing spaces
-    replacement: '-', // replace spaces with hyphens
-    remove: /[*+~.()'"!:@]/g // Remove specific characters
+  // Step 2: Create a better quality slug
+  let slug = slugify(normalized, {
+    lower: true,       // convert to lower case
+    strict: true,      // strip special characters
+    trim: true,        // trim leading and trailing spaces
+    replacement: '-',  // replace spaces with hyphens
+    locale: 'es',      // Use Spanish locale for better handling of special chars
+    remove: /[*+~.()'"!:@#%^&]/g // Remove more problematic characters
   });
   
-  // Remove any trailing dashes
-  slug = slug.replace(/-+$/g, '');
+  // Step 3: Clean up the result
+  slug = slug
+    .replace(/-+/g, '-')     // Replace multiple dashes with single dash
+    .replace(/^-+|-+$/g, ''); // Remove leading and trailing dashes
   
+  // Step 4: Limit slug length but preserve whole words where possible
+  if (slug.length > 80) {
+    // Cut at the last dash before character 80
+    const lastDashPos = slug.substring(0, 80).lastIndexOf('-');
+    if (lastDashPos > 40) { // Ensure we don't cut too short
+      slug = slug.substring(0, lastDashPos);
+    } else {
+      // If no suitable dash found, just cut at 80
+      slug = slug.substring(0, 80);
+    }
+  }
+  
+  // Ensure we have something valid
   return slug || `article-${Date.now()}`;
 }
 
@@ -92,130 +100,34 @@ export async function handlePublishWebhook(req, res) {
     const airtableData = await airtableResponse.json();
     const fieldsData = airtableData.fields;
     
-    // Extract section from Airtable data
+    // Use forceSectionId if provided, otherwise extract from data
+    let sectionId = forceSectionId || null;
     let sectionName = fieldsData.Section || fieldsData.section || '';
     
-    // DIRECT FIX FOR EDUCACIÓN
-    if (sectionName === 'Educación' || sectionName === 'Educacion') {
-      // Prepare article data
-      const title = fieldsData.Title || fieldsData.title || 'Untitled';
-      const excerpt = fieldsData.Excerpt || fieldsData.excerpt || '';
-      const content = fieldsData.Content || fieldsData.content || fieldsData.Article || fieldsData.article || '';
-      const slug = generateSlug(title);
-      const image_url = fieldsData.Image?.[0]?.url || fieldsData.image_url || null;
-      
-      // INSERT WITH HARDCODED SECTION ID
-      const { data: article, error: articleError } = await supabase
-        .from('articles')
-        .upsert({
-          title,
-          slug,
-          excerpt,
-          article: content,
-          status,
-          "imgUrl": image_url,
-          published_at: status === 'published' ? new Date().toISOString() : null,
-          airtable_id: recordId,
-          section: "educacion" // HARDCODED
-        }, {
-          onConflict: 'airtable_id',
-          returning: true
-        })
-        .select()
-        .single();
-      
-      if (articleError) {
-        console.error('Error creating article:', articleError);
-        return res.status(500).json({ success: false, error: articleError.message });
-      }
-      
-      // CREATE RELATIONSHIP WITH HARDCODED SECTION ID
-      if (article) {
-        // Delete existing primary relationships
-        await supabase
-          .from('article_sections')
-          .delete()
-          .eq('article_id', article.id)
-          .eq('is_primary', true);
-        
-        // Create new relationship
-        const { error: relationshipError } = await supabase
-          .from('article_sections')
-          .insert({
-            article_id: article.id,
-            section_id: "educacion", // HARDCODED
-            is_primary: true
-          });
-        
-        if (relationshipError) {
-          console.error('Error creating section relationship:', relationshipError);
-        }
-      }
-      
-      // Return success
-      return res.status(200).json({
-        success: true,
-        article: {
-          id: article.id,
-          title: article.title,
-          slug: article.slug,
-          status: article.status,
-          section: "educacion" // HARDCODED
-        }
-      });
-    }
-    
-    // Original section handling for non-Educación sections
-    let sectionId = forceSectionId || null;
-    
+    // Determine section ID if not forced
     if (!sectionId && sectionName) {
-      // Clean section name and create slug
-      const cleanSectionName = sectionName.trim();
-      const sectionSlug = slugify(cleanSectionName, { lower: true, strict: true });
-      
-      // Check if section exists by name or slug
-      const { data: existingSection, error: sectionError } = await supabase
-        .from('sections')
-        .select('id, name')
-        .or(`name.ilike.${cleanSectionName},slug.eq.${sectionSlug}`)
-        .single();
-      
-      if (sectionError && sectionError.code !== 'PGRST116') { 
-        // PGRST116 is just "not found" error, which is expected
-        console.error('Error checking for existing section:', sectionError);
-      }
-      
-      // If section exists, use it
-      if (existingSection) {
-        sectionId = existingSection.id;
-        console.log(`Found existing section: ${existingSection.name} (${sectionId})`);
+      // Special handling for Education section
+      if (sectionName.toLowerCase().includes('educa')) {
+        sectionId = 'educacion';
       } else {
-        // Create new section if it doesn't exist
-        const sectionId = sectionSlug;
-        
-        const { data: newSection, error: createError } = await supabase
-          .from('sections')
-          .insert({
-            id: sectionId,
-            name: cleanSectionName,
-            slug: sectionSlug,
-            position: 100 // Default position at the end
-          })
-          .select()
-          .single();
-        
-        if (createError) {
-          console.error('Error creating section:', createError);
-          // Fall back to uncategorized
-          sectionId = 'uncategorized';
-        } else {
-          sectionId = newSection.id;
-          console.log(`Created new section: ${newSection.name} (${sectionId})`);
-        }
+        // Create a clean section ID
+        sectionId = sectionName
+          .toLowerCase()
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")  // Remove accents
+          .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphens
+          .replace(/^-+|-+$/g, '');    // Remove leading/trailing dashes
       }
+      
+      // Ensure no trailing dash (the root of our original bug)
+      sectionId = sectionId.replace(/-+$/g, '');
     }
     
-    // Now that we have article and section data, create or update the article
+    // Default to uncategorized if no section was found
+    if (!sectionId) {
+      sectionId = 'uncategorized';
+    }
+    
+    // Prepare article data
     const title = fieldsData.Title || fieldsData.title || 'Untitled';
     const excerpt = fieldsData.Excerpt || fieldsData.excerpt || '';
     const content = fieldsData.Content || fieldsData.content || fieldsData.Article || fieldsData.article || '';
@@ -234,8 +146,7 @@ export async function handlePublishWebhook(req, res) {
         "imgUrl": image_url,
         published_at: status === 'published' ? new Date().toISOString() : null,
         airtable_id: recordId,
-        // Store raw section name in article.section field as a fallback
-        section: sectionName 
+        section: sectionId
       }, {
         onConflict: 'airtable_id',
         returning: true
@@ -248,32 +159,26 @@ export async function handlePublishWebhook(req, res) {
       return res.status(500).json({ success: false, error: articleError.message });
     }
     
-    console.log(`Article ${status === 'published' ? 'published' : 'updated'}: ${article.title} (${article.id})`);
-    
-    // Connect article to section if we have a section ID
+    // Create the section relationship
     if (article) {
-      // Delete existing connections
+      // First delete any existing primary relationships
       await supabase
         .from('article_sections')
         .delete()
         .eq('article_id', article.id)
         .eq('is_primary', true);
       
-      // Create new primary connection - use uncategorized if no section found
-      const finalSectionId = sectionId || 'uncategorized';
-      
-      const { error: connectionError } = await supabase
+      // Create the new relationship with the correct section ID
+      const { error: relationshipError } = await supabase
         .from('article_sections')
         .insert({
           article_id: article.id,
-          section_id: finalSectionId,
+          section_id: sectionId,
           is_primary: true
         });
       
-      if (connectionError) {
-        console.error('Error connecting article to section:', connectionError);
-      } else {
-        console.log(`Connected article to section: ${finalSectionId} (primary: true)`);
+      if (relationshipError) {
+        console.error('Error creating section relationship:', relationshipError);
       }
     }
     
@@ -285,7 +190,7 @@ export async function handlePublishWebhook(req, res) {
         title: article.title,
         slug: article.slug,
         status: article.status,
-        section: sectionId || 'uncategorized'
+        section: sectionId
       }
     });
     

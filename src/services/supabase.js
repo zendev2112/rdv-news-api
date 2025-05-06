@@ -39,35 +39,52 @@ if (decodedKey.role !== 'service_role') {
   console.warn('WARNING: Not using a service_role key. This may cause RLS policy violations.');
 }
 
-// Update the generateSlug function
+// Updated helper function to generate a higher quality slug
 function generateSlug(title) {
   if (!title || typeof title !== 'string') {
     logger.warn('Invalid title for slug generation');
     return `article-${Date.now()}`;
   }
   
-  // Clean the title before slugifying
-  const cleanTitle = title
-    .trim()
-    .replace(/\s+/g, '-');  // Replace spaces with hyphens
-    
-  // Use slugify with improved settings
-  let slug = slugify(cleanTitle, {
-    lower: true,      // convert to lower case
-    strict: true,     // strip special characters
-    trim: true,       // trim leading and trailing spaces
-    replacement: '-', // replace spaces with hyphens
-    remove: /[*+~.()'"!:@]/g // Remove specific characters
+  // Step 1: Normalize the text to remove accents
+  const normalized = title
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  
+  // Step 2: Create a better quality slug
+  let slug = slugify(normalized, {
+    lower: true,       // convert to lower case
+    strict: true,      // strip special characters
+    trim: true,        // trim leading and trailing spaces
+    replacement: '-',  // replace spaces with hyphens
+    locale: 'es',      // Use Spanish locale for better handling of special chars
+    remove: /[*+~.()'"!:@#%^&]/g // Remove more problematic characters
   });
   
-  // IMPORTANT: Remove any trailing dashes
-  slug = slug.replace(/-+$/g, '');
+  // Step 3: Clean up the result
+  slug = slug
+    .replace(/-+/g, '-')     // Replace multiple dashes with single dash
+    .replace(/^-+|-+$/g, ''); // Remove leading and trailing dashes
   
-  // Log the generated slug for debugging
-  logger.info(`Generated slug for "${title}": ${slug}`);
+  // Step 4: Limit slug length but preserve whole words where possible
+  if (slug.length > 80) {
+    // Cut at the last dash before character 80
+    const lastDashPos = slug.substring(0, 80).lastIndexOf('-');
+    if (lastDashPos > 40) { // Ensure we don't cut too short
+      slug = slug.substring(0, lastDashPos);
+    } else {
+      // If no suitable dash found, just cut at 80
+      slug = slug.substring(0, 80);
+    }
+  }
   
-  // Return the slug or a fallback if it's empty
-  return slug || `article-${Date.now()}`;
+  // Step 5: Ensure we have something valid
+  if (!slug) {
+    return `article-${Date.now()}`;
+  }
+  
+  logger.info(`Generated high-quality slug from "${title}": "${slug}"`);
+  return slug;
 }
 
 // Add this section mapping at the top level of the file
