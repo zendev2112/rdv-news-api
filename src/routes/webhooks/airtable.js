@@ -86,8 +86,12 @@ export async function handlePublishWebhook(req, res) {
     let sectionName = record.fields.Section || record.fields.section || '';
     let sectionId = forceSectionId || null;
 
-    // If we have a section name but no forced ID, look up the section
-    if (!sectionId && sectionName) {
+    // Special case for "Educación" to fix the trailing dash issue
+    if (sectionName && sectionName.toLowerCase().includes('educaci')) {
+      sectionId = 'educacion';
+      console.log('Found education section, using fixed ID:', sectionId);
+    } else if (!sectionId && sectionName) {
+      // Regular section lookup logic
       // Clean section name
       const cleanSectionName = sectionName.trim();
       
