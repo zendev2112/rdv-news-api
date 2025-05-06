@@ -169,6 +169,32 @@ export async function handlePublishWebhook(req, res) {
       });
     }
     
+    // After creating the article, create the section relationship
+    if (article) {
+      // If we identified this as the education section, create the relationship
+      if (sectionId === 'educacion') {
+        // First, delete any existing primary relationship for this article
+        await supabase
+          .from('article_sections')
+          .delete()
+          .eq('article_id', article.id)
+          .eq('is_primary', true);
+          
+        // Now create the correct relationship
+        const { error: relationshipError } = await supabase
+          .from('article_sections')
+          .insert({
+            article_id: article.id,
+            section_id: 'educacion',
+            is_primary: true
+          });
+          
+        if (relationshipError) {
+          console.error('Error creating relationship:', relationshipError);
+        }
+      }
+    }
+    
     return res.json({
       success: true,
       article: {
