@@ -11,10 +11,23 @@ const supabase = createClient(
  * Generate a slug from a title
  */
 function generateSlug(title) {
-  return slugify(title, {
-    lower: true,
-    strict: true,
-    trim: true
+  if (!title || typeof title !== 'string') {
+    console.error('Invalid title for slug generation:', title);
+    return `article-${Date.now()}`;
+  }
+  
+  // Clean the title before slugifying
+  const cleanTitle = title
+    .trim()
+    .replace(/\s+/g, '-');  // Replace spaces with hyphens
+    
+  // Use slugify with improved settings
+  return slugify(cleanTitle, {
+    lower: true,      // convert to lower case
+    strict: true,     // strip special characters
+    trim: true,       // trim leading and trailing spaces
+    replacement: '-', // replace spaces with hyphens
+    remove: /[*+~.()'"!:@]/g // Remove specific characters
   });
 }
 

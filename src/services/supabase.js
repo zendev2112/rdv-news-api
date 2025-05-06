@@ -39,14 +39,32 @@ if (decodedKey.role !== 'service_role') {
   console.warn('WARNING: Not using a service_role key. This may cause RLS policy violations.');
 }
 
-// Add this helper function to generate a slug
+// Update the generateSlug function
 function generateSlug(title) {
-  if (!title) return '';
-  return slugify(title, {
+  if (!title || typeof title !== 'string') {
+    logger.warn('Invalid title for slug generation');
+    return `article-${Date.now()}`;
+  }
+  
+  // Clean the title before slugifying
+  const cleanTitle = title
+    .trim()
+    .replace(/\s+/g, '-');  // Replace spaces with hyphens
+    
+  // Use slugify with improved settings
+  const slug = slugify(cleanTitle, {
     lower: true,      // convert to lower case
     strict: true,     // strip special characters
-    trim: true        // trim leading and trailing spaces
+    trim: true,       // trim leading and trailing spaces
+    replacement: '-', // replace spaces with hyphens
+    remove: /[*+~.()'"!:@]/g // Remove specific characters
   });
+  
+  // Log the generated slug for debugging
+  logger.info(`Generated slug for "${title}": ${slug}`);
+  
+  // Return the slug or a fallback if it's empty
+  return slug || `article-${Date.now()}`;
 }
 
 // Add this section mapping at the top level of the file
