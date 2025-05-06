@@ -31,6 +31,24 @@ function generateSlug(title) {
   });
 }
 
+// Add this helper function to clean section IDs
+
+function cleanSectionId(text) {
+  if (!text) return 'uncategorized';
+  
+  // First normalize the text (remove accents)
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  
+  // Convert to lowercase and replace non-alphanumeric with dash
+  let cleaned = normalized.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-');
+    
+  // IMPORTANT: Remove trailing dashes
+  cleaned = cleaned.replace(/-+$/g, '');
+  
+  return cleaned || 'uncategorized';
+}
+
 /**
  * Handle webhooks from Airtable for publishing content
  */
