@@ -64,15 +64,41 @@ export async function handlePublishWebhook(req, res) {
       });
     }
     
-    // Check if the section exists
-    const sectionId = forceSectionId || 'primera-plana';
-    const section = await getSection(sectionId);
-    
-    if (!section) {
-      return res.status(400).json({
-        success: false,
-        error: `Section not found: ${sectionId}`
-      });
+    // Extract section from Airtable data
+    let sectionName = record.fields.Section || record.fields.section || '';
+    let sectionId = forceSectionId || null;
+
+    // If we have a section name but no forced ID, look up the section
+    if (!sectionId && sectionName) {
+      // Clean section name
+      const cleanSectionName = sectionName.trim();
+      
+      console.log(`Looking for section: "${cleanSectionName}"`);
+      
+      // Create a normalized ID for lookup (removing trailing dashes)
+      const normalizedId = cleanSectionName
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
+        .replace(/[^a-z0-9]+/g, '-')  // Replace non-alphanumeric with dash
+        .replace(/^-+|-+$/g, '');     // Remove leading/trailing dashes
+      
+      console.log(`Normalized section ID: "${normalizedId}"`);
+      
+      // Try multiple ways to find the section
+      const { data: sections } = await supabase
+        .from('sections')
+        .select('id, name')
+        .or(`name.ilike.${cleanSectionName},id.eq.${normalizedId}`);
+      
+      if (sections && sections.length > 0) {
+        // Found at least one matching section
+        sectionId = sections[0].id;
+        console.log(`Found matching section: ${sections[0].name} (${sectionId})`);
+      } else {
+        // No match found, use uncategorized
+        console.log(`No matching section found for "${cleanSectionName}", using uncategorized`);
+        sectionId = 'uncategorized';
+      }
     }
     
     // Create or update the article
