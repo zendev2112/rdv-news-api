@@ -16,22 +16,17 @@ function generateSlug(title) {
     return `article-${Date.now()}`;
   }
   
-  // Clean the title before slugifying
-  const cleanTitle = title
-    .trim()
-    .replace(/\s+/g, '-');  // Replace spaces with hyphens
-    
-  // Use slugify with improved settings
-  let slug = slugify(cleanTitle, {
-    lower: true,      // convert to lower case
-    strict: true,     // strip special characters
-    trim: true,       // trim leading and trailing spaces
-    replacement: '-', // replace spaces with hyphens
-    remove: /[*+~.()'"!:@]/g // Remove specific characters
-  });
+  // First normalize the text to remove accents - this is the key change
+  const normalized = title.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   
-  // IMPORTANT: Remove any trailing dashes
-  slug = slug.replace(/-+$/g, '');
+  // Clean and generate the slug directly without using slugify
+  const slug = normalized
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '') // Remove special characters except whitespace and dash
+    .replace(/\s+/g, '-')     // Replace spaces with dashes
+    .replace(/-+/g, '-')      // Replace multiple consecutive dashes with a single dash
+    .replace(/-+$/g, '');     // Remove trailing dashes
   
   return slug || `article-${Date.now()}`;
 }
@@ -127,6 +122,27 @@ export async function handlePublishWebhook(req, res) {
       return res.status(500).json({ success: false, error: articleError.message });
     }
     
+    // Extract section from Airtable and make a CORRECT ID
+    let sectionName = fieldsData.Section || fieldsData.section || '';
+    let sectionId = null;
+    
+    if (sectionName) {
+      // Hard-coded fix for Educación section
+      if (sectionName.toLowerCase().includes('educa')) {
+        sectionId = 'educacion';
+      } else {
+        // For other sections, generate a clean ID
+        sectionId = sectionName
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
+          .toLowerCase()
+          .trim()
+          .replace(/[^\w\s-]/g, '') // Remove special characters
+          .replace(/\s+/g, '-')     // Replace spaces with dashes
+          .replace(/-+/g, '-')      // Remove consecutive dashes
+          .replace(/-+$/g, '');     // Remove trailing dashes
+      }
+    }
+    
     // FORCE create the correct relationship for this article
     if (article) {
       // Delete any existing primary section relationship
@@ -141,7 +157,7 @@ export async function handlePublishWebhook(req, res) {
         .from('article_sections')
         .insert({
           article_id: article.id,
-          section_id: isEducationSection ? 'educacion' : (forceSectionId || 'uncategorized'),
+          section_id: sectionId,
           is_primary: true
         });
       
