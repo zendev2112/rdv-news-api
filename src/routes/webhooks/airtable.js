@@ -55,79 +55,48 @@ function cleanSectionId(text) {
 export async function handlePublishWebhook(req, res) {
   const { recordId, tableName, forceSectionId, status = 'published' } = req.body;
   
-  if (!recordId || !tableName) {
-    return res.status(400).json({
-      success: false,
-      error: 'Missing required fields: recordId and tableName'
-    });
+  if (!recordId) {
+    return res.status(400).json({ success: false, error: 'Record ID is required' });
   }
   
   try {
-    // Get record from Airtable (your existing code)
-    const record = await getAirtableRecord(tableName, recordId);
+    // Fetch record from Airtable
+    const airtableUrl = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${tableName}/${recordId}`;
     
-    if (!record || !record.fields) {
-      return res.status(404).json({
-        success: false,
-        error: 'Record not found in Airtable'
-      });
-    }
-    
-    const { title, excerpt, article: content, image_url } = record.fields;
-    
-    if (!title) {
-      return res.status(400).json({
-        success: false,
-        error: 'Record is missing a title'
-      });
-    }
-    
-    // Extract section from Airtable data
-    let sectionName = record.fields.Section || record.fields.section || '';
-    let sectionId = forceSectionId || null;
-
-    // Explicitly fix the "educacion-" issue - direct workaround
-    if (sectionName.toLowerCase().includes('educación') || 
-        sectionName.toLowerCase().includes('educacion')) {
-      console.log('Found Education section, fixing the trailing dash issue');
-      sectionName = 'Educación';
-      sectionId = 'educacion'; // Use the correct ID directly
-    } else if (!sectionId && sectionName) {
-      // Regular section lookup logic
-      // Clean section name
-      const cleanSectionName = sectionName.trim();
-      
-      console.log(`Looking for section: "${cleanSectionName}"`);
-      
-      // Create a normalized ID for lookup (removing trailing dashes)
-      const normalizedId = cleanSectionName
-        .toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
-        .replace(/[^a-z0-9]+/g, '-')  // Replace non-alphanumeric with dash
-        .replace(/^-+|-+$/g, '');     // Remove leading/trailing dashes
-      
-      console.log(`Normalized section ID: "${normalizedId}"`);
-      
-      // Try multiple ways to find the section
-      const { data: sections } = await supabase
-        .from('sections')
-        .select('id, name')
-        .or(`name.ilike.${cleanSectionName},id.eq.${normalizedId}`);
-      
-      if (sections && sections.length > 0) {
-        // Found at least one matching section
-        sectionId = sections[0].id;
-        console.log(`Found matching section: ${sections[0].name} (${sectionId})`);
-      } else {
-        // No match found, use uncategorized
-        console.log(`No matching section found for "${cleanSectionName}", using uncategorized`);
-        sectionId = 'uncategorized';
+    const airtableResponse = await fetch(airtableUrl, {
+      headers: {
+        Authorization: `Bearer ${process.env.AIRTABLE_API_KEY}`
       }
+    });
+    
+    if (!airtableResponse.ok) {
+      return res.status(500).json({ 
+        success: false, 
+        error: `Failed to fetch from Airtable: ${airtableResponse.statusText}` 
+      });
     }
     
-    // Create or update the article
-    const slug = generateSlug(title);
+    const airtableData = await airtableResponse.json();
+    const fieldsData = airtableData.fields;
     
+    // DIRECTLY CHECK for "Educación" specifically
+    let isEducationSection = false;
+    let rawSectionValue = fieldsData.Section || fieldsData.section || '';
+    
+    if (typeof rawSectionValue === 'string' && 
+        (rawSectionValue.includes('ducaci') || rawSectionValue.includes('ducación'))) {
+      isEducationSection = true;
+    }
+    
+    // Prepare article data
+    const title = fieldsData.Title || fieldsData.title || 'Untitled';
+    const excerpt = fieldsData.Excerpt || fieldsData.excerpt || '';
+    const content = fieldsData.Content || fieldsData.content || fieldsData.Article || fieldsData.article || '';
+    const slug = generateSlug(title);
+    const image_url = fieldsData.Image?.[0]?.url || fieldsData.image_url || null;
+    
+    // Insert article with the CORRECT section value
+    // This is the key part - we're forcing "educacion" for the section
     const { data: article, error: articleError } = await supabase
       .from('articles')
       .upsert({
@@ -139,78 +108,57 @@ export async function handlePublishWebhook(req, res) {
         "imgUrl": image_url,
         published_at: status === 'published' ? new Date().toISOString() : null,
         airtable_id: recordId,
-        // Clean up section name explicitly
-        section: sectionName && sectionName.toLowerCase().includes('educacion') 
-          ? 'educacion' // Use the correct ID without the dash
-          : sectionName.trim()
+        // Force "educacion" as the section for the Educación case
+        section: isEducationSection ? 'educacion' : (rawSectionValue || null)
       }, {
         onConflict: 'airtable_id',
         returning: true
       })
       .select()
       .single();
-      
+    
     if (articleError) {
-      console.error('Error creating/updating article:', articleError);
-      return res.status(500).json({
-        success: false,
-        error: articleError.message
-      });
+      console.error('Error creating article:', articleError);
+      return res.status(500).json({ success: false, error: articleError.message });
     }
     
-    // Add the article to the specified section
-    try {
-      await addArticleToSections(article.id, sectionId);
-    } catch (sectionError) {
-      console.error('Error adding article to section:', sectionError);
-      return res.status(500).json({
-        success: false,
-        error: `Article created but failed to add to section: ${sectionError.message}`
-      });
-    }
-    
-    // After creating the article, create the section relationship
+    // FORCE create the correct relationship for this article
     if (article) {
-      // If we identified this as the education section, create the relationship
-      if (sectionId === 'educacion') {
-        // First, delete any existing primary relationship for this article
-        await supabase
-          .from('article_sections')
-          .delete()
-          .eq('article_id', article.id)
-          .eq('is_primary', true);
-          
-        // Now create the correct relationship
-        const { error: relationshipError } = await supabase
-          .from('article_sections')
-          .insert({
-            article_id: article.id,
-            section_id: 'educacion',
-            is_primary: true
-          });
-          
-        if (relationshipError) {
-          console.error('Error creating relationship:', relationshipError);
-        }
+      // Delete any existing primary section relationship
+      await supabase
+        .from('article_sections')
+        .delete()
+        .eq('article_id', article.id)
+        .eq('is_primary', true);
+      
+      // Create the new relationship with the correct section ID
+      const { error: relationshipError } = await supabase
+        .from('article_sections')
+        .insert({
+          article_id: article.id,
+          section_id: isEducationSection ? 'educacion' : (forceSectionId || 'uncategorized'),
+          is_primary: true
+        });
+      
+      if (relationshipError) {
+        console.error('Error creating section relationship:', relationshipError);
       }
     }
     
-    return res.json({
+    // Return success response
+    return res.status(200).json({
       success: true,
       article: {
         id: article.id,
         title: article.title,
         slug: article.slug,
         status: article.status,
-        section: section.name
+        section: isEducationSection ? 'educacion' : article.section
       }
     });
     
   } catch (error) {
-    console.error('Webhook handler error:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    console.error('Error processing webhook:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 }
