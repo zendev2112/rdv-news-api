@@ -16,31 +16,20 @@ function generateSlug(title) {
     return `article-${Date.now()}`;
   }
   
-  // Clean the title before slugifying
-  const cleanTitle = title
+  // First normalize text to remove accents
+  const normalized = title
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  
+  // Clean the title and generate slug directly
+  const slug = normalized
+    .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, '') // Remove special characters except hyphens and spaces
+    .replace(/[^\w\s-]/g, '') // Remove special characters
     .replace(/\s+/g, '-')     // Replace spaces with hyphens
     .replace(/-+/g, '-')      // Remove consecutive hyphens
-    .toLowerCase();
+    .replace(/-+$/g, '');     // Remove trailing dashes
     
-  // If title is empty after cleaning, generate a fallback
-  if (!cleanTitle) {
-    return `article-${Date.now()}`;
-  }
-  
-  // Use slugify with stricter settings
-  let slug = slugify(cleanTitle, {
-    lower: true,      // convert to lower case
-    strict: true,     // strip special characters
-    trim: true,       // trim leading and trailing spaces
-    replacement: '-', // replace spaces with hyphens
-    remove: /[*+~.()'"!:@]/g // Remove specific characters
-  });
-  
-  // Remove any trailing dashes
-  slug = slug.replace(/-+$/g, '');
-  
   return slug || `article-${Date.now()}`;
 }
 
@@ -92,86 +81,81 @@ export async function handlePublishWebhook(req, res) {
     const airtableData = await airtableResponse.json();
     const fieldsData = airtableData.fields;
     
-    // Extract raw section from Airtable
-    const rawSection = fieldsData.Section || fieldsData.section || '';
+    // Use forceSectionId if provided, otherwise extract from data
+    let sectionId = forceSectionId || null;
+    let sectionName = fieldsData.Section || fieldsData.section || '';
     
-    // Hard-coded section mapping to guarantee correct IDs
-    const sectionMapping = {
-      'Educación': 'educacion',
-      'Educacion': 'educacion',
-      'Política': 'politica',
-      'Politica': 'politica',
-      'Economía': 'economia',
-      'Economia': 'economia',
-      'Coronel Suárez': 'coronel-suarez',
-      'Coronel Suarez': 'coronel-suarez',
-      'Pueblos Alemanes': 'pueblos-alemanes',
-      'Huanguelén': 'huanguelen',
-      'Huanguelen': 'huanguelen',
-      'La Sexta': 'la-sexta',
-      'Agro': 'agro',
-      'Sociedad': 'sociedad',
-      'Salud': 'salud',
-      'Cultura': 'cultura',
-      'Opinión': 'opinion',
-      'Opinion': 'opinion',
-      'Deportes': 'deportes',
-      'Lifestyle': 'lifestyle',
-      'Vinos': 'vinos',
-      'El Recetario': 'el-recetario',
-      'Santa Trinidad': 'santa-trinidad',
-      'San José': 'san-jose',
-      'San Jose': 'san-jose',
-      'Santa María': 'santa-maria',
-      'Santa Maria': 'santa-maria',
-      'IActualidad': 'iactualidad',
-      'Dólar': 'dolar',
-      'Dolar': 'dolar',
-      'Propiedades': 'propiedades',
-      'Pymes y Emprendimientos': 'pymes-emprendimientos',
-      'Inmuebles': 'inmuebles',
-      'Campos': 'campos',
-      'Construcción y Diseño': 'construccion-diseno',
-      'Construccion y Diseño': 'construccion-diseno',
-      'Construccion y Diseno': 'construccion-diseno',
-      'Agricultura': 'agricultura',
-      'Ganadería': 'ganaderia',
-      'Ganaderia': 'ganaderia',
-      'Tecnologías': 'tecnologias-agro',
-      'Tecnologias': 'tecnologias-agro',
-      'Educación': 'educacion',
-      'Educacion': 'educacion',
-      'Policiales': 'policiales',
-      'Efemérides': 'efemerides',
-      'Efemerides': 'efemerides',
-      'Ciencia': 'ciencia',
-      'Vida en Armonía': 'vida-armonia',
-      'Vida en Armonia': 'vida-armonia',
-      'Nutrición y energía': 'nutricion-energia',
-      'Nutricion y energia': 'nutricion-energia',
-      'Fitness': 'fitness',
-      'Salud mental': 'salud-mental',
-      'Turismo': 'turismo',
-      'Horóscopo': 'horoscopo',
-      'Horoscopo': 'horoscopo',
-      'Feriados': 'feriados',
-      'Loterías y Quinielas': 'loterias-quinielas',
-      'Loterias y Quinielas': 'loterias-quinielas',
-      'Moda y Belleza': 'moda-belleza',
-      'Mascotas': 'mascotas'
-    };
-    
-    // Determine section ID directly from mapping or by cleaning the raw value
-    let sectionId = sectionMapping[rawSection] || forceSectionId || null;
-    
-    // Special case for "Educación" variants
-    if (!sectionId && rawSection.toLowerCase().includes('educa')) {
-      sectionId = 'educacion';
-    }
-    
-    // Fallback to uncategorized if no section was found
-    if (!sectionId) {
-      sectionId = 'uncategorized';
+    // Only calculate section ID if not provided
+    if (!sectionId && sectionName) {
+      // Hard-coded section mapping as fallback
+      const sectionMapping = {
+        'Educación': 'educacion',
+        'Educacion': 'educacion',
+        'Política': 'politica',
+        'Politica': 'politica',
+        'Economía': 'economia',
+        'Economia': 'economia',
+        'Coronel Suárez': 'coronel-suarez',
+        'Coronel Suarez': 'coronel-suarez',
+        'Pueblos Alemanes': 'pueblos-alemanes',
+        'Huanguelén': 'huanguelen',
+        'Huanguelen': 'huanguelen',
+        'La Sexta': 'la-sexta',
+        'Agro': 'agro',
+        'Sociedad': 'sociedad',
+        'Salud': 'salud',
+        'Cultura': 'cultura',
+        'Opinión': 'opinion',
+        'Opinion': 'opinion',
+        'Deportes': 'deportes',
+        'Lifestyle': 'lifestyle',
+        'Vinos': 'vinos',
+        'El Recetario': 'el-recetario',
+        'Santa Trinidad': 'santa-trinidad',
+        'San José': 'san-jose',
+        'San Jose': 'san-jose',
+        'Santa María': 'santa-maria',
+        'Santa Maria': 'santa-maria',
+        'IActualidad': 'iactualidad',
+        'Dólar': 'dolar',
+        'Dolar': 'dolar',
+        'Propiedades': 'propiedades',
+        'Pymes y Emprendimientos': 'pymes-emprendimientos',
+        'Inmuebles': 'inmuebles',
+        'Campos': 'campos',
+        'Construcción y Diseño': 'construccion-diseno',
+        'Construccion y Diseño': 'construccion-diseno',
+        'Construccion y Diseno': 'construccion-diseno',
+        'Agricultura': 'agricultura',
+        'Ganadería': 'ganaderia',
+        'Ganaderia': 'ganaderia',
+        'Tecnologías': 'tecnologias-agro',
+        'Tecnologias': 'tecnologias-agro',
+        'Educación': 'educacion',
+        'Educacion': 'educacion',
+        'Policiales': 'policiales',
+        'Efemérides': 'efemerides',
+        'Efemerides': 'efemerides',
+        'Ciencia': 'ciencia',
+        'Vida en Armonía': 'vida-armonia',
+        'Vida en Armonia': 'vida-armonia',
+        'Nutrición y energía': 'nutricion-energia',
+        'Nutricion y energia': 'nutricion-energia',
+        'Fitness': 'fitness',
+        'Salud mental': 'salud-mental',
+        'Turismo': 'turismo',
+        'Horóscopo': 'horoscopo',
+        'Horoscopo': 'horoscopo',
+        'Feriados': 'feriados',
+        'Loterías y Quinielas': 'loterias-quinielas',
+        'Loterias y Quinielas': 'loterias-quinielas',
+        'Moda y Belleza': 'moda-belleza',
+        'Mascotas': 'mascotas',
+        'Sin categoría': 'uncategorized',
+        'Sin categoria': 'uncategorized'
+      };
+      
+      sectionId = sectionMapping[sectionName] || 'uncategorized';
     }
     
     // Prepare article data
@@ -193,8 +177,7 @@ export async function handlePublishWebhook(req, res) {
         "imgUrl": image_url,
         published_at: status === 'published' ? new Date().toISOString() : null,
         airtable_id: recordId,
-        // Store the correct section ID without trailing dash
-        section: sectionId 
+        section: sectionId || sectionName // Use the clean section ID if available
       }, {
         onConflict: 'airtable_id',
         returning: true
@@ -210,7 +193,7 @@ export async function handlePublishWebhook(req, res) {
     console.log(`Article ${status === 'published' ? 'published' : 'updated'}: ${article.title} (${article.id})`);
     
     // Create the section relationship
-    if (article) {
+    if (article && sectionId) {
       // First delete any existing primary relationships for this article
       await supabase
         .from('article_sections')
@@ -240,7 +223,7 @@ export async function handlePublishWebhook(req, res) {
         title: article.title,
         slug: article.slug,
         status: article.status,
-        section: sectionId
+        section: sectionId || sectionName
       }
     });
     
