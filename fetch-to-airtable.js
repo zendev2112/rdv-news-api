@@ -1296,6 +1296,8 @@ async function processSection(section) {
             processingStatus: 'completed', // Mark as completed since we have the full text already
             postDate: item.date_published || '',
             postDateFormatted: pubDate,
+            // Add this line to create proper image attachments:
+            image: imageUrl ? [{ url: imageUrl }] : [], 
           }
 
           // Add social media specific fields based on source type
