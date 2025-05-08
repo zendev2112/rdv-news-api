@@ -982,6 +982,36 @@ async function processArticle(item, sectionId) {
       console.warn(`Using fallback metadata for: ${item.url}`)
     }
 
+    // Generate tags
+    console.log(`Generating tags for: ${item.url}`)
+    let tags = ''
+    try {
+      tags = await generateTags(extractedText, metadata)
+      console.log(`Generated tags for: ${item.url}`)
+    } catch (tagError) {
+      console.error(`Error generating tags: ${tagError.message}`)
+      tags = generateFallbackTags(extractedText, metadata)
+    }
+
+    // Generate social media text
+    console.log(`Generating social media text for: ${item.url}`)
+    let socialMediaText = ''
+    try {
+      socialMediaText = await generateSocialMediaText(
+        extractedText,
+        metadata,
+        tags
+      )
+      console.log(
+        `Generated social media text: ${socialMediaText.length} chars`
+      )
+    } catch (socialTextError) {
+      console.error(
+        `Error generating social media text: ${socialTextError.message}`
+      )
+      socialMediaText = generateFallbackSocialText(metadata, tags)
+    }
+
     // Get section information
     const section = getSection(sectionId)
 
@@ -1075,7 +1105,9 @@ async function processArticle(item, sectionId) {
       'tw-post': twitterContent || '',
       'yt-video': youtubeContent || '',
       section: sectionValue, // Using exact dropdown value from Airtable options
-      status: 'draft', // Using exact dropdown value 'draft' instead of 'Borrador'
+      status: 'draft',
+      tags: tags,
+      socialMediaText: socialMediaText, // Using exact dropdown value 'draft' instead of 'Borrador'
     }
 
     console.log(
@@ -1297,7 +1329,43 @@ async function processSection(section) {
             postDate: item.date_published || '',
             postDateFormatted: pubDate,
             // Add this line to create proper image attachments:
-            image: imageUrl ? [{ url: imageUrl }] : [], 
+            image: imageUrl ? [{ url: imageUrl }] : [],
+          }
+
+          // Generate tags and social media text for social media content
+          try {
+            // For social media, use a simpler approach focused on the source and text
+            const socialText = `${item.title || ''} ${postText}`
+            const socialMetadata = {
+              title: item.title || `Publicación de ${sourceName}`,
+              bajada: postText.substring(0, 200),
+              sourceName: sourceName,
+            }
+
+            // Generate tags
+            const tags = await generateTags(socialText, socialMetadata)
+            console.log(`Generated tags for social media item`)
+            recordFields.tags = tags
+
+            // Generate social media text
+            const socialMediaText = await generateSocialMediaText(
+              socialText,
+              socialMetadata,
+              tags
+            )
+            console.log(
+              `Generated social media text: ${socialMediaText.length} chars`
+            )
+            recordFields.socialMediaText = socialMediaText
+          } catch (genError) {
+            console.error(
+              `Error generating tags/social text: ${genError.message}`
+            )
+            recordFields.tags = sourceName
+            recordFields.socialMediaText = `📱 Nueva publicación de ${sourceName} #${sourceName.replace(
+              /\s+/g,
+              ''
+            )}`
           }
 
           // Add social media specific fields based on source type
@@ -1624,5 +1692,254 @@ function extractSourceName(url) {
   } catch (error) {
     console.error(`Error extracting source name from ${url}:`, error.message)
     return 'Unknown Source'
+  }
+}
+
+/**
+ * Generate tags for an article using AI
+ * @param {string} extractedText - The raw text content
+ * @param {object} metadata - The article metadata (title, bajada, etc.)
+ * @returns {string} - Comma-separated list of generated tags
+ */
+async function generateTags(extractedText, metadata, maxRetries = 3) {
+  let retries = 0;
+  while (retries < maxRetries) {
+    try {
+      // Add delay with exponential backoff
+      const delayTime = API_DELAY * Math.pow(1.5, retries);
+      console.log(`Waiting ${delayTime / 1000} seconds before generating tags...`);
+      await delay(delayTime);
+
+      const title = metadata?.title || '';
+      const bajada = metadata?.bajada || '';
+      
+      const prompt = `
+        Analiza este artículo y genera entre 5 y 8 etiquetas (tags) relevantes para categorizarlo.
+
+        TÍTULO: ${title}
+        BAJADA: ${bajada}
+        CONTENIDO: "${extractedText.substring(0, 4000)}"
+        
+        INSTRUCCIONES:
+        1. Identifica nombres propios importantes (personas, lugares, organizaciones, eventos).
+        2. Identifica temas principales y subtemas.
+        3. Prioriza sustantivos y conceptos clave.
+        4. Cada etiqueta debe tener entre 1 y 3 palabras.
+        5. NO utilices hashtags (#).
+        6. Enfócate en sujetos y temas, NO en adjetivos o emociones.
+        7. Las etiquetas deben ser específicas pero no demasiado largas.
+        8. Las etiquetas pueden ser en singular o plural, según corresponda.
+        9. NO incluyas palabras muy genéricas como "noticia", "actualidad", etc.
+        
+        Devuelve SOLO un array de strings en formato JSON, sin ningún otro texto:
+        ["etiqueta1", "etiqueta2", "etiqueta3", ...]
+      `;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+
+      // Clean up the response - extract just the JSON array
+      const jsonMatch = text.match(/\[.*?\]/s);
+      if (!jsonMatch) {
+        throw new Error('No valid JSON array found in response');
+      }
+      
+      const cleanedJson = jsonMatch[0].replace(/```json|```/g, '').trim();
+      const tags = JSON.parse(cleanedJson);
+      
+      // Validate tags
+      if (!Array.isArray(tags) || tags.length === 0) {
+        throw new Error('Generated tags are not in expected format');
+      }
+      
+      // Format tags: capitalize first letter of each word
+      const formattedTags = tags.map(tag => 
+        tag.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+      );
+      
+      // Join tags with commas to create a string
+      const tagsString = formattedTags.join(', ');
+      
+      console.log(`Generated tags: ${tagsString}`);
+      return tagsString;
+    } catch (error) {
+      console.error(`Error generating tags (attempt ${retries + 1}):`, error.message);
+      retries++;
+      
+      if (retries >= maxRetries) {
+        // Return basic fallback tags
+        console.warn('Using fallback tag generation');
+        return generateFallbackTags(extractedText, metadata);
+      }
+      
+      await delay(2000); // Wait before retrying
+    }
+  }
+  
+  return ''; // Shouldn't reach here, but just in case
+}
+
+/**
+ * Generate fallback tags based on keyword frequency when AI fails
+ * @returns {string} - Comma-separated string of tags
+ */
+function generateFallbackTags(extractedText, metadata) {
+  try {
+    const text = `${metadata?.title || ''} ${metadata?.bajada || ''} ${extractedText}`.toLowerCase();
+    
+    // Split into words and remove stopwords
+    const words = text.split(/\W+/).filter(word => 
+      word.length > 3 && 
+      !['para', 'como', 'esta', 'esto', 'estos', 'esta', 'estas', 'sobre', 'desde', 'entre', 'hasta', 'porque'].includes(word)
+    );
+    
+    // Count word frequency
+    const wordCount = {};
+    words.forEach(word => {
+      wordCount[word] = (wordCount[word] || 0) + 1;
+    });
+    
+    // Sort by frequency
+    const sortedWords = Object.entries(wordCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(entry => entry[0]);
+    
+    // Take top words and capitalize first letter
+    const tags = sortedWords.slice(0, 6).map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    );
+    
+    // Add source as a tag if available
+    if (metadata?.sourceName) {
+      tags.push(metadata.sourceName);
+    }
+    
+    // Join with commas
+    const tagsString = tags.join(', ');
+    
+    console.log(`Generated fallback tags: ${tagsString}`);
+    return tagsString;
+  } catch (error) {
+    console.error('Error in fallback tag generation:', error.message);
+    return 'Noticias'; // Absolute minimum fallback
+  }
+}
+
+/**
+ * Generate social media text with hashtags and emojis
+ * @param {string} extractedText - The raw text content
+ * @param {object} metadata - The article metadata
+ * @param {string} tags - The generated tags (comma-separated)
+ * @returns {string} - Social media text with hashtags (< 500 chars)
+ */
+async function generateSocialMediaText(extractedText, metadata, tags, maxRetries = 3) {
+  let retries = 0;
+  while (retries < maxRetries) {
+    try {
+      // Add delay with exponential backoff
+      const delayTime = API_DELAY * Math.pow(1.5, retries);
+      console.log(`Waiting ${delayTime / 1000} seconds before generating social text...`);
+      await delay(delayTime);
+
+      const title = metadata?.title || '';
+      const bajada = metadata?.bajada || '';
+      
+      const prompt = `
+        Crea un texto atractivo para redes sociales de MENOS DE 500 CARACTERES (EXTREMADAMENTE IMPORTANTE) 
+        que promocione este artículo. Incluye hashtags y emojis relevantes.
+
+        TÍTULO: ${title}
+        BAJADA: ${bajada}
+        ETIQUETAS: ${tags}
+        CONTENIDO: "${extractedText.substring(0, 2000)}"
+        
+        INSTRUCCIONES:
+        1. El texto DEBE tener MENOS DE 500 CARACTERES en total (incluyendo hashtags y emojis).
+        2. Escribe en español rioplatense con tono conversacional.
+        3. Incluye 2-4 emojis estratégicamente ubicados para aumentar el impacto visual.
+        4. Termina con 3-5 hashtags relevantes al contenido.
+        5. Usa frases cortas y directas que generen interés.
+        6. NO incluyas enlaces ni menciones (@).
+        7. El contenido debe ser informativo pero intrigante para generar clics.
+        8. CRUCIAL: Verifica que el texto final tenga MENOS DE 500 CARACTERES.
+        
+        Devuelve SOLO el texto para redes sociales, sin ningún comentario adicional.
+      `;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      let socialText = response.text().trim();
+      
+      // Clean up any markdown or extra formatting
+      socialText = socialText.replace(/^```[\s\S]*```$/gm, '').trim();
+      
+      // Enforce character limit
+      if (socialText.length > 500) {
+        socialText = socialText.substring(0, 497) + '...';
+      }
+      
+      console.log(`Generated social media text: ${socialText.length} characters`);
+      return socialText;
+    } catch (error) {
+      console.error(`Error generating social media text (attempt ${retries + 1}):`, error.message);
+      retries++;
+      
+      if (retries >= maxRetries) {
+        // Return basic fallback social media text
+        console.warn('Using fallback social media text generation');
+        return generateFallbackSocialText(metadata, tags);
+      }
+      
+      await delay(2000); // Wait before retrying
+    }
+  }
+  
+  return generateFallbackSocialText(metadata, tags);
+}
+
+/**
+ * Generate fallback social media text when AI fails
+ */
+function generateFallbackSocialText(metadata, tags) {
+  try {
+    const title = metadata?.title || 'Nuevo artículo';
+    const bajada = metadata?.bajada || '';
+    
+    // Create emojis based on content
+    let emojis = '📰';
+    
+    // Add topic-specific emojis
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes('econom') || lowerTitle.includes('dólar') || lowerTitle.includes('inflac')) {
+      emojis += ' 💰';
+    } else if (lowerTitle.includes('polít') || lowerTitle.includes('gobiern') || lowerTitle.includes('presiden')) {
+      emojis += ' 🏛️';
+    } else if (lowerTitle.includes('depor') || lowerTitle.includes('fútbol') || lowerTitle.includes('campeón')) {
+      emojis += ' ⚽';
+    } else if (lowerTitle.includes('salud') || lowerTitle.includes('hospital') || lowerTitle.includes('médic')) {
+      emojis += ' 🏥';
+    } else if (lowerTitle.includes('tecno') || lowerTitle.includes('digital') || lowerTitle.includes('intel')) {
+      emojis += ' 💻';
+    }
+    
+    // Generate hashtags from tags
+    const tagsArray = tags.split(',').map(tag => tag.trim());
+    const hashtags = tagsArray.slice(0, 4).map(tag => '#' + tag.replace(/\s+/g, '')).join(' ');
+    
+    // Create the text (ensure under 500 chars)
+    let summary = bajada.length > 100 ? bajada.substring(0, 100) + '...' : bajada;
+    if (!summary) {
+      summary = 'Conoce todos los detalles en nuestro artículo.';
+    }
+    
+    const socialText = `${emojis} ${title}\n\n${summary}\n\n${hashtags}`;
+    
+    // Ensure under 500 chars
+    return socialText.length <= 500 ? socialText : socialText.substring(0, 497) + '...';
+  } catch (error) {
+    console.error('Error in fallback social text generation:', error.message);
+    return '📰 Nuevo artículo disponible en nuestro portal. ¡No te lo pierdas! #Noticias';
   }
 }
