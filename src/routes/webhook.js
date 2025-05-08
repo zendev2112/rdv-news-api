@@ -41,6 +41,10 @@ router.post('/airtable/publish', async (req, res) => {
     const forceSectionId = req.body.forceSectionId;
     const isInstituciones = req.body.isInstituciones;
     
+    // Extract tags and social media text
+    const tags = req.body.tags;
+    const socialMediaText = req.body.socialMediaText;
+    
     // Validate input
     if (!recordId) {
       logger.error('No record ID provided');
@@ -75,6 +79,14 @@ router.post('/airtable/publish', async (req, res) => {
     
     // Add source section ID to the record for reference
     record.sourceSectionId = sectionId;
+    
+    // Add tags and social media text from webhook body
+    if (tags) {
+      record.tags = tags;
+    }
+    if (socialMediaText) {
+      record.socialMediaText = socialMediaText;
+    }
     
     // Publish to Supabase
     const result = await supabaseService.publishArticle(record);

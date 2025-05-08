@@ -205,11 +205,12 @@ async function publishArticle(airtableRecord) {
       "yt-video": airtableRecord.fields['yt-video'] || '',
       status: airtableRecord.fields.status || 'draft',
       
+      // Add tags and social media text fields
+      tags: airtableRecord.fields.tags || airtableRecord.tags || '',
+      social_media_text: airtableRecord.fields.socialMediaText || airtableRecord.socialMediaText || '',
+      
       // Use the mapped section ID
       section: sectionId,
-      
-      // Also store the original section name in a metadata field if you want
-      // section_name: airtableSection
     };
     
     // Check for optional fields that might exist in some tables
@@ -342,6 +343,8 @@ async function publishArticle(airtableRecord) {
         section: sectionId,
         section_name: airtableSection,
         status: articleData.status,
+        tags: articleData.tags,
+        social_media_text: articleData.social_media_text
       },
     };
   } catch (error) {
