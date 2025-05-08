@@ -74,7 +74,7 @@ function cleanSectionId(text) {
  * Handle webhooks from Airtable for publishing content
  */
 export async function handlePublishWebhook(req, res) {
-  const { recordId, tableName, forceSectionId, status = 'published' } = req.body;
+  const { recordId, tableName, forceSectionId, status = 'published', tags, socialMediaText } = req.body;
   
   if (!recordId) {
     return res.status(400).json({ success: false, error: 'Record ID is required' });
@@ -134,6 +134,10 @@ export async function handlePublishWebhook(req, res) {
     const slug = generateSlug(title);
     const image_url = fieldsData.Image?.[0]?.url || fieldsData.image_url || null;
     
+    // Get tags and social media text either from the request body or Airtable fields
+    const articleTags = fieldsData.tags || tags || '';
+    const articleSocialMediaText = fieldsData.socialMediaText || socialMediaText || '';
+    
     // Insert or update the article
     const { data: article, error: articleError } = await supabase
       .from('articles')
@@ -146,7 +150,9 @@ export async function handlePublishWebhook(req, res) {
         "imgUrl": image_url,
         published_at: status === 'published' ? new Date().toISOString() : null,
         airtable_id: recordId,
-        section: sectionId
+        section: sectionId,
+        tags: articleTags,
+        social_media_text: articleSocialMediaText
       }, {
         onConflict: 'airtable_id',
         returning: true
@@ -190,7 +196,9 @@ export async function handlePublishWebhook(req, res) {
         title: article.title,
         slug: article.slug,
         status: article.status,
-        section: sectionId
+        section: sectionId,
+        tags: articleTags,
+        social_media_text: articleSocialMediaText
       }
     });
     
