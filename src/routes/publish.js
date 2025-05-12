@@ -140,4 +140,47 @@ router.post('/publish', async (req, res) => {
   }
 });
 
+/**
+ * Get articles for a specific front page section
+ */
+router.get('/front-section/:sectionName', async (req, res) => {
+  try {
+    const { sectionName } = req.params;
+    
+    if (!sectionName) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Section name is required' 
+      });
+    }
+    
+    // Query for published articles that belong to the specified front section
+    const { data, error } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('status', 'published')
+      .eq('front', sectionName)
+      .order('order', { ascending: true });
+      
+    if (error) {
+      console.error('Error fetching front section articles:', error);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to fetch articles' 
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    console.error('Error in front section endpoint:', error);
+    return res.status(500).json({ 
+      success: false,
+      error: 'Server error' 
+    });
+  }
+});
+
 export default router;
