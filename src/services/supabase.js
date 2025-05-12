@@ -190,28 +190,39 @@ async function publishArticle(airtableRecord) {
       airtable_id: airtableRecord.id, // Use underscore, not hyphen
       title: airtableRecord.fields.title || '',
       slug: slug, // Add the generated slug here
-      overline: airtableRecord.fields.overline || airtableRecord.fields.volanta || '',
-      excerpt: airtableRecord.fields.excerpt || airtableRecord.fields.bajada || '',
+      overline:
+        airtableRecord.fields.overline || airtableRecord.fields.volanta || '',
+      excerpt:
+        airtableRecord.fields.excerpt || airtableRecord.fields.bajada || '',
       article: airtableRecord.fields.article || '',
       url: airtableRecord.fields.url || '',
       source: airtableRecord.fields.source || '',
-      image: airtableRecord.fields.imagen || airtableRecord.fields.image ? 
-             JSON.stringify(airtableRecord.fields.imagen || airtableRecord.fields.image) : null,
+      image:
+        airtableRecord.fields.imagen || airtableRecord.fields.image
+          ? JSON.stringify(
+              airtableRecord.fields.imagen || airtableRecord.fields.image
+            )
+          : null,
       imgUrl: airtableRecord.fields.imgUrl || '',
-      "article-images": airtableRecord.fields['article-images'] || '',
-      "ig-post": airtableRecord.fields['ig-post'] || '',
-      "fb-post": airtableRecord.fields['fb-post'] || '',
-      "tw-post": airtableRecord.fields['tw-post'] || '',
-      "yt-video": airtableRecord.fields['yt-video'] || '',
+      'article-images': airtableRecord.fields['article-images'] || '',
+      'ig-post': airtableRecord.fields['ig-post'] || '',
+      'fb-post': airtableRecord.fields['fb-post'] || '',
+      'tw-post': airtableRecord.fields['tw-post'] || '',
+      'yt-video': airtableRecord.fields['yt-video'] || '',
       status: airtableRecord.fields.status || 'draft',
-      
+
       // Add tags and social media text fields
       tags: airtableRecord.fields.tags || airtableRecord.tags || '',
-      social_media_text: airtableRecord.fields.socialMediaText || airtableRecord.socialMediaText || '',
-      
+      social_media_text:
+        airtableRecord.fields.socialMediaText ||
+        airtableRecord.socialMediaText ||
+        '',
+      front: airtableRecord.fields.front || null,
+      order: airtableRecord.fields.order || null,
+
       // Use the mapped section ID
       section: sectionId,
-    };
+    }
     
     // Check for optional fields that might exist in some tables
     const optionalFields = ['section_name', 'section_color'];

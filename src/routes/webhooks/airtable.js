@@ -152,7 +152,9 @@ export async function handlePublishWebhook(req, res) {
         airtable_id: recordId,
         section: sectionId,
         tags: articleTags,
-        social_media_text: articleSocialMediaText
+        social_media_text: articleSocialMediaText,
+        front: fieldsData.front || null,
+        order: fieldsData.order || null
       }, {
         onConflict: 'airtable_id',
         returning: true

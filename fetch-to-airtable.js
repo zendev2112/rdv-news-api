@@ -1108,6 +1108,8 @@ async function processArticle(item, sectionId) {
       status: 'draft',
       tags: tags,
       socialMediaText: socialMediaText, // Using exact dropdown value 'draft' instead of 'Borrador'
+      front: '', // Default to empty (no front page section assigned)
+      order: '', // Default to empty (no specific display order assigned)
     }
 
     console.log(
