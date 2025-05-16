@@ -56,7 +56,7 @@ router.post('/social-media', async (req, res) => {
       imgUrl: payload.imgUrl || '',
       tags: payload.tags || '',
       socialMediaText: payload.socialMediaText || '',
-      source_table: payload.sourceTable || '',
+      section: payload.section || '', // Use section instead of source_table
       created_at: new Date().toISOString()
     };
     
@@ -75,8 +75,8 @@ router.post('/social-media', async (req, res) => {
     // Log the processed fields for debugging
     logger.info('Processed fields for Redes Sociales', { 
       title: fields.title,
-      imageCount: processedImage.length,
-      processedImage  
+      section: fields.section,
+      imageCount: processedImage.length
     });
     
     // Initialize Airtable
