@@ -9,6 +9,47 @@ import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
 
+// Test GET endpoint
+router.get('/generate', (req, res) => {
+  res.json({
+    success: true,
+    message: 'The social media image generator endpoint is working',
+    usage: 'Send a POST request to this endpoint with recordId, imageUrl, and title in the request body',
+    examples: {
+      singlePlatform: {
+        method: 'POST',
+        body: {
+          recordId: 'rec123',
+          imageUrl: 'https://example.com/image.jpg',
+          title: 'Your post title',
+          platform: 'facebook' // Optional, defaults to 'generic'
+        }
+      },
+      allPlatforms: {
+        endpoint: '/api/social-media-images/generate-all',
+        method: 'POST',
+        body: {
+          recordId: 'rec123',
+          imageUrl: 'https://example.com/image.jpg',
+          title: 'Your post title'
+        }
+      }
+    }
+  });
+});
+
+// Basic test endpoint to verify router is accessible
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Social media images API is working',
+    endpoints: {
+      generate: '/api/social-media-images/generate',
+      generateAll: '/api/social-media-images/generate-all'
+    }
+  });
+});
+
 /**
  * Generate social media image for a specific record
  * POST /api/social-media-images/generate

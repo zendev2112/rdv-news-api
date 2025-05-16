@@ -41,9 +41,9 @@ app.get('/', (req, res) => {
 })
 
 // Routes
+app.use('/api/social-media-images', socialMediaImagesRouter) // Add this line
 app.use('/api', publishRoutes)
 app.use('/webhooks', webhookRoutes)
-app.use('/api/social-media-images', socialMediaImagesRouter) // Add this line
 
 
 // Health check endpoint
