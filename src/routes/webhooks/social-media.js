@@ -25,13 +25,34 @@ router.post('/social-media', async (req, res) => {
       });
     }
     
+    // Process image attachments - convert Airtable attachment objects to URL-only format
+    let processedImage = [];
+    if (payload.image && Array.isArray(payload.image)) {
+      processedImage = payload.image.map(img => {
+        // If it's already in the simple URL format
+        if (typeof img === 'string') {
+          return { url: img };
+        }
+        
+        // If it's an Airtable attachment object
+        if (img.url) {
+          return { url: img.url };
+        }
+        
+        return img;
+      });
+    } else if (payload.imgUrl) {
+      // If no image array but imgUrl exists
+      processedImage = [{ url: payload.imgUrl }];
+    }
+    
     // Create record fields
     const fields = {
       title: payload.title,
       overline: payload.overline || '',
       excerpt: payload.excerpt || '',
       url: payload.url,
-      image: payload.image || [],
+      image: processedImage, // Use the processed image array
       imgUrl: payload.imgUrl || '',
       tags: payload.tags || '',
       socialMediaText: payload.socialMediaText || '',
@@ -51,12 +72,19 @@ router.post('/social-media', async (req, res) => {
       });
     }
     
+    // Log the processed fields for debugging
+    logger.info('Processed fields for Redes Sociales', { 
+      title: fields.title,
+      imageCount: processedImage.length,
+      processedImage  
+    });
+    
     // Initialize Airtable
     const airtable = new Airtable({ apiKey: apiToken });
     const base = airtable.base(baseId);
     
     // Create record in Redes Sociales table
-    logger.info('Creating record in Redes Sociales table', { fields });
+    logger.info('Creating record in Redes Sociales table');
     
     const result = await base('Redes Sociales').create([{ fields }]);
     
