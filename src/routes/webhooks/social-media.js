@@ -46,17 +46,107 @@ router.post('/social-media', async (req, res) => {
       processedImage = [{ url: payload.imgUrl }];
     }
     
+    // Map section to the correct Airtable value if needed
+    let sectionValue = '';
+    if (payload.section) {
+      // Map section IDs to their corresponding dropdown values in Airtable
+      const sectionMapping = {
+        'Educación': 'educacion',
+        'Educacion': 'educacion',
+        'Política': 'politica',
+        'Politica': 'politica',
+        'Economía': 'economia',
+        'Economia': 'economia',
+        'Coronel Suárez': 'coronel-suarez',
+        'Coronel Suarez': 'coronel-suarez',
+        'Pueblos Alemanes': 'pueblos-alemanes',
+        'Huanguelén': 'huanguelen',
+        'Huanguelen': 'huanguelen',
+        'La Sexta': 'la-sexta',
+        'Agro': 'agro',
+        'Sociedad': 'sociedad',
+        'Salud': 'salud',
+        'Cultura': 'cultura',
+        'Opinión': 'opinion',
+        'Opinion': 'opinion',
+        'Deportes': 'deportes',
+        'Lifestyle': 'lifestyle',
+        'Vinos': 'vinos',
+        'El Recetario': 'el-recetario',
+        'Santa Trinidad': 'santa-trinidad',
+        'San José': 'san-jose',
+        'San Jose': 'san-jose',
+        'Santa María': 'santa-maria',
+        'Santa Maria': 'santa-maria',
+        'IActualidad': 'iactualidad',
+        'Dólar': 'dolar',
+        'Dolar': 'dolar',
+        'Propiedades': 'propiedades',
+        'Pymes y Emprendimientos': 'pymes-emprendimientos',
+        'Inmuebles': 'inmuebles',
+        'Campos': 'campos',
+        'Construcción y Diseño': 'construccion-diseno',
+        'Construccion y Diseño': 'construccion-diseno',
+        'Construccion y Diseno': 'construccion-diseno',
+        'Agricultura': 'agricultura',
+        'Ganadería': 'ganaderia',
+        'Ganaderia': 'ganaderia',
+        'Tecnologías': 'tecnologias-agro',
+        'Tecnologias': 'tecnologias-agro',
+        'Policiales': 'policiales',
+        'Efemérides': 'efemerides',
+        'Efemerides': 'efemerides',
+        'Ciencia': 'ciencia',
+        'Vida en Armonía': 'vida-armonia',
+        'Vida en Armonia': 'vida-armonia',
+        'Nutrición y energía': 'nutricion-energia',
+        'Nutricion y energia': 'nutricion-energia',
+        'Fitness': 'fitness',
+        'Salud mental': 'salud-mental',
+        'Turismo': 'turismo',
+        'Horóscopo': 'horoscopo',
+        'Horoscopo': 'horoscopo',
+        'Feriados': 'feriados',
+        'Loterías y Quinielas': 'loterias-quinielas',
+        'Loterias y Quinielas': 'loterias-quinielas',
+        'Moda y Belleza': 'moda-belleza',
+        'Mascotas': 'mascotas',
+        'Sin categoría': 'uncategorized',
+        'Sin categoria': 'uncategorized'
+      };
+      
+      // First check if we have a match in the mapping (from display name to ID)
+      if (sectionMapping[payload.section]) {
+        sectionValue = payload.section; // Use the original display name
+      } 
+      // Check if the incoming value is actually an ID, find its display name
+      else {
+        // Reverse mapping to find display name from ID
+        for (const [displayName, id] of Object.entries(sectionMapping)) {
+          if (id === payload.section) {
+            sectionValue = displayName;
+            break;
+          }
+        }
+        
+        // If still not found, use as is
+        if (!sectionValue) {
+          sectionValue = payload.section;
+        }
+      }
+    }
+    
     // Create record fields
     const fields = {
       title: payload.title,
       overline: payload.overline || '',
       excerpt: payload.excerpt || '',
       url: payload.url,
-      image: processedImage, // Use the processed image array
+      image: processedImage,
       imgUrl: payload.imgUrl || '',
       tags: payload.tags || '',
       socialMediaText: payload.socialMediaText || '',
-      section: payload.section || '', // Use section instead of source_table
+      section: sectionValue,
       created_at: new Date().toISOString()
     };
     
