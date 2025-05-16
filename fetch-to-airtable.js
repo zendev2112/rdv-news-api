@@ -1317,15 +1317,27 @@ async function processSection(section) {
             console.log(`Error formatting date: ${e.message}`)
           }
 
-          // Create record fields
+          // Before creating record fields, generate metadata as you do for regular articles
+          let metadata = null;
+          try {
+            // Use the same metadata generation function used for regular articles
+            metadata = await generateMetadata(postText);
+            console.log(`Generated metadata for social media content`);
+          } catch (metaError) {
+            console.error(`Error generating metadata for social media: ${metaError.message}`);
+            // Use fallback metadata
+            metadata = generateFallbackMetadata(postText);
+          }
+
+          // Create record fields using the generated metadata
           const recordFields = {
-            title: item.title || `Publicación de ${sourceName}`,
+            title: metadata.title || item.title || `Publicación de ${sourceName}`,
             url: itemUrl,
-            excerpt: postText.substring(0, 200), // First 200 chars as excerpt
+            excerpt: metadata.bajada || postText.substring(0, 200), // Use generated bajada
             source: sourceName,
             imgUrl: imageUrl || '',
             article: postText, // Store the full post text
-            overline: item.overline || '', // Use author name as volanta
+            overline: metadata.volanta, // Use the AI-generated volanta/overline
             status: 'draft',
             processingStatus: 'completed', // Mark as completed since we have the full text already
             postDate: item.date_published || '',
