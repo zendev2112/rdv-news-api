@@ -4,6 +4,8 @@ import morgan from 'morgan'
 import dotenv from 'dotenv'
 import publishRoutes from './routes/publish.js'
 import webhookRoutes from './routes/webhook.js'
+import socialMediaImagesRouter from './routes/social-media-images.js'
+
 // Remove or conditionally import background scripts
 // import './scripts/poll-sync-requests.js';
 
@@ -31,15 +33,18 @@ app.get('/', (req, res) => {
     endpoints: {
       api: '/api',
       webhooks: '/webhooks',
-      health: '/health'
+      socialMediaImages: '/api/social-media-images',
+      health: '/health',
     },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   })
 })
 
 // Routes
 app.use('/api', publishRoutes)
 app.use('/webhooks', webhookRoutes)
+app.use('/api/social-media-images', socialMediaImagesRouter) // Add this line
+
 
 // Health check endpoint
 app.get('/health', (req, res) => {
