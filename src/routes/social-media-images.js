@@ -17,12 +17,46 @@ router.post('/generate', async (req, res) => {
   try {
     const { recordId, platform = 'generic', imageUrl, title } = req.body;
     
+    logger.info(`Received request to generate ${platform} image for record ${recordId}`);
+    
     if (!recordId || !imageUrl || !title) {
       return res.status(400).json({
         success: false,
         error: 'Record ID, image URL, and title are required'
       });
     }
+    
+    // Test the image URL by trying to fetch headers
+    try {
+      const imageResponse = await fetch(imageUrl, { method: 'HEAD' });
+      if (!imageResponse.ok) {
+        return res.status(400).json({
+          success: false,
+          error: `Image URL returned status ${imageResponse.status}`
+        });
+      }
+      
+      const contentType = imageResponse.headers.get('content-type');
+      if (!contentType || !contentType.startsWith('image/')) {
+        return res.status(400).json({
+          success: false,
+          error: `URL does not appear to be an image (content-type: ${contentType})`
+        });
+      }
+    } catch (imageError) {
+      return res.status(400).json({
+        success: false,
+        error: `Could not access image URL: ${imageError.message}`
+      });
+    }
+    
+    // Generate the image
+    logger.info('Calling image generator service');
+    const imageBuffer = await imageGenerator.generateSocialMediaImage({
+      imageUrl,
+      title,
+      platform
+    });
     
     // Get Airtable credentials
     const apiToken = config.airtable?.personalAccessToken || process.env.AIRTABLE_TOKEN;
@@ -35,13 +69,6 @@ router.post('/generate', async (req, res) => {
         error: 'Server configuration error: Missing Airtable credentials'
       });
     }
-    
-    // Generate the social media image
-    const imageBuffer = await imageGenerator.generateSocialMediaImage({
-      imageUrl,
-      title,
-      platform
-    });
     
     // Initialize Airtable
     const airtable = new Airtable({ apiKey: apiToken });
@@ -107,7 +134,8 @@ router.post('/generate', async (req, res) => {
     });
     
   } catch (error) {
-    logger.error('Error generating social media image:', error);
+    // Improved error logging
+    logger.error('Error details:', error);
     return res.status(500).json({
       success: false,
       error: error.message || 'Failed to generate social media image'
