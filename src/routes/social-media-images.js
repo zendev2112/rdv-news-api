@@ -84,7 +84,6 @@ router.post('/generate', async (req, res) => {
         height = 600; // Square format
         break;
       case 'twitter':
-      case 'x':
         width = 600;
         height = 335; // 16:9 ratio
         break;
@@ -210,27 +209,52 @@ router.post('/generate', async (req, res) => {
     const timestamp = new Date().toISOString().substring(0, 10);
     const fileName = `${platform}-${timestamp}.jpg`;
     
-    // Generate a plain text caption with the title to include with the image
-    const caption = `${title}\n\n#${platform.toLowerCase()}`;
-    
     try {
-      // Update the record with URL attachment and caption
-      await base('Redes Sociales').update(recordId, {
-        [`social_image_${platform.toLowerCase()}`]: [{
+      // Create update object with correct field name for the specified platform
+      const updateFields = {};
+      
+      // Use the correct field name based on platform
+      if (platform.toLowerCase() === 'instagram') {
+        updateFields.social_image_instagram = [{
           url: imageUrl,
           filename: fileName
-        }],
-        [`social_caption_${platform.toLowerCase()}`]: caption
-      });
+        }];
+      } else if (platform.toLowerCase() === 'twitter') {
+        updateFields.social_image_twitter = [{
+          url: imageUrl,
+          filename: fileName
+        }];
+      } else if (platform.toLowerCase() === 'facebook') {
+        updateFields.social_image_facebook = [{
+          url: imageUrl,
+          filename: fileName
+        }];
+      } else {
+        // Generic/default platform - update all fields
+        updateFields.social_image_instagram = [{
+          url: imageUrl,
+          filename: `instagram-${timestamp}.jpg`
+        }];
+        updateFields.social_image_twitter = [{
+          url: imageUrl,
+          filename: `twitter-${timestamp}.jpg`
+        }];
+        updateFields.social_image_facebook = [{
+          url: imageUrl,
+          filename: `facebook-${timestamp}.jpg`
+        }];
+      }
+      
+      // Update Airtable record
+      await base('Redes Sociales').update(recordId, updateFields);
       
       return res.json({
         success: true,
-        message: `Attached image for ${platform} with caption`,
+        message: `Attached image for ${platform}`,
         data: {
           recordId,
           platform,
           imageUrl: imageUrl,
-          caption: caption,
           previewWithTitle: previewDataUrl // Send the preview image with title overlay
         }
       });
@@ -251,10 +275,6 @@ router.post('/generate', async (req, res) => {
   }
 });
 
-/**
- * Generate social media images for multiple platforms
- * POST /api/social-media-images/generate-all
- */
 /**
  * Generate social media images for multiple platforms
  * POST /api/social-media-images/generate-all
@@ -310,29 +330,31 @@ router.post('/generate-all', async (req, res) => {
       // Create timestamp for filenames
       const timestamp = new Date().toISOString().substring(0, 10);
       
-      // Prepare update fields for each platform
-      for (const platform of platforms) {
-        const fileName = `${platform}-${timestamp}.jpg`;
-        
-        // Add URL attachment for this platform
-        updateFields[`social_image_${platform.toLowerCase()}`] = [{
-          url: imageUrl,
-          filename: fileName
-        }];
-        
-        // Generate a caption with the title
-        const caption = `${title}\n\n#${platform.toLowerCase()}`;
-        updateFields[`social_caption_${platform.toLowerCase()}`] = caption;
-        
+      // Prepare update fields using correct field names
+      updateFields.social_image_facebook = [{
+        url: imageUrl,
+        filename: `facebook-${timestamp}.jpg`
+      }];
+      
+      updateFields.social_image_twitter = [{
+        url: imageUrl,
+        filename: `twitter-${timestamp}.jpg`
+      }];
+      
+      updateFields.social_image_instagram = [{
+        url: imageUrl,
+        filename: `instagram-${timestamp}.jpg`
+      }];
+      
+      platforms.forEach(platform => {
         results.push({
           platform,
           success: true,
-          imageUrl: imageUrl,
-          caption: caption
+          imageUrl: imageUrl
         });
-      }
+      });
       
-      // Generate a single preview image for the response (using Twitter/X dimensions)
+      // Generate a preview image for the response (using Twitter dimensions)
       const { createCanvas, loadImage } = await import('canvas');
       let previewDataUrl = null;
       
@@ -435,13 +457,13 @@ router.post('/generate-all', async (req, res) => {
         logger.error('Error creating preview image:', previewError);
       }
       
-      // Update the record in Airtable
+      // Update the record in Airtable with all social media images
       try {
         await base('Redes Sociales').update(recordId, updateFields);
         
         return res.json({
           success: true,
-          message: 'Attached social media images for all platforms with captions',
+          message: 'Attached social media images for all platforms',
           data: {
             recordId,
             results,
