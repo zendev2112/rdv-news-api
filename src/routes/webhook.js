@@ -2,6 +2,7 @@ import express from 'express';
 import airtableService from '../services/airtable.js';
 import supabaseService from '../services/supabase.js';
 import logger from '../utils/logger.js';
+import socialMediaRouter from './webhooks/social-media.js' 
 
 const router = express.Router();
 
@@ -105,5 +106,8 @@ router.post('/airtable/publish', async (req, res) => {
     return res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// Mount the social media router
+router.use('/airtable', socialMediaRouter); // Add this line to connect the router
 
 export default router;
