@@ -2,6 +2,7 @@ import express from 'express';
 import { startJobs } from './scheduler/jobs.js';
 import logger from './utils/logger.js';
 import webhookRoutes from './routes/webhook.js';
+import socialMediaImagesRouter from './routes/social-media-images.js';
 
 // Create Express application
 const app = express();
@@ -14,6 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Set up routes
 app.use('/webhooks', webhookRoutes);
+app.use('/api/social-media-images', socialMediaImagesRouter);
 
 // Start the job scheduler
 startJobs();
