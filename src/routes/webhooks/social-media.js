@@ -1,13 +1,12 @@
 import express from 'express';
-import { airtableService } from '../../services/index.js';
+import Airtable from 'airtable';
+import config from '../../config/index.js';
 import logger from '../../utils/logger.js';
-
 
 const router = express.Router();
 
 /**
  * Webhook handler for social media exports to Redes Sociales table
- * Receives data from Airtable script and creates a record in Redes Sociales table
  */
 router.post('/social-media', async (req, res) => {
   try {
@@ -26,36 +25,47 @@ router.post('/social-media', async (req, res) => {
       });
     }
     
-    // Create a record in the Redes Sociales table with only specified fields
-    const record = {
-      fields: {
-        title: payload.title,
-        overline: payload.overline || '',
-        excerpt: payload.excerpt || '',
-        url: payload.url,
-        image: payload.image || [],
-        imgUrl: payload.imgUrl || '',
-        tags: payload.tags || '',
-        socialMediaText: payload.socialMediaText || '',
-        source_table: payload.sourceTable || '',
-        created_at: new Date().toISOString()
-      }
+    // Create record fields
+    const fields = {
+      title: payload.title,
+      overline: payload.overline || '',
+      excerpt: payload.excerpt || '',
+      url: payload.url,
+      image: payload.image || [],
+      imgUrl: payload.imgUrl || '',
+      tags: payload.tags || '',
+      socialMediaText: payload.socialMediaText || '',
+      source_table: payload.sourceTable || '',
+      created_at: new Date().toISOString()
     };
     
-    logger.info('Creating record in Redes Sociales table', { record });
+    // Get Airtable credentials
+    const apiToken = config.airtable?.personalAccessToken || process.env.AIRTABLE_TOKEN;
+    const baseId = config.airtable?.baseId || process.env.AIRTABLE_BASE_ID;
     
-    // Insert into Airtable Redes Sociales table
-    const result = await airtableService.insertRecords(
-      [record], 
-      'Redes Sociales' // The actual table name in Airtable
-    );
+    if (!apiToken || !baseId) {
+      logger.error('Missing Airtable credentials');
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error: Missing Airtable credentials'
+      });
+    }
+    
+    // Initialize Airtable
+    const airtable = new Airtable({ apiKey: apiToken });
+    const base = airtable.base(baseId);
+    
+    // Create record in Redes Sociales table
+    logger.info('Creating record in Redes Sociales table', { fields });
+    
+    const result = await base('Redes Sociales').create([{ fields }]);
     
     logger.info('Social media export successful', { result });
     
     return res.json({
       success: true,
       message: 'Content successfully exported to Redes Sociales',
-      data: result.length > 0 ? result[0] : {}
+      data: result[0]
     });
   } catch (error) {
     logger.error('Error exporting to Redes Sociales', { error: error.message, stack: error.stack });
