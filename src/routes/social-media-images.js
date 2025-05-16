@@ -131,37 +131,84 @@ router.post('/generate', async (req, res) => {
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
       
-      // Add overlay gradient for better text readability
-      const gradient = ctx.createLinearGradient(0, 0, 0, height);
-      gradient.addColorStop(0, 'rgba(0, 0, 0, 0.6)');
-      gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.3)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.6)');
+      // Add a more sophisticated overlay for better readability
+      const bottomGradientHeight = height * 0.5; // Use bottom half for gradient
+      const gradient = ctx.createLinearGradient(0, height - bottomGradientHeight, 0, height);
+      gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
       ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, width, height);
+      ctx.fillRect(0, height - bottomGradientHeight, width, bottomGradientHeight);
       
-      // Add platform badge in the corner
+      // Add a subtle border/frame
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(5, 5, width - 10, height - 10);
+      
+      // Add your site's branding/logo
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 18px Arial';
+      ctx.font = 'bold 20px Arial';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(platform.toUpperCase(), 20, 20);
+      ctx.fillText('RDV NEWS', 20, 20);
       
-      // Add title text
-      const formattedTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
+      // For platform badge, make it more modern with a pill shape
+      const platformText = platform.toUpperCase();
+      const platformTextWidth = ctx.measureText(platformText).width;
+      const badgeWidth = platformTextWidth + 20;
+      const badgeHeight = 28;
+      const badgeX = width - badgeWidth - 20;
+      const badgeY = 20;
       
-      // Calculate font size based on canvas width
-      const fontSize = Math.floor(width * 0.05);
-      ctx.font = `bold ${fontSize}px Arial`;
-      ctx.fillStyle = '#FFFFFF';
+      // Draw badge background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      // Round rectangle function
+      function roundRect(x, y, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.arcTo(x + width, y, x + width, y + height, radius);
+        ctx.arcTo(x + width, y + height, x, y + height, radius);
+        ctx.arcTo(x, y + height, x, y, radius);
+        ctx.arcTo(x, y, x + width, y, radius);
+        ctx.closePath();
+        ctx.fill();
+      }
+      roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 14);
+      
+      // Draw platform text
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 14px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      ctx.fillText(platformText, badgeX + badgeWidth/2, badgeY + badgeHeight/2);
       
-      // Text wrapping
+      // Enhance title text styling
+      // For the title, use a more modern approach:
+      const formattedTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
+      
+      // Calculate font size based on canvas width - use dynamic sizing
+      const titleLines = formattedTitle.split(' ').length;
+      const fontSize = Math.min(
+        Math.floor(width * 0.07), // Size based on width
+        Math.floor(height * 0.1)  // Size based on height
+      );
+      
+      // Add text shadow for better visibility
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+      
+      ctx.font = `bold ${fontSize}px 'Arial', sans-serif`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textAlign = 'left';  // Left align looks more news-like
+      ctx.textBaseline = 'bottom';  // Position from bottom
+      
+      // Text wrapping - keep lines shorter for better readability
       const words = formattedTitle.split(' ');
       const lines = [];
       let currentLine = words[0];
       
-      const maxLineWidth = width * 0.8; // 80% of canvas width
+      const maxLineWidth = width * 0.85; // 85% of canvas width
       
       for (let i = 1; i < words.length; i++) {
         const word = words[i];
@@ -177,15 +224,36 @@ router.post('/generate', async (req, res) => {
       }
       lines.push(currentLine);
       
-      // Draw each line of text
+      // Draw each line of text at the bottom of the image
       const lineHeight = fontSize * 1.2;
       const totalTextHeight = lineHeight * lines.length;
-      const startY = (height / 2) - (totalTextHeight / 2);
+      const startY = height - 40;  // Position from bottom with padding
       
-      lines.forEach((line, i) => {
-        const y = startY + (i * lineHeight);
-        ctx.fillText(line, width / 2, y);
+      // Draw each line of text
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const y = startY - ((lines.length - 1 - i) * lineHeight);
+        ctx.fillText(lines[i], width * 0.07, y);  // Left padding
+      }
+      
+      // Add publication date or category (optional)
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
       });
+      
+      ctx.font = '16px Arial';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(dateStr, width * 0.07, height - totalTextHeight - 50);
+      
+      // Reset shadow for other operations
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
       
     } catch (drawError) {
       logger.error('Error drawing image:', drawError);
@@ -398,37 +466,84 @@ router.post('/generate-all', async (req, res) => {
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
       
-      // Add overlay gradient for better text readability
-      const gradient = ctx.createLinearGradient(0, 0, 0, height);
-      gradient.addColorStop(0, 'rgba(0, 0, 0, 0.6)');
-      gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.3)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.6)');
+      // Add a more sophisticated overlay for better readability
+      const bottomGradientHeight = height * 0.5; // Use bottom half for gradient
+      const gradient = ctx.createLinearGradient(0, height - bottomGradientHeight, 0, height);
+      gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
       ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, width, height);
+      ctx.fillRect(0, height - bottomGradientHeight, width, bottomGradientHeight);
       
-      // Add "Social Media" badge in the corner
+      // Add a subtle border/frame
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(5, 5, width - 10, height - 10);
+      
+      // Add your site's branding/logo
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 18px Arial';
+      ctx.font = 'bold 20px Arial';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText('SOCIAL MEDIA', 20, 20);
+      ctx.fillText('RDV NEWS', 20, 20);
       
-      // Add title text
-      const formattedTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
+      // For platform badge, make it more modern with a pill shape
+      const platformText = 'SOCIAL MEDIA';
+      const platformTextWidth = ctx.measureText(platformText).width;
+      const badgeWidth = platformTextWidth + 20;
+      const badgeHeight = 28;
+      const badgeX = width - badgeWidth - 20;
+      const badgeY = 20;
       
-      // Calculate font size based on canvas width
-      const fontSize = Math.floor(width * 0.05);
-      ctx.font = `bold ${fontSize}px Arial`;
-      ctx.fillStyle = '#FFFFFF';
+      // Draw badge background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      // Round rectangle function
+      function roundRect(x, y, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.arcTo(x + width, y, x + width, y + height, radius);
+        ctx.arcTo(x + width, y + height, x, y + height, radius);
+        ctx.arcTo(x, y + height, x, y, radius);
+        ctx.arcTo(x, y, x + width, y, radius);
+        ctx.closePath();
+        ctx.fill();
+      }
+      roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 14);
+      
+      // Draw platform text
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 14px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      ctx.fillText(platformText, badgeX + badgeWidth/2, badgeY + badgeHeight/2);
       
-      // Text wrapping
+      // Enhance title text styling
+      // For the title, use a more modern approach:
+      const formattedTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
+      
+      // Calculate font size based on canvas width - use dynamic sizing
+      const titleLines = formattedTitle.split(' ').length;
+      const fontSize = Math.min(
+        Math.floor(width * 0.07), // Size based on width
+        Math.floor(height * 0.1)  // Size based on height
+      );
+      
+      // Add text shadow for better visibility
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+      
+      ctx.font = `bold ${fontSize}px 'Arial', sans-serif`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textAlign = 'left';  // Left align looks more news-like
+      ctx.textBaseline = 'bottom';  // Position from bottom
+      
+      // Text wrapping - keep lines shorter for better readability
       const words = formattedTitle.split(' ');
       const lines = [];
       let currentLine = words[0];
       
-      const maxLineWidth = width * 0.8; // 80% of canvas width
+      const maxLineWidth = width * 0.85; // 85% of canvas width
       
       for (let i = 1; i < words.length; i++) {
         const word = words[i];
@@ -444,15 +559,36 @@ router.post('/generate-all', async (req, res) => {
       }
       lines.push(currentLine);
       
-      // Draw each line of text
+      // Draw each line of text at the bottom of the image
       const lineHeight = fontSize * 1.2;
       const totalTextHeight = lineHeight * lines.length;
-      const startY = (height / 2) - (totalTextHeight / 2);
+      const startY = height - 40;  // Position from bottom with padding
       
-      lines.forEach((line, i) => {
-        const y = startY + (i * lineHeight);
-        ctx.fillText(line, width / 2, y);
+      // Draw each line of text
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const y = startY - ((lines.length - 1 - i) * lineHeight);
+        ctx.fillText(lines[i], width * 0.07, y);  // Left padding
+      }
+      
+      // Add publication date or category (optional)
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
       });
+      
+      ctx.font = '16px Arial';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(dateStr, width * 0.07, height - totalTextHeight - 50);
+      
+      // Reset shadow for other operations
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
       
       previewDataUrl = canvas.toDataURL('image/jpeg');
     } catch (previewError) {
