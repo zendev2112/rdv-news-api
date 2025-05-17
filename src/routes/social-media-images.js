@@ -830,6 +830,18 @@ router.post('/generate-all', async (req, res) => {
         // Add this line to define formattedTitle
         const formattedTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
         
+        // Add this line to define dateStr for Instagram image
+        const today = new Date();
+        const dateStr = today.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        
+        // Draw black background
+        instagramCtx.fillStyle = '#000000';
+        
+        // ...rest of the Instagram image creation code
         // Draw black background
         instagramCtx.fillStyle = '#000000';
         instagramCtx.fillRect(0, 0, 800, 800);
