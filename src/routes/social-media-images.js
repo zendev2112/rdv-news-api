@@ -723,8 +723,27 @@ router.post('/generate-all', async (req, res) => {
         instagramCtx.fillStyle = '#000000';
         instagramCtx.fillRect(0, 0, 400, 400);
         
-        // Draw the image proportionally
-        instagramCtx.drawImage(image, ix, iy, iw, ih, 0, 0, 400, 400);
+        // Draw the image proportionally - fixed variables
+        const instagramImage = await loadImage(imageUrl);
+        const imgAspect = instagramImage.width / instagramImage.height;
+        
+        let ix, iy, iw, ih;
+        if (imgAspect > 1) {
+          // Image is wider than tall, crop sides
+          ih = instagramImage.height;
+          iw = instagramImage.height;
+          iy = 0;
+          ix = (instagramImage.width - iw) / 2;
+        } else {
+          // Image is taller than wide, crop top/bottom
+          iw = instagramImage.width;
+          ih = instagramImage.width;
+          ix = 0;
+          iy = (instagramImage.height - ih) / 2;
+        }
+        
+        // Draw the image
+        instagramCtx.drawImage(instagramImage, ix, iy, iw, ih, 0, 0, 400, 400);
         
         // Add gradient
         const instagramGradient = instagramCtx.createLinearGradient(0, 200, 0, 400);
