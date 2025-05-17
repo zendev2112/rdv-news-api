@@ -7,6 +7,20 @@ import { uploadImage } from '../services/cloudinary.js';
 
 const router = express.Router();
 
+// Define the roundRect function outside of your route handlers so it's available everywhere
+
+// Add this helper function at the top of your file, after the imports but before the routes
+function roundRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, radius);
+  ctx.arcTo(x + width, y + height, x, y + height, radius);
+  ctx.arcTo(x, y + height, x, y, radius);
+  ctx.arcTo(x, y, x + width, y, radius);
+  ctx.closePath();
+  ctx.fill();
+}
+
 // Test GET endpoint
 router.get('/generate', (req, res) => {
   res.json({
@@ -163,17 +177,7 @@ router.post('/generate', async (req, res) => {
       // Draw badge background
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       // Round rectangle function
-      function roundRect(x, y, width, height, radius) {
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.arcTo(x + width, y, x + width, y + height, radius);
-        ctx.arcTo(x + width, y + height, x, y + height, radius);
-        ctx.arcTo(x, y + height, x, y, radius);
-        ctx.arcTo(x, y, x + width, y, radius);
-        ctx.closePath();
-        ctx.fill();
-      }
-      roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 14);
+      roundRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14);
       
       // Draw platform text
       ctx.fillStyle = '#ffffff';
@@ -489,17 +493,7 @@ router.post('/generate-all', async (req, res) => {
       // Draw badge background
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       // Round rectangle function
-      function roundRect(x, y, width, height, radius) {
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.arcTo(x + width, y, x + width, y + height, radius);
-        ctx.arcTo(x + width, y + height, x, y + height, radius);
-        ctx.arcTo(x, y + height, x, y, radius);
-        ctx.arcTo(x, y, x + width, y, radius);
-        ctx.closePath();
-        ctx.fill();
-      }
-      roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 14);
+      roundRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14);
       
       // Draw platform text
       ctx.fillStyle = '#ffffff';
@@ -660,7 +654,7 @@ router.post('/generate-all', async (req, res) => {
         
         // Draw badge background
         instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        roundRect.call(instagramCtx, igBadgeX, igBadgeY, igBadgeWidth, igBadgeHeight, 14);
+        roundRect(instagramCtx, igBadgeX, igBadgeY, igBadgeWidth, igBadgeHeight, 14);
         
         // Draw platform text
         instagramCtx.fillStyle = '#ffffff';
@@ -888,7 +882,7 @@ router.post('/generate-all', async (req, res) => {
         
         // Draw badge background using the roundRect function
         instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        roundRect.call(instagramCtx, igBadgeX, igBadgeY, igBadgeWidth, igBadgeHeight, 14);
+        roundRect(instagramCtx, igBadgeX, igBadgeY, igBadgeWidth, igBadgeHeight, 14);
         
         // Draw platform text
         instagramCtx.fillStyle = '#ffffff';
