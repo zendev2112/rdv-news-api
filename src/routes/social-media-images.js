@@ -266,12 +266,8 @@ router.post('/generate', async (req, res) => {
       ctx.fillText(title.substring(0, 50), width / 2, height / 2);
     }
     
-    // Get the image buffer and convert to base64 for attachment
-    const imageBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
-    const base64Image = imageBuffer.toString('base64');
-    
-    // Get the preview image as a data URL for the response
-    const previewDataUrl = canvas.toDataURL('image/jpeg');
+    // Get the high-quality preview image for the response
+    const previewDataUrl = canvas.toDataURL('image/jpeg', 0.9);
     
     // Initialize Airtable
     const airtable = new Airtable({ apiKey: apiToken });
@@ -281,6 +277,16 @@ router.post('/generate', async (req, res) => {
     const timestamp = new Date().toISOString().substring(0, 10);
     const fileName = `${platform}-${timestamp}.jpg`;
     
+    // Create a smaller version to upload to Airtable
+    // This is the key change - we're using a smaller image for Airtable to avoid size issues
+    const smallerCanvas = createCanvas(Math.floor(width/2), Math.floor(height/2));
+    const smallerCtx = smallerCanvas.getContext('2d');
+    smallerCtx.drawImage(canvas, 0, 0, width, height, 0, 0, Math.floor(width/2), Math.floor(height/2));
+    
+    // Get lower quality buffer for Airtable
+    const imageBuffer = smallerCanvas.toBuffer('image/jpeg', { quality: 0.6 });
+    const base64Image = imageBuffer.toString('base64');
+    
     try {
       // Create update object with correct field name for the specified platform
       const updateFields = {};
@@ -289,53 +295,166 @@ router.post('/generate', async (req, res) => {
       if (platform.toLowerCase() === 'instagram') {
         updateFields.social_image_instagram = [{
           filename: fileName,
-          type: 'image/jpeg', // Add content type
+          type: 'image/jpeg',
           content: base64Image
         }];
       } else if (platform.toLowerCase() === 'twitter') {
         updateFields.social_image_twitter = [{
           filename: fileName,
-          type: 'image/jpeg', // Add content type
+          type: 'image/jpeg',
           content: base64Image
         }];
       } else if (platform.toLowerCase() === 'facebook') {
         updateFields.social_image_facebook = [{
           filename: fileName,
-          type: 'image/jpeg', // Add content type
+          type: 'image/jpeg',
           content: base64Image
         }];
       } else {
         // Generic/default platform - update all fields
         updateFields.social_image_instagram = [{
           filename: `instagram-${timestamp}.jpg`,
-          type: 'image/jpeg', // Add content type
+          type: 'image/jpeg',
           content: base64Image
         }];
         updateFields.social_image_twitter = [{
           filename: `twitter-${timestamp}.jpg`,
-          type: 'image/jpeg', // Add content type
+          type: 'image/jpeg',
           content: base64Image
         }];
         updateFields.social_image_facebook = [{
           filename: `facebook-${timestamp}.jpg`,
-          type: 'image/jpeg', // Add content type
+          type: 'image/jpeg',
           content: base64Image
         }];
       }
       
-      // Update Airtable record
-      await base('Redes Sociales').update(recordId, updateFields);
-      
-      return res.json({
-        success: true,
-        message: `Attached image with title overlay for ${platform}`,
-        data: {
-          recordId,
-          platform,
-          title: title, // Include title in response
-          previewWithTitle: previewDataUrl // Send the preview image with title overlay
+      // Try to update with reduced image size
+      try {
+        await base('Redes Sociales').update(recordId, updateFields);
+        
+        return res.json({
+          success: true,
+          message: `Attached image with title overlay for ${platform}`,
+          data: {
+            recordId,
+            platform,
+            title: title,
+            previewWithTitle: previewDataUrl
+          }
+        });
+      } catch (firstError) {
+        logger.warn('First attempt to upload failed, trying with lower quality');
+        
+        // Try again with even smaller image and lower quality
+        const tinyCanvas = createCanvas(Math.floor(width/3), Math.floor(height/3));
+        const tinyCtx = tinyCanvas.getContext('2d');
+        tinyCtx.drawImage(canvas, 0, 0, width, height, 0, 0, Math.floor(width/3), Math.floor(height/3));
+        
+        const tinyBuffer = tinyCanvas.toBuffer('image/jpeg', { quality: 0.5 });
+        const tinyBase64 = tinyBuffer.toString('base64');
+        
+        // Update all fields with tiny images
+        if (platform.toLowerCase() === 'instagram') {
+          updateFields.social_image_instagram = [{
+            filename: fileName,
+            type: 'image/jpeg',
+            content: tinyBase64
+          }];
+        } else if (platform.toLowerCase() === 'twitter') {
+          updateFields.social_image_twitter = [{
+            filename: fileName,
+            type: 'image/jpeg',
+            content: tinyBase64
+          }];
+        } else if (platform.toLowerCase() === 'facebook') {
+          updateFields.social_image_facebook = [{
+            filename: fileName,
+            type: 'image/jpeg',
+            content: tinyBase64
+          }];
+        } else {
+          // Generic/default platform - update all fields
+          updateFields.social_image_instagram = [{
+            filename: `instagram-${timestamp}.jpg`,
+            type: 'image/jpeg',
+            content: tinyBase64
+          }];
+          updateFields.social_image_twitter = [{
+            filename: `twitter-${timestamp}.jpg`,
+            type: 'image/jpeg',
+            content: tinyBase64
+          }];
+          updateFields.social_image_facebook = [{
+            filename: `facebook-${timestamp}.jpg`,
+            type: 'image/jpeg',
+            content: tinyBase64
+          }];
         }
-      });
+        
+        try {
+          await base('Redes Sociales').update(recordId, updateFields);
+          
+          return res.json({
+            success: true,
+            message: `Attached smaller image with title overlay for ${platform}`,
+            data: {
+              recordId,
+              platform,
+              title: title,
+              previewWithTitle: previewDataUrl,
+              note: "Using reduced quality for Airtable storage"
+            }
+          });
+        } catch (secondError) {
+          logger.error('Even tiny images failed to upload:', secondError);
+          
+          // Fall back to URL method as last resort
+          if (platform.toLowerCase() === 'instagram') {
+            updateFields.social_image_instagram = [{
+              filename: fileName,
+              url: imageUrl
+            }];
+          } else if (platform.toLowerCase() === 'twitter') {
+            updateFields.social_image_twitter = [{
+              filename: fileName,
+              url: imageUrl
+            }];
+          } else if (platform.toLowerCase() === 'facebook') {
+            updateFields.social_image_facebook = [{
+              filename: fileName,
+              url: imageUrl
+            }];
+          } else {
+            updateFields.social_image_instagram = [{
+              filename: `instagram-${timestamp}.jpg`,
+              url: imageUrl
+            }];
+            updateFields.social_image_twitter = [{
+              filename: `twitter-${timestamp}.jpg`,
+              url: imageUrl
+            }];
+            updateFields.social_image_facebook = [{
+              filename: `facebook-${timestamp}.jpg`,
+              url: imageUrl
+            }];
+          }
+          
+          await base('Redes Sociales').update(recordId, updateFields);
+          
+          return res.json({
+            success: true,
+            message: `Attached original image URL for ${platform} (title overlay not available in storage)`,
+            data: {
+              recordId,
+              platform,
+              title: title,
+              previewWithTitle: previewDataUrl,
+              note: "Using original URL due to upload limitations"
+            }
+          });
+        }
+      }
     } catch (airtableError) {
       logger.error('Airtable update error:', airtableError);
       
@@ -577,55 +696,51 @@ router.post('/generate-all', async (req, res) => {
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
       
-      // Get the common overlaid image for all platforms as buffer and base64
-      const imageBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
-      const base64Image = imageBuffer.toString('base64');
+      // Create a high quality preview
+      const previewCanvas = createCanvas(600, 335);
+      const previewCtx = previewCanvas.getContext('2d');
+      previewCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 600, 335);
+      previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.9);
+      
+      // Create a smaller size for Airtable uploads to address size limitations
+      const smallerWidth = Math.floor(width/2);
+      const smallerHeight = Math.floor(height/2);
+      const smallerCanvas = createCanvas(smallerWidth, smallerHeight);
+      const smallerCtx = smallerCanvas.getContext('2d');
+      smallerCtx.drawImage(canvas, 0, 0, width, height, 0, 0, smallerWidth, smallerHeight);
+      
+      // Get the smaller size image as buffer and base64
+      const facebookTwitterBuffer = smallerCanvas.toBuffer('image/jpeg', { quality: 0.6 });
+      const facebookTwitterBase64 = facebookTwitterBuffer.toString('base64');
       
       // Create platform-specific versions if needed (e.g. for Instagram)
-      // For Instagram, we need a square image
+      // For Instagram, we need a square image but also smaller
       if (platforms.includes('instagram')) {
-        const instagramCanvas = createCanvas(800, 800);
+        const instagramCanvas = createCanvas(400, 400); // Half the original size
         const instagramCtx = instagramCanvas.getContext('2d');
         
         // Draw black background
         instagramCtx.fillStyle = '#000000';
-        instagramCtx.fillRect(0, 0, 800, 800);
+        instagramCtx.fillRect(0, 0, 400, 400);
         
         // Draw the image proportionally
-        const instagramImage = await loadImage(imageUrl);
-        const imgAspect = instagramImage.width / instagramImage.height;
-        
-        let ix, iy, iw, ih;
-        if (imgAspect > 1) {
-          ih = instagramImage.height;
-          iw = instagramImage.height;
-          iy = 0;
-          ix = (instagramImage.width - iw) / 2;
-        } else {
-          iw = instagramImage.width;
-          ih = instagramImage.width;
-          ix = 0;
-          iy = (instagramImage.height - ih) / 2;
-        }
-        
-        // Draw the image
-        instagramCtx.drawImage(instagramImage, ix, iy, iw, ih, 0, 0, 800, 800);
+        instagramCtx.drawImage(image, ix, iy, iw, ih, 0, 0, 400, 400);
         
         // Add gradient
-        const instagramGradient = instagramCtx.createLinearGradient(0, 400, 0, 800);
+        const instagramGradient = instagramCtx.createLinearGradient(0, 200, 0, 400);
         instagramGradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
         instagramGradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
         instagramCtx.fillStyle = instagramGradient;
-        instagramCtx.fillRect(0, 400, 800, 400);
+        instagramCtx.fillRect(0, 200, 400, 200);
         
         // Add border
         instagramCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
         instagramCtx.lineWidth = 2;
-        instagramCtx.strokeRect(5, 5, 790, 790);
+        instagramCtx.strokeRect(5, 5, 390, 390);
         
         // Add branding
         instagramCtx.fillStyle = '#ffffff';
-        instagramCtx.font = 'bold 20px Arial';
+        instagramCtx.font = 'bold 16px Arial';
         instagramCtx.textAlign = 'left';
         instagramCtx.textBaseline = 'top';
         instagramCtx.fillText('RDV NEWS', 20, 20);
@@ -635,7 +750,7 @@ router.post('/generate-all', async (req, res) => {
         const igTextWidth = instagramCtx.measureText(igText).width;
         const igBadgeWidth = igTextWidth + 20;
         const igBadgeHeight = 28;
-        const igBadgeX = 800 - igBadgeWidth - 20;
+        const igBadgeX = 400 - igBadgeWidth - 20;
         const igBadgeY = 20;
         
         // Draw badge background
@@ -655,7 +770,7 @@ router.post('/generate-all', async (req, res) => {
         instagramCtx.shadowOffsetX = 2;
         instagramCtx.shadowOffsetY = 2;
         
-        instagramCtx.font = `bold ${Math.floor(800 * 0.06)}px 'Arial', sans-serif`;
+        instagramCtx.font = `bold ${Math.floor(400 * 0.06)}px 'Arial', sans-serif`;
         instagramCtx.fillStyle = '#FFFFFF';
         instagramCtx.textAlign = 'left';
         instagramCtx.textBaseline = 'bottom';
@@ -665,7 +780,7 @@ router.post('/generate-all', async (req, res) => {
         const igLines = [];
         let igCurrentLine = igWords[0];
         
-        const igMaxLineWidth = 800 * 0.85;
+        const igMaxLineWidth = 400 * 0.85;
         
         for (let i = 1; i < igWords.length; i++) {
           const word = igWords[i];
@@ -682,21 +797,21 @@ router.post('/generate-all', async (req, res) => {
         igLines.push(igCurrentLine);
         
         // Draw each line of text
-        const igLineHeight = Math.floor(800 * 0.06) * 1.2;
+        const igLineHeight = Math.floor(400 * 0.06) * 1.2;
         const igTotalTextHeight = igLineHeight * igLines.length;
-        const igStartY = 800 - 40;
+        const igStartY = 400 - 40;
         
         for (let i = igLines.length - 1; i >= 0; i--) {
           const y = igStartY - ((igLines.length - 1 - i) * igLineHeight);
-          instagramCtx.fillText(igLines[i], 800 * 0.07, y);
+          instagramCtx.fillText(igLines[i], 400 * 0.07, y);
         }
         
         // Add date
-        instagramCtx.font = '16px Arial';
+        instagramCtx.font = '14px Arial';
         instagramCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         instagramCtx.textAlign = 'left';
         instagramCtx.textBaseline = 'bottom';
-        instagramCtx.fillText(dateStr, 800 * 0.07, 800 - igTotalTextHeight - 50);
+        instagramCtx.fillText(dateStr, 400 * 0.07, 400 - igTotalTextHeight - 50);
         
         // Reset shadow
         instagramCtx.shadowColor = 'transparent';
@@ -705,42 +820,36 @@ router.post('/generate-all', async (req, res) => {
         instagramCtx.shadowOffsetY = 0;
         
         // Get the Instagram-specific image buffer
-        const igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
+        const igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.6 });
         const igBase64 = igBuffer.toString('base64');
         
         // Set Instagram image
         updateFields.social_image_instagram = [{
           filename: `instagram-${timestamp}.jpg`,
-          type: 'image/jpeg', // Add content type
+          type: 'image/jpeg',
           content: igBase64
         }];
       } else {
         // Just use the standard image for Instagram as well
         updateFields.social_image_instagram = [{
           filename: `instagram-${timestamp}.jpg`,
-          type: 'image/jpeg', // Add content type
-          content: base64Image
+          type: 'image/jpeg',
+          content: facebookTwitterBase64
         }];
       }
       
       // Set Twitter and Facebook images
       updateFields.social_image_twitter = [{
         filename: `twitter-${timestamp}.jpg`,
-        type: 'image/jpeg', // Add content type
-        content: base64Image
+        type: 'image/jpeg',
+        content: facebookTwitterBase64
       }];
       
       updateFields.social_image_facebook = [{
         filename: `facebook-${timestamp}.jpg`,
-        type: 'image/jpeg', // Add content type
-        content: base64Image
+        type: 'image/jpeg',
+        content: facebookTwitterBase64
       }];
-      
-      // Create a smaller preview version for the response
-      const previewCanvas = createCanvas(600, 335);
-      const previewCtx = previewCanvas.getContext('2d');
-      previewCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 600, 335);
-      previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.7);
       
       platforms.forEach(platform => {
         results.push({
@@ -770,24 +879,25 @@ router.post('/generate-all', async (req, res) => {
       previewDataUrl = fallbackCanvas.toDataURL('image/jpeg');
       
       // Set fallback images in Airtable (plain black with text)
-      const fallbackBuffer = fallbackCanvas.toBuffer('image/jpeg');
+      // Make sure they're small for Airtable
+      const fallbackBuffer = fallbackCanvas.toBuffer('image/jpeg', { quality: 0.5 });
       const fallbackBase64 = fallbackBuffer.toString('base64');
       
       updateFields.social_image_facebook = [{
         filename: `facebook-${timestamp}.jpg`,
-        type: 'image/jpeg', // Add content type
+        type: 'image/jpeg',
         content: fallbackBase64
       }];
       
       updateFields.social_image_twitter = [{
         filename: `twitter-${timestamp}.jpg`,
-        type: 'image/jpeg', // Add content type
+        type: 'image/jpeg',
         content: fallbackBase64
       }];
       
       updateFields.social_image_instagram = [{
         filename: `instagram-${timestamp}.jpg`,
-        type: 'image/jpeg', // Add content type
+        type: 'image/jpeg',
         content: fallbackBase64
       }];
       
@@ -818,10 +928,81 @@ router.post('/generate-all', async (req, res) => {
     } catch (airtableError) {
       logger.error('Airtable update error:', airtableError);
       
-      return res.status(500).json({
-        success: false,
-        error: `Error updating Airtable record: ${airtableError.message}`
-      });
+      // Try with even smaller/lower quality images
+      try {
+        // Create even smaller images for a second attempt
+        const tinyCanvas = createCanvas(Math.floor(width/3), Math.floor(height/3));
+        const tinyCtx = tinyCanvas.getContext('2d');
+        tinyCtx.drawImage(canvas, 0, 0, width, height, 0, 0, Math.floor(width/3), Math.floor(height/3));
+        
+        const tinyBuffer = tinyCanvas.toBuffer('image/jpeg', { quality: 0.5 });
+        const tinyBase64 = tinyBuffer.toString('base64');
+        
+        // Update all fields with tiny images
+        updateFields.social_image_facebook = [{
+          filename: `facebook-${timestamp}.jpg`,
+          type: 'image/jpeg',
+          content: tinyBase64
+        }];
+        
+        updateFields.social_image_twitter = [{
+          filename: `twitter-${timestamp}.jpg`,
+          type: 'image/jpeg',
+          content: tinyBase64
+        }];
+        
+        updateFields.social_image_instagram = [{
+          filename: `instagram-${timestamp}.jpg`,
+          type: 'image/jpeg',
+          content: tinyBase64
+        }];
+        
+        await base('Redes Sociales').update(recordId, updateFields);
+        
+        return res.json({
+          success: true,
+          message: 'Attached social media images with title overlay (reduced quality)',
+          data: {
+            recordId,
+            results,
+            title,
+            previewWithTitle: previewDataUrl,
+            note: "Using reduced quality for Airtable storage"
+          }
+        });
+      } catch (secondError) {
+        logger.error('Second attempt failed, falling back to URL method:', secondError);
+        
+        // Fall back to URL method as absolute last resort
+        const fallbackUpdateFields = {
+          social_image_facebook: [{
+            filename: `facebook-${timestamp}.jpg`,
+            url: imageUrl
+          }],
+          social_image_twitter: [{
+            filename: `twitter-${timestamp}.jpg`,
+            url: imageUrl
+          }],
+          social_image_instagram: [{
+            filename: `instagram-${timestamp}.jpg`,
+            url: imageUrl
+          }]
+        };
+        
+        await base('Redes Sociales').update(recordId, fallbackUpdateFields);
+        
+        return res.json({
+          success: true,
+          message: 'Attached original images (title overlay not available in storage)',
+          data: {
+            recordId,
+            results,
+            title,
+            previewWithTitle: previewDataUrl,
+            note: "Original images used due to upload limitations"
+          }
+        });
+      }
     }
   } catch (error) {
     logger.error('Error attaching social media images:', error);
