@@ -827,6 +827,9 @@ router.post('/generate-all', async (req, res) => {
         instagramCanvas = createCanvas(800, 800);
         const instagramCtx = instagramCanvas.getContext('2d');
         
+        // Add this line to define formattedTitle
+        const formattedTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
+        
         // Draw black background
         instagramCtx.fillStyle = '#000000';
         instagramCtx.fillRect(0, 0, 800, 800);
