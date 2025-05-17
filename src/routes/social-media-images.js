@@ -824,12 +824,138 @@ router.post('/generate-all', async (req, res) => {
       // Get high-quality buffers for each platform
       const fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
       
-      // Get Instagram-specific image if it exists
+      // Create Instagram-specific image if needed
+      let instagramCanvas;
       let igBuffer;
-      if (instagramCanvas) {
+      
+      if (platforms.includes('instagram')) {
+        // Create Instagram-specific canvas (square format)
+        instagramCanvas = createCanvas(800, 800);
+        const instagramCtx = instagramCanvas.getContext('2d');
+        
+        // Draw black background
+        instagramCtx.fillStyle = '#000000';
+        instagramCtx.fillRect(0, 0, 800, 800);
+        
+        // Draw the image proportionally
+        const instagramImage = await loadImage(imageUrl);
+        const imgAspect = instagramImage.width / instagramImage.height;
+        
+        let ix, iy, iw, ih;
+        if (imgAspect > 1) {
+          // Image is wider than tall, crop sides
+          ih = instagramImage.height;
+          iw = instagramImage.height;
+          iy = 0;
+          ix = (instagramImage.width - iw) / 2;
+        } else {
+          // Image is taller than wide, crop top/bottom
+          iw = instagramImage.width;
+          ih = instagramImage.width;
+          ix = 0;
+          iy = (instagramImage.height - ih) / 2;
+        }
+        
+        // Draw the image
+        instagramCtx.drawImage(instagramImage, ix, iy, iw, ih, 0, 0, 800, 800);
+        
+        // Add gradient
+        const instagramGradient = instagramCtx.createLinearGradient(0, 400, 0, 800);
+        instagramGradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        instagramGradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
+        instagramCtx.fillStyle = instagramGradient;
+        instagramCtx.fillRect(0, 400, 800, 400);
+        
+        // Add border
+        instagramCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        instagramCtx.lineWidth = 2;
+        instagramCtx.strokeRect(5, 5, 790, 790);
+        
+        // Add branding
+        instagramCtx.fillStyle = '#ffffff';
+        instagramCtx.font = 'bold 20px Arial';
+        instagramCtx.textAlign = 'left';
+        instagramCtx.textBaseline = 'top';
+        instagramCtx.fillText('RDV NEWS', 20, 20);
+        
+        // Add Instagram badge
+        const igText = 'INSTAGRAM';
+        const igTextWidth = instagramCtx.measureText(igText).width;
+        const igBadgeWidth = igTextWidth + 20;
+        const igBadgeHeight = 28;
+        const igBadgeX = 800 - igBadgeWidth - 20;
+        const igBadgeY = 20;
+        
+        // Draw badge background using the roundRect function
+        instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        roundRect.call(instagramCtx, igBadgeX, igBadgeY, igBadgeWidth, igBadgeHeight, 14);
+        
+        // Draw platform text
+        instagramCtx.fillStyle = '#ffffff';
+        instagramCtx.font = 'bold 14px Arial';
+        instagramCtx.textAlign = 'center';
+        instagramCtx.textBaseline = 'middle';
+        instagramCtx.fillText(igText, igBadgeX + igBadgeWidth/2, igBadgeY + igBadgeHeight/2);
+        
+        // Add title
+        instagramCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        instagramCtx.shadowBlur = 8;
+        instagramCtx.shadowOffsetX = 2;
+        instagramCtx.shadowOffsetY = 2;
+        
+        instagramCtx.font = `bold ${Math.floor(800 * 0.05)}px 'Arial', sans-serif`;
+        instagramCtx.fillStyle = '#FFFFFF';
+        instagramCtx.textAlign = 'left';
+        instagramCtx.textBaseline = 'bottom';
+        
+        // Text wrapping
+        const igWords = formattedTitle.split(' ');
+        const igLines = [];
+        let igCurrentLine = igWords[0];
+        
+        const igMaxLineWidth = 800 * 0.85;
+        
+        for (let i = 1; i < igWords.length; i++) {
+          const word = igWords[i];
+          const testLine = igCurrentLine + ' ' + word;
+          const metrics = instagramCtx.measureText(testLine);
+          
+          if (metrics.width > igMaxLineWidth) {
+            igLines.push(igCurrentLine);
+            igCurrentLine = word;
+          } else {
+            igCurrentLine = testLine;
+          }
+        }
+        igLines.push(igCurrentLine);
+        
+        // Draw each line of text
+        const igLineHeight = Math.floor(800 * 0.05) * 1.2;
+        const igTotalTextHeight = igLineHeight * igLines.length;
+        const igStartY = 800 - 40;
+        
+        for (let i = igLines.length - 1; i >= 0; i--) {
+          const y = igStartY - ((igLines.length - 1 - i) * igLineHeight);
+          instagramCtx.fillText(igLines[i], 800 * 0.07, y);
+        }
+        
+        // Add date
+        instagramCtx.font = '16px Arial';
+        instagramCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        instagramCtx.textAlign = 'left';
+        instagramCtx.textBaseline = 'bottom';
+        instagramCtx.fillText(dateStr, 800 * 0.07, 800 - igTotalTextHeight - 50);
+        
+        // Reset shadow
+        instagramCtx.shadowColor = 'transparent';
+        instagramCtx.shadowBlur = 0;
+        instagramCtx.shadowOffsetX = 0;
+        instagramCtx.shadowOffsetY = 0;
+        
+        // Get Instagram buffer for Cloudinary
         igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
       } else {
-        // If no Instagram-specific canvas, use the default one
+        // If Instagram is not in the platforms list, just use the default canvas
         igBuffer = fbtwBuffer;
       }
       
@@ -864,19 +990,25 @@ router.post('/generate-all', async (req, res) => {
       // Update Airtable record
       await base('Redes Sociales').update(recordId, updateFields);
       
-      // Add results for response
-      platforms.forEach(platform => {
-        let url;
-        if (platform === 'facebook') url = fbUrl;
-        else if (platform === 'twitter') url = twUrl;
-        else if (platform === 'instagram') url = igUrl;
-        
-        results.push({
-          platform,
-          success: true,
-          title: title,
-          imageUrl: url
-        });
+      // Prepare results for response
+      const platformResults = [];
+      platformResults.push({
+        platform: 'facebook',
+        success: true,
+        title: title,
+        imageUrl: fbUrl
+      });
+      platformResults.push({
+        platform: 'twitter',
+        success: true,
+        title: title,
+        imageUrl: twUrl
+      });
+      platformResults.push({
+        platform: 'instagram',
+        success: true,
+        title: title,
+        imageUrl: igUrl
       });
       
       return res.json({
@@ -884,7 +1016,7 @@ router.post('/generate-all', async (req, res) => {
         message: 'Generated and uploaded social media images for all platforms',
         data: {
           recordId,
-          results,
+          results: platformResults,
           title,
           previewWithTitle: previewDataUrl
         }
@@ -893,21 +1025,19 @@ router.post('/generate-all', async (req, res) => {
       logger.error('Error uploading images:', uploadError);
       
       // Add error results
-      platforms.forEach(platform => {
-        results.push({
-          platform,
-          success: false,
-          error: uploadError.message,
-          title: title
-        });
-      });
+      const errorResults = platforms.map(platform => ({
+        platform,
+        success: false,
+        error: uploadError.message,
+        title: title
+      }));
       
       return res.status(500).json({
         success: false,
         error: `Failed to upload images: ${uploadError.message}`,
         data: {
           recordId,
-          results,
+          results: errorResults,
           previewWithTitle: previewDataUrl
         }
       });
