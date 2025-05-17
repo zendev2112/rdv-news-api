@@ -289,30 +289,36 @@ router.post('/generate', async (req, res) => {
       if (platform.toLowerCase() === 'instagram') {
         updateFields.social_image_instagram = [{
           filename: fileName,
+          type: 'image/jpeg', // Add content type
           content: base64Image
         }];
       } else if (platform.toLowerCase() === 'twitter') {
         updateFields.social_image_twitter = [{
           filename: fileName,
+          type: 'image/jpeg', // Add content type
           content: base64Image
         }];
       } else if (platform.toLowerCase() === 'facebook') {
         updateFields.social_image_facebook = [{
           filename: fileName,
+          type: 'image/jpeg', // Add content type
           content: base64Image
         }];
       } else {
         // Generic/default platform - update all fields
         updateFields.social_image_instagram = [{
           filename: `instagram-${timestamp}.jpg`,
+          type: 'image/jpeg', // Add content type
           content: base64Image
         }];
         updateFields.social_image_twitter = [{
           filename: `twitter-${timestamp}.jpg`,
+          type: 'image/jpeg', // Add content type
           content: base64Image
         }];
         updateFields.social_image_facebook = [{
           filename: `facebook-${timestamp}.jpg`,
+          type: 'image/jpeg', // Add content type
           content: base64Image
         }];
       }
@@ -705,12 +711,14 @@ router.post('/generate-all', async (req, res) => {
         // Set Instagram image
         updateFields.social_image_instagram = [{
           filename: `instagram-${timestamp}.jpg`,
+          type: 'image/jpeg', // Add content type
           content: igBase64
         }];
       } else {
         // Just use the standard image for Instagram as well
         updateFields.social_image_instagram = [{
           filename: `instagram-${timestamp}.jpg`,
+          type: 'image/jpeg', // Add content type
           content: base64Image
         }];
       }
@@ -718,11 +726,13 @@ router.post('/generate-all', async (req, res) => {
       // Set Twitter and Facebook images
       updateFields.social_image_twitter = [{
         filename: `twitter-${timestamp}.jpg`,
+        type: 'image/jpeg', // Add content type
         content: base64Image
       }];
       
       updateFields.social_image_facebook = [{
         filename: `facebook-${timestamp}.jpg`,
+        type: 'image/jpeg', // Add content type
         content: base64Image
       }];
       
@@ -765,16 +775,19 @@ router.post('/generate-all', async (req, res) => {
       
       updateFields.social_image_facebook = [{
         filename: `facebook-${timestamp}.jpg`,
+        type: 'image/jpeg', // Add content type
         content: fallbackBase64
       }];
       
       updateFields.social_image_twitter = [{
         filename: `twitter-${timestamp}.jpg`,
+        type: 'image/jpeg', // Add content type
         content: fallbackBase64
       }];
       
       updateFields.social_image_instagram = [{
         filename: `instagram-${timestamp}.jpg`,
+        type: 'image/jpeg', // Add content type
         content: fallbackBase64
       }];
       
