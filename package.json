@@ -52,6 +52,7 @@
   "license": "ISC",
   "description": "API for publishing Airtable records to Supabase",
   "dependencies": {
+    "@google-cloud/storage": "^7.16.0",
     "@google/generative-ai": "^0.24.0",
     "@mozilla/readability": "^0.6.0",
     "@supabase/supabase-js": "^2.49.3",
@@ -59,6 +60,7 @@
     "axios": "^1.8.4",
     "canvas": "^3.1.0",
     "cheerio": "^1.0.0",
+    "cloudinary": "^2.6.1",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "date-fns": "^4.1.0",

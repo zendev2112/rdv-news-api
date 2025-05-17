@@ -3,6 +3,7 @@ import Airtable from 'airtable';
 import logger from '../utils/logger.js';
 import config from '../config/index.js';
 import imageGenerator from '../services/image-generator.js';
+import { uploadImage } from '../services/cloudinary.js';
 
 const router = express.Router();
 
@@ -275,192 +276,77 @@ router.post('/generate', async (req, res) => {
     
     // Create a timestamp for filenames
     const timestamp = new Date().toISOString().substring(0, 10);
-    const fileName = `${platform}-${timestamp}.jpg`;
-    
-    // Create a smaller version to upload to Airtable
-    // This is the key change - we're using a smaller image for Airtable to avoid size issues
-    const smallerCanvas = createCanvas(Math.floor(width/2), Math.floor(height/2));
-    const smallerCtx = smallerCanvas.getContext('2d');
-    smallerCtx.drawImage(canvas, 0, 0, width, height, 0, 0, Math.floor(width/2), Math.floor(height/2));
-    
-    // Get lower quality buffer for Airtable
-    const imageBuffer = smallerCanvas.toBuffer('image/jpeg', { quality: 0.6 });
-    const base64Image = imageBuffer.toString('base64');
     
     try {
-      // Create update object with correct field name for the specified platform
+      // Get high-quality buffer for Cloudinary
+      const uploadBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
+      
+      // Upload to Cloudinary
+      const fileName = `${platform.toLowerCase()}-${recordId}-${timestamp}.jpg`;
+      const publicUrl = await uploadImage(uploadBuffer, fileName);
+      
+      // Create update object with the Cloudinary URL
       const updateFields = {};
       
-      // Use the correct field name based on platform and upload the processed image
       if (platform.toLowerCase() === 'instagram') {
         updateFields.social_image_instagram = [{
           filename: fileName,
-          type: 'image/jpeg',
-          content: base64Image
+          url: publicUrl
         }];
       } else if (platform.toLowerCase() === 'twitter') {
         updateFields.social_image_twitter = [{
           filename: fileName,
-          type: 'image/jpeg',
-          content: base64Image
+          url: publicUrl
         }];
       } else if (platform.toLowerCase() === 'facebook') {
         updateFields.social_image_facebook = [{
           filename: fileName,
-          type: 'image/jpeg',
-          content: base64Image
+          url: publicUrl
         }];
       } else {
         // Generic/default platform - update all fields
+        const igFileName = `instagram-${recordId}-${timestamp}.jpg`;
+        const twFileName = `twitter-${recordId}-${timestamp}.jpg`;
+        const fbFileName = `facebook-${recordId}-${timestamp}.jpg`;
+        
+        const igUrl = await uploadImage(uploadBuffer, igFileName);
+        const twUrl = await uploadImage(uploadBuffer, twFileName);
+        const fbUrl = await uploadImage(uploadBuffer, fbFileName);
+        
         updateFields.social_image_instagram = [{
-          filename: `instagram-${timestamp}.jpg`,
-          type: 'image/jpeg',
-          content: base64Image
+          filename: igFileName,
+          url: igUrl
         }];
         updateFields.social_image_twitter = [{
-          filename: `twitter-${timestamp}.jpg`,
-          type: 'image/jpeg',
-          content: base64Image
+          filename: twFileName,
+          url: twUrl
         }];
         updateFields.social_image_facebook = [{
-          filename: `facebook-${timestamp}.jpg`,
-          type: 'image/jpeg',
-          content: base64Image
+          filename: fbFileName,
+          url: fbUrl
         }];
       }
       
-      // Try to update with reduced image size
-      try {
-        await base('Redes Sociales').update(recordId, updateFields);
-        
-        return res.json({
-          success: true,
-          message: `Attached image with title overlay for ${platform}`,
-          data: {
-            recordId,
-            platform,
-            title: title,
-            previewWithTitle: previewDataUrl
-          }
-        });
-      } catch (firstError) {
-        logger.warn('First attempt to upload failed, trying with lower quality');
-        
-        // Try again with even smaller image and lower quality
-        const tinyCanvas = createCanvas(Math.floor(width/3), Math.floor(height/3));
-        const tinyCtx = tinyCanvas.getContext('2d');
-        tinyCtx.drawImage(canvas, 0, 0, width, height, 0, 0, Math.floor(width/3), Math.floor(height/3));
-        
-        const tinyBuffer = tinyCanvas.toBuffer('image/jpeg', { quality: 0.5 });
-        const tinyBase64 = tinyBuffer.toString('base64');
-        
-        // Update all fields with tiny images
-        if (platform.toLowerCase() === 'instagram') {
-          updateFields.social_image_instagram = [{
-            filename: fileName,
-            type: 'image/jpeg',
-            content: tinyBase64
-          }];
-        } else if (platform.toLowerCase() === 'twitter') {
-          updateFields.social_image_twitter = [{
-            filename: fileName,
-            type: 'image/jpeg',
-            content: tinyBase64
-          }];
-        } else if (platform.toLowerCase() === 'facebook') {
-          updateFields.social_image_facebook = [{
-            filename: fileName,
-            type: 'image/jpeg',
-            content: tinyBase64
-          }];
-        } else {
-          // Generic/default platform - update all fields
-          updateFields.social_image_instagram = [{
-            filename: `instagram-${timestamp}.jpg`,
-            type: 'image/jpeg',
-            content: tinyBase64
-          }];
-          updateFields.social_image_twitter = [{
-            filename: `twitter-${timestamp}.jpg`,
-            type: 'image/jpeg',
-            content: tinyBase64
-          }];
-          updateFields.social_image_facebook = [{
-            filename: `facebook-${timestamp}.jpg`,
-            type: 'image/jpeg',
-            content: tinyBase64
-          }];
+      // Update Airtable record
+      await base('Redes Sociales').update(recordId, updateFields);
+      
+      return res.json({
+        success: true,
+        message: `Generated and uploaded image for ${platform}`,
+        data: {
+          recordId,
+          platform,
+          title: title,
+          previewWithTitle: previewDataUrl,
+          imageUrl: publicUrl
         }
-        
-        try {
-          await base('Redes Sociales').update(recordId, updateFields);
-          
-          return res.json({
-            success: true,
-            message: `Attached smaller image with title overlay for ${platform}`,
-            data: {
-              recordId,
-              platform,
-              title: title,
-              previewWithTitle: previewDataUrl,
-              note: "Using reduced quality for Airtable storage"
-            }
-          });
-        } catch (secondError) {
-          logger.error('Even tiny images failed to upload:', secondError);
-          
-          // Fall back to URL method as last resort
-          if (platform.toLowerCase() === 'instagram') {
-            updateFields.social_image_instagram = [{
-              filename: fileName,
-              url: imageUrl
-            }];
-          } else if (platform.toLowerCase() === 'twitter') {
-            updateFields.social_image_twitter = [{
-              filename: fileName,
-              url: imageUrl
-            }];
-          } else if (platform.toLowerCase() === 'facebook') {
-            updateFields.social_image_facebook = [{
-              filename: fileName,
-              url: imageUrl
-            }];
-          } else {
-            updateFields.social_image_instagram = [{
-              filename: `instagram-${timestamp}.jpg`,
-              url: imageUrl
-            }];
-            updateFields.social_image_twitter = [{
-              filename: `twitter-${timestamp}.jpg`,
-              url: imageUrl
-            }];
-            updateFields.social_image_facebook = [{
-              filename: `facebook-${timestamp}.jpg`,
-              url: imageUrl
-            }];
-          }
-          
-          await base('Redes Sociales').update(recordId, updateFields);
-          
-          return res.json({
-            success: true,
-            message: `Attached original image URL for ${platform} (title overlay not available in storage)`,
-            data: {
-              recordId,
-              platform,
-              title: title,
-              previewWithTitle: previewDataUrl,
-              note: "Using original URL due to upload limitations"
-            }
-          });
-        }
-      }
-    } catch (airtableError) {
-      logger.error('Airtable update error:', airtableError);
+      });
+    } catch (uploadError) {
+      logger.error('Error uploading image:', uploadError);
       
       return res.status(500).json({
         success: false,
-        error: `Error updating Airtable record: ${airtableError.message}`
+        error: `Error uploading image: ${uploadError.message}`
       });
     }
   } catch (error) {
@@ -930,13 +816,72 @@ router.post('/generate-all', async (req, res) => {
       });
     }
     
-    // Update the record in Airtable with all social media images
+    // Update the /generate-all endpoint to use Cloudinary
+
+    // In the /generate-all endpoint, replace the Airtable attachment section with:
+
     try {
+      // Get high-quality buffers for each platform
+      const fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
+      
+      // Get Instagram-specific image if it exists
+      let igBuffer;
+      if (instagramCanvas) {
+        igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
+      } else {
+        // If no Instagram-specific canvas, use the default one
+        igBuffer = fbtwBuffer;
+      }
+      
+      // Create unique filenames for each platform
+      const fbFileName = `facebook-${recordId}-${timestamp}.jpg`;
+      const twFileName = `twitter-${recordId}-${timestamp}.jpg`;
+      const igFileName = `instagram-${recordId}-${timestamp}.jpg`;
+      
+      // Upload images to Cloudinary (in parallel for speed)
+      const [fbUrl, twUrl, igUrl] = await Promise.all([
+        uploadImage(fbtwBuffer, fbFileName),
+        uploadImage(fbtwBuffer, twFileName),
+        uploadImage(igBuffer, igFileName)
+      ]);
+      
+      // Create update object with Cloudinary URLs
+      const updateFields = {
+        social_image_facebook: [{
+          filename: fbFileName,
+          url: fbUrl
+        }],
+        social_image_twitter: [{
+          filename: twFileName,
+          url: twUrl
+        }],
+        social_image_instagram: [{
+          filename: igFileName,
+          url: igUrl
+        }]
+      };
+      
+      // Update Airtable record
       await base('Redes Sociales').update(recordId, updateFields);
+      
+      // Add results for response
+      platforms.forEach(platform => {
+        let url;
+        if (platform === 'facebook') url = fbUrl;
+        else if (platform === 'twitter') url = twUrl;
+        else if (platform === 'instagram') url = igUrl;
+        
+        results.push({
+          platform,
+          success: true,
+          title: title,
+          imageUrl: url
+        });
+      });
       
       return res.json({
         success: true,
-        message: 'Attached social media images with title overlay for all platforms',
+        message: 'Generated and uploaded social media images for all platforms',
         data: {
           recordId,
           results,
@@ -944,84 +889,28 @@ router.post('/generate-all', async (req, res) => {
           previewWithTitle: previewDataUrl
         }
       });
-    } catch (airtableError) {
-      logger.error('Airtable update error:', airtableError);
+    } catch (uploadError) {
+      logger.error('Error uploading images:', uploadError);
       
-      // Try with even smaller/lower quality images
-      try {
-        // Create even smaller images for a second attempt
-        const tinyCanvas = createCanvas(Math.floor(width/3), Math.floor(height/3));
-        const tinyCtx = tinyCanvas.getContext('2d');
-        tinyCtx.drawImage(canvas, 0, 0, width, height, 0, 0, Math.floor(width/3), Math.floor(height/3));
-        
-        const tinyBuffer = tinyCanvas.toBuffer('image/jpeg', { quality: 0.5 });
-        const tinyBase64 = tinyBuffer.toString('base64');
-        
-        // Update all fields with tiny images
-        updateFields.social_image_facebook = [{
-          filename: `facebook-${timestamp}.jpg`,
-          type: 'image/jpeg',
-          content: tinyBase64
-        }];
-        
-        updateFields.social_image_twitter = [{
-          filename: `twitter-${timestamp}.jpg`,
-          type: 'image/jpeg',
-          content: tinyBase64
-        }];
-        
-        updateFields.social_image_instagram = [{
-          filename: `instagram-${timestamp}.jpg`,
-          type: 'image/jpeg',
-          content: tinyBase64
-        }];
-        
-        await base('Redes Sociales').update(recordId, updateFields);
-        
-        return res.json({
-          success: true,
-          message: 'Attached social media images with title overlay (reduced quality)',
-          data: {
-            recordId,
-            results,
-            title,
-            previewWithTitle: previewDataUrl,
-            note: "Using reduced quality for Airtable storage"
-          }
+      // Add error results
+      platforms.forEach(platform => {
+        results.push({
+          platform,
+          success: false,
+          error: uploadError.message,
+          title: title
         });
-      } catch (secondError) {
-        logger.error('Second attempt failed, falling back to URL method:', secondError);
-        
-        // Fall back to URL method as absolute last resort
-        const fallbackUpdateFields = {
-          social_image_facebook: [{
-            filename: `facebook-${timestamp}.jpg`,
-            url: imageUrl
-          }],
-          social_image_twitter: [{
-            filename: `twitter-${timestamp}.jpg`,
-            url: imageUrl
-          }],
-          social_image_instagram: [{
-            filename: `instagram-${timestamp}.jpg`,
-            url: imageUrl
-          }]
-        };
-        
-        await base('Redes Sociales').update(recordId, fallbackUpdateFields);
-        
-        return res.json({
-          success: true,
-          message: 'Attached original images (title overlay not available in storage)',
-          data: {
-            recordId,
-            results,
-            title,
-            previewWithTitle: previewDataUrl,
-            note: "Original images used due to upload limitations"
-          }
-        });
-      }
+      });
+      
+      return res.status(500).json({
+        success: false,
+        error: `Failed to upload images: ${uploadError.message}`,
+        data: {
+          recordId,
+          results,
+          previewWithTitle: previewDataUrl
+        }
+      });
     }
   } catch (error) {
     logger.error('Error attaching social media images:', error);
