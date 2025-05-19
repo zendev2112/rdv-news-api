@@ -7,18 +7,53 @@ import { uploadImage } from '../services/cloudinary.js';
 import { createCanvas, loadImage, registerFont } from 'canvas';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Register a system font that's guaranteed to exist
-// This avoids the issue where fonts like 'Arial' might not be available
-// Use generic sans-serif font - most systems have at least one sans-serif
+// Create fonts directory if needed
+const fontDir = path.join(__dirname, '../../assets/fonts');
+if (!fs.existsSync(fontDir)) {
+  fs.mkdirSync(fontDir, { recursive: true });
+}
+
+// Try multiple font registration approaches
+let fontRegistered = false;
+
+// First try project bundled fonts (if they exist)
+const fontPath = path.join(fontDir, 'Arial.ttf');
+const fontPathBold = path.join(fontDir, 'Arial-Bold.ttf');
+
 try {
-  // Try to register system fonts if possible
-  registerFont('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', { family: 'DejaVuSans' });
-  registerFont('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf', { family: 'LiberationSans' });
+  if (fs.existsSync(fontPath)) {
+    registerFont(fontPath, { family: 'Arial' });
+    fontRegistered = true;
+    logger.info('Registered bundled Arial font');
+  }
 } catch (err) {
-  logger.warn('Could not register system fonts:', err.message);
+  logger.warn('Failed to register bundled font:', err.message);
+}
+
+// Then try system fonts
+if (!fontRegistered) {
+  try {
+    // Try to register system fonts if possible
+    registerFont('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', { family: 'DejaVuSans' });
+    registerFont('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf', { family: 'LiberationSans' });
+    fontRegistered = true;
+    logger.info('Registered system fonts');
+  } catch (err) {
+    logger.warn('Could not register system fonts:', err.message);
+  }
+}
+
+// Last resort - register a fake font to avoid errors
+if (!fontRegistered) {
+  try {
+    logger.warn('No fonts registered, using node-canvas built-in fonts');
+  } catch (err) {
+    logger.error('Font registration completely failed:', err.message);
+  }
 }
 
 const router = express.Router();
@@ -35,12 +70,9 @@ function roundRect(ctx, x, y, width, height, radius) {
   ctx.fill();
 }
 
-// Modify the getFont function to use only system fonts
+// Modify the getFont function to use most basic fonts possible
 function getFont(size, bold = false) {
-  // Use system fonts in order of preference
-  return bold 
-    ? `bold ${size}px monospace` 
-    : `${size}px monospace`;
+  return bold ? `bold ${size}px sans-serif` : `${size}px sans-serif`;
 }
 
 // Test GET endpoint
@@ -167,29 +199,19 @@ router.post('/generate', async (req, res) => {
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
       
-      // Create a simple dark overlay for text
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(0, height - 150, width, 150);
-
-      // Set font directly (don't use getFont helper)
-      ctx.font = 'bold 36px monospace';
-
-      // Set text properties
+      // Add a solid color background for text
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(0, height - 120, width, 120);
+      
+      // Use extremely basic text settings
+      ctx.font = `bold ${Math.floor(width * 0.04)}px sans-serif`;
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-
-      // Draw title text (simplified with truncation)
-      const shortTitle = title.length > 50 ? title.substring(0, 47) + '...' : title;
-      ctx.fillText(shortTitle, width / 2, height - 75);
       
-      // Reset shadow
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-      
-      // SIMPLIFY TITLE RENDERING - END
+      // Draw title text (simplified, no wrapping)
+      const shortTitle = title.length > 60 ? title.substring(0, 57) + '...' : title;
+      ctx.fillText(shortTitle, width / 2, height - 60);
       
       // Add publication date
       const today = new Date();
@@ -199,11 +221,9 @@ router.post('/generate', async (req, res) => {
         year: 'numeric'
       });
       
-      // Add date with simpler font
-      ctx.font = '16px monospace';
-      ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'left';
-      ctx.fillText(dateStr, width * 0.07, height - 25);
+      ctx.font = `${Math.floor(width * 0.02)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(dateStr, width / 2, height - 25);
       
     } catch (drawError) {
       logger.error('Error drawing image:', drawError);
@@ -355,8 +375,6 @@ router.post('/generate-all', async (req, res) => {
     const airtable = new Airtable({ apiKey: apiToken });
     const base = airtable.base(baseId);
     
-    // Import canvas package if not already imported
-    
     // Create timestamp for filenames
     const timestamp = new Date().toISOString().substring(0, 10);
     
@@ -400,21 +418,19 @@ router.post('/generate-all', async (req, res) => {
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
       
-      // Create a simple dark overlay for text
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(0, height - 150, width, 150);
-
-      // Set font directly (don't use getFont helper)
-      ctx.font = 'bold 36px monospace';
-
-      // Set text properties
+      // Add a solid color background for text
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(0, height - 120, width, 120);
+      
+      // Use extremely basic text settings
+      ctx.font = `bold ${Math.floor(width * 0.04)}px sans-serif`;
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-
-      // Draw title text (simplified with truncation)
-      const shortTitle = title.length > 50 ? title.substring(0, 47) + '...' : title;
-      ctx.fillText(shortTitle, width / 2, height - 75);
+      
+      // Draw title text (simplified, no wrapping)
+      const shortTitle = title.length > 60 ? title.substring(0, 57) + '...' : title;
+      ctx.fillText(shortTitle, width / 2, height - 60);
       
       // Add date
       const today = new Date();
@@ -424,17 +440,9 @@ router.post('/generate-all', async (req, res) => {
         year: 'numeric'
       });
       
-      // Add date with simpler font
-      ctx.font = '16px monospace';
-      ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'left';
-      ctx.fillText(dateStr, width * 0.07, height - 25);
-      
-      // Reset shadow for other operations
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
+      ctx.font = `${Math.floor(width * 0.02)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(dateStr, width / 2, height - 25);
       
       // Create a preview data URL
       const previewCanvas = createCanvas(600, 315);
@@ -476,46 +484,21 @@ router.post('/generate-all', async (req, res) => {
         // Draw the image
         instagramCtx.drawImage(image, ix, iy, iw, ih, 0, 0, 800, 800);
         
-        // Add gradient overlay
-        const instagramGradient = instagramCtx.createLinearGradient(0, 400, 0, 800);
-        instagramGradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-        instagramGradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
-        instagramCtx.fillStyle = instagramGradient;
-        instagramCtx.fillRect(0, 400, 800, 400);
-        
-        // Add shadow for text
-        instagramCtx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-        instagramCtx.shadowBlur = 10;
-        instagramCtx.shadowOffsetX = 3;
-        instagramCtx.shadowOffsetY = 3;
+        // Add solid color background for text
+        instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        instagramCtx.fillRect(0, 680, 800, 120);
         
         // Draw title text - simple approach
-        instagramCtx.font = `bold 36px monospace`;
+        instagramCtx.font = `bold ${Math.floor(800 * 0.04)}px sans-serif`;
         instagramCtx.fillStyle = '#FFFFFF';
         instagramCtx.textAlign = 'center';
         instagramCtx.textBaseline = 'middle';
-        
-        // Simple text display without complex wrapping
-        instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        instagramCtx.fillRect(0, 700, 800, 100);
-        instagramCtx.font = 'bold 36px monospace';
-        instagramCtx.fillStyle = '#FFFFFF';
-        instagramCtx.textAlign = 'center';
-        instagramCtx.textBaseline = 'middle';
-        instagramCtx.fillText(shortTitle, 400, 750);
+        instagramCtx.fillText(shortTitle, 400, 730);
         
         // Add date
-        instagramCtx.font = `16px sans-serif`;
-        instagramCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        instagramCtx.textAlign = 'left';
-        instagramCtx.textBaseline = 'bottom';
-        instagramCtx.fillText(dateStr, 40, 650);
-        
-        // Reset shadow
-        instagramCtx.shadowColor = 'transparent';
-        instagramCtx.shadowBlur = 0;
-        instagramCtx.shadowOffsetX = 0;
-        instagramCtx.shadowOffsetY = 0;
+        instagramCtx.font = `${Math.floor(800 * 0.02)}px sans-serif`;
+        instagramCtx.textAlign = 'center';
+        instagramCtx.fillText(dateStr, 400, 770);
         
         // Get Instagram buffer for Cloudinary
         igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
