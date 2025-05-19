@@ -304,12 +304,25 @@ router.post('/generate', async (req, res) => {
       const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
       const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
-      // Draw title text with most basic font approach
-      ctx.font = `bold ${Math.floor(width * 0.04)}px Roboto, sans-serif`;
+      // Multi-line approach for text rendering - draw character by character
+      const centerX = width / 2;
+      const titleY = height - 60;
+      const fontSize = Math.floor(width * 0.04);
+      const charWidth = fontSize * 0.6;
+      
+      // Save context state
+      ctx.save();
       ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(shortTitle, width / 2, height - 60);
+      
+      // Draw each character individually
+      for (let i = 0; i < shortTitle.length; i++) {
+        const char = shortTitle[i];
+        const xPos = centerX - ((shortTitle.length * charWidth) / 2) + (i * charWidth);
+        
+        // Draw a single character
+        ctx.font = `bold ${fontSize}px Roboto, sans-serif`;
+        ctx.fillText(char, xPos, titleY);
+      }
       
       // Add ASCII-only date
       const today = new Date();
@@ -319,8 +332,22 @@ router.post('/generate', async (req, res) => {
         year: 'numeric'
       }).replace(/[^\x00-\x7F]/g, '');
       
-      ctx.font = `${Math.floor(width * 0.02)}px Roboto, sans-serif`;
-      ctx.fillText(dateStr, width / 2, height - 25);
+      // Draw date character by character
+      const dateY = height - 25;
+      const dateFontSize = Math.floor(width * 0.02);
+      const dateCharWidth = dateFontSize * 0.6;
+      
+      for (let i = 0; i < dateStr.length; i++) {
+        const char = dateStr[i];
+        const xPos = centerX - ((dateStr.length * dateCharWidth) / 2) + (i * dateCharWidth);
+        
+        // Draw a single character
+        ctx.font = `${dateFontSize}px Roboto, sans-serif`;
+        ctx.fillText(char, xPos, dateY);
+      }
+      
+      // Restore context
+      ctx.restore();
       
     } catch (drawError) {
       logger.error('Error drawing image:', drawError);
@@ -526,12 +553,25 @@ router.post('/generate-all', async (req, res) => {
       const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
       const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
-      // Draw title text with most basic font approach
-      ctx.font = `bold ${Math.floor(width * 0.04)}px Roboto, sans-serif`;
+      // Multi-line approach for text rendering - draw character by character
+      const centerX = width / 2;
+      const titleY = height - 60;
+      const fontSize = Math.floor(width * 0.04);
+      const charWidth = fontSize * 0.6;
+      
+      // Save context state
+      ctx.save();
       ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(shortTitle, width / 2, height - 60);
+      
+      // Draw each character individually
+      for (let i = 0; i < shortTitle.length; i++) {
+        const char = shortTitle[i];
+        const xPos = centerX - ((shortTitle.length * charWidth) / 2) + (i * charWidth);
+        
+        // Draw a single character
+        ctx.font = `bold ${fontSize}px Roboto, sans-serif`;
+        ctx.fillText(char, xPos, titleY);
+      }
       
       // Add ASCII-only date
       const today = new Date();
@@ -541,8 +581,22 @@ router.post('/generate-all', async (req, res) => {
         year: 'numeric'
       }).replace(/[^\x00-\x7F]/g, '');
       
-      ctx.font = `${Math.floor(width * 0.02)}px Roboto, sans-serif`;
-      ctx.fillText(dateStr, width / 2, height - 25);
+      // Draw date character by character
+      const dateY = height - 25;
+      const dateFontSize = Math.floor(width * 0.02);
+      const dateCharWidth = dateFontSize * 0.6;
+      
+      for (let i = 0; i < dateStr.length; i++) {
+        const char = dateStr[i];
+        const xPos = centerX - ((dateStr.length * dateCharWidth) / 2) + (i * dateCharWidth);
+        
+        // Draw a single character
+        ctx.font = `${dateFontSize}px Roboto, sans-serif`;
+        ctx.fillText(char, xPos, dateY);
+      }
+      
+      // Restore context
+      ctx.restore();
       
       // Create a preview data URL
       const previewCanvas = createCanvas(600, 315);
@@ -591,17 +645,46 @@ router.post('/generate-all', async (req, res) => {
         instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         instagramCtx.fillRect(0, 680, 800, 120);
         
-        // Draw title text - simple approach
-        instagramCtx.font = `bold ${Math.floor(800 * 0.04)}px Roboto, sans-serif`;
-        instagramCtx.fillStyle = '#FFFFFF';
-        instagramCtx.textAlign = 'center';
-        instagramCtx.textBaseline = 'middle';
-        instagramCtx.fillText(shortTitle, 400, 730);
+        // Use ASCII characters only for maximum compatibility
+        const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
+        const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
         
-        // Add date
-        instagramCtx.font = `${Math.floor(800 * 0.02)}px Roboto, sans-serif`;
-        instagramCtx.textAlign = 'center';
-        instagramCtx.fillText(dateStr, 400, 770);
+        // Multi-line approach for text rendering - draw character by character
+        const centerX = 400;
+        const titleY = 730;
+        const fontSize = Math.floor(800 * 0.04);
+        const charWidth = fontSize * 0.6;
+        
+        // Save context state
+        instagramCtx.save();
+        instagramCtx.fillStyle = '#FFFFFF';
+        
+        // Draw each character individually
+        for (let i = 0; i < shortTitle.length; i++) {
+          const char = shortTitle[i];
+          const xPos = centerX - ((shortTitle.length * charWidth) / 2) + (i * charWidth);
+          
+          // Draw a single character
+          instagramCtx.font = `bold ${fontSize}px Roboto, sans-serif`;
+          instagramCtx.fillText(char, xPos, titleY);
+        }
+        
+        // Draw date character by character
+        const dateY = 770;
+        const dateFontSize = Math.floor(800 * 0.02);
+        const dateCharWidth = dateFontSize * 0.6;
+        
+        for (let i = 0; i < dateStr.length; i++) {
+          const char = dateStr[i];
+          const xPos = centerX - ((dateStr.length * dateCharWidth) / 2) + (i * dateCharWidth);
+          
+          // Draw a single character
+          instagramCtx.font = `${dateFontSize}px Roboto, sans-serif`;
+          instagramCtx.fillText(char, xPos, dateY);
+        }
+        
+        // Restore context
+        instagramCtx.restore();
         
         // Get Instagram buffer for Cloudinary
         igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
