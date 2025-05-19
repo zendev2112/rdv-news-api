@@ -4,12 +4,26 @@ import logger from '../utils/logger.js';
 import config from '../config/index.js';
 import imageGenerator from '../services/image-generator.js';
 import { uploadImage } from '../services/cloudinary.js';
+import { registerFont } from 'canvas';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Register a system font that's guaranteed to exist
+// This avoids the issue where fonts like 'Arial' might not be available
+// Use generic sans-serif font - most systems have at least one sans-serif
+try {
+  // Try to register system fonts if possible
+  registerFont('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', { family: 'DejaVuSans' });
+  registerFont('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf', { family: 'LiberationSans' });
+} catch (err) {
+  logger.warn('Could not register system fonts:', err.message);
+}
 
 const router = express.Router();
 
 // Define the roundRect function outside of your route handlers so it's available everywhere
-
-// Add this helper function at the top of your file, after the imports but before the routes
 function roundRect(ctx, x, y, width, height, radius) {
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
@@ -19,6 +33,13 @@ function roundRect(ctx, x, y, width, height, radius) {
   ctx.arcTo(x, y, x + width, y, radius);
   ctx.closePath();
   ctx.fill();
+}
+
+// When setting fonts, use a font fallback chain:
+// Try our registered fonts first, then fallback to system defaults
+function getFont(size, bold = false) {
+  const weight = bold ? 'bold' : 'normal';
+  return `${weight} ${size}px DejaVuSans, LiberationSans, sans-serif`;
 }
 
 // Test GET endpoint
@@ -161,7 +182,7 @@ router.post('/generate', async (req, res) => {
       
       // Add your site's branding/logo
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 20px Arial';
+      ctx.font = getFont(20, true);
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText('RDV NEWS', 20, 20);
@@ -181,7 +202,7 @@ router.post('/generate', async (req, res) => {
       
       // Draw platform text
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 14px Arial';
+      ctx.font = getFont(14, true);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(platformText, badgeX + badgeWidth/2, badgeY + badgeHeight/2);
@@ -203,7 +224,7 @@ router.post('/generate', async (req, res) => {
       ctx.shadowOffsetX = 2;
       ctx.shadowOffsetY = 2;
       
-      ctx.font = `bold ${fontSize}px 'Arial', sans-serif`;
+      ctx.font = getFont(fontSize, true);
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'left';  // Left align looks more news-like
       ctx.textBaseline = 'bottom';  // Position from bottom
@@ -248,7 +269,7 @@ router.post('/generate', async (req, res) => {
         year: 'numeric'
       });
       
-      ctx.font = '16px Arial';
+      ctx.font = getFont(16);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
@@ -264,7 +285,7 @@ router.post('/generate', async (req, res) => {
       logger.error('Error drawing image:', drawError);
       
       // Just draw title text on black background
-      ctx.font = 'bold 24px Arial';
+      ctx.font = getFont(24, true);
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -477,7 +498,7 @@ router.post('/generate-all', async (req, res) => {
       
       // Add your site's branding/logo
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 20px Arial';
+      ctx.font = getFont(20, true);
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText('RDV NEWS', 20, 20);
@@ -497,7 +518,7 @@ router.post('/generate-all', async (req, res) => {
       
       // Draw platform text
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 14px Arial';
+      ctx.font = getFont(14, true);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(platformText, badgeX + badgeWidth/2, badgeY + badgeHeight/2);
@@ -519,7 +540,7 @@ router.post('/generate-all', async (req, res) => {
       ctx.shadowOffsetX = 2;
       ctx.shadowOffsetY = 2;
       
-      ctx.font = `bold ${fontSize}px 'Arial', sans-serif`;
+      ctx.font = getFont(fontSize, true);
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'left';  // Left align looks more news-like
       ctx.textBaseline = 'bottom';  // Position from bottom
@@ -564,7 +585,7 @@ router.post('/generate-all', async (req, res) => {
         year: 'numeric'
       });
       
-      ctx.font = '16px Arial';
+      ctx.font = getFont(16);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
@@ -639,7 +660,7 @@ router.post('/generate-all', async (req, res) => {
         
         // Add branding
         instagramCtx.fillStyle = '#ffffff';
-        instagramCtx.font = 'bold 16px Arial';
+        instagramCtx.font = getFont(16, true);
         instagramCtx.textAlign = 'left';
         instagramCtx.textBaseline = 'top';
         instagramCtx.fillText('RDV NEWS', 20, 20);
@@ -658,7 +679,7 @@ router.post('/generate-all', async (req, res) => {
         
         // Draw platform text
         instagramCtx.fillStyle = '#ffffff';
-        instagramCtx.font = 'bold 14px Arial';
+        instagramCtx.font = getFont(14, true);
         instagramCtx.textAlign = 'center';
         instagramCtx.textBaseline = 'middle';
         instagramCtx.fillText(igText, igBadgeX + igBadgeWidth/2, igBadgeY + igBadgeHeight/2);
@@ -669,7 +690,7 @@ router.post('/generate-all', async (req, res) => {
         instagramCtx.shadowOffsetX = 2;
         instagramCtx.shadowOffsetY = 2;
         
-        instagramCtx.font = `bold ${Math.floor(400 * 0.06)}px 'Arial', sans-serif`;
+        instagramCtx.font = getFont(Math.floor(400 * 0.06), true);
         instagramCtx.fillStyle = '#FFFFFF';
         instagramCtx.textAlign = 'left';
         instagramCtx.textBaseline = 'bottom';
@@ -706,7 +727,7 @@ router.post('/generate-all', async (req, res) => {
         }
         
         // Add date
-        instagramCtx.font = '14px Arial';
+        instagramCtx.font = getFont(14);
         instagramCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         instagramCtx.textAlign = 'left';
         instagramCtx.textBaseline = 'bottom';
@@ -768,11 +789,11 @@ router.post('/generate-all', async (req, res) => {
       fallbackCtx.fillStyle = '#000000';
       fallbackCtx.fillRect(0, 0, 600, 335);
       fallbackCtx.fillStyle = '#FFFFFF';
-      fallbackCtx.font = 'bold 24px Arial';
+      fallbackCtx.font = getFont(24, true);
       fallbackCtx.textAlign = 'center';
       fallbackCtx.textBaseline = 'middle';
       fallbackCtx.fillText(title.substring(0, 50), 300, 168);
-      fallbackCtx.font = '16px Arial';
+      fallbackCtx.font = getFont(16);
       fallbackCtx.fillText('Error processing image', 300, 200);
       
       previewDataUrl = fallbackCanvas.toDataURL('image/jpeg');
@@ -882,7 +903,7 @@ router.post('/generate-all', async (req, res) => {
         
         // Add branding
         instagramCtx.fillStyle = '#ffffff';
-        instagramCtx.font = 'bold 20px Arial';
+        instagramCtx.font = getFont(20, true);
         instagramCtx.textAlign = 'left';
         instagramCtx.textBaseline = 'top';
         instagramCtx.fillText('RDV NEWS', 20, 20);
@@ -901,7 +922,7 @@ router.post('/generate-all', async (req, res) => {
         
         // Draw platform text
         instagramCtx.fillStyle = '#ffffff';
-        instagramCtx.font = 'bold 14px Arial';
+        instagramCtx.font = getFont(14, true);
         instagramCtx.textAlign = 'center';
         instagramCtx.textBaseline = 'middle';
         instagramCtx.fillText(igText, igBadgeX + igBadgeWidth/2, igBadgeY + igBadgeHeight/2);
@@ -912,7 +933,7 @@ router.post('/generate-all', async (req, res) => {
         instagramCtx.shadowOffsetX = 2;
         instagramCtx.shadowOffsetY = 2;
         
-        instagramCtx.font = `bold ${Math.floor(800 * 0.05)}px 'Arial', sans-serif`;
+        instagramCtx.font = getFont(Math.floor(800 * 0.05), true);
         instagramCtx.fillStyle = '#FFFFFF';
         instagramCtx.textAlign = 'left';
         instagramCtx.textBaseline = 'bottom';
@@ -949,7 +970,7 @@ router.post('/generate-all', async (req, res) => {
         }
         
         // Add date
-        instagramCtx.font = '16px Arial';
+        instagramCtx.font = getFont(16);
         instagramCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         instagramCtx.textAlign = 'left';
         instagramCtx.textBaseline = 'bottom';
