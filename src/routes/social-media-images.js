@@ -632,6 +632,16 @@ router.post('/generate-all', async (req, res) => {
       const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
       const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
+      // Create date string outside try-catch for both paths
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric', 
+        year: 'numeric'
+      }).replace(/[^\x00-\x7F]/g, '');
+      
+      let fbtwBuffer, igBuffer; // Initialize both buffers to make sure they're defined
+      
       try {
         // Create title text image using ImageMagick
         const titleImagePath = await createTextImage(shortTitle, width - 100, {
@@ -642,13 +652,6 @@ router.post('/generate-all', async (req, res) => {
         });
         
         // Create date text image using ImageMagick
-        const today = new Date();
-        const dateStr = today.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric', 
-          year: 'numeric'
-        }).replace(/[^\x00-\x7F]/g, '');
-        
         const dateImagePath = await createTextImage(dateStr, width / 2, {
           fontSize: Math.floor(width * 0.02),
           color: 'white',
@@ -670,12 +673,9 @@ router.post('/generate-all', async (req, res) => {
         previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.8);
         
         // Create Instagram square image if needed
-        let instagramCanvas;
-        let igBuffer;
-        
         if (platforms.includes('instagram')) {
           // Create Instagram-specific canvas (square format)
-          instagramCanvas = createCanvas(800, 800);
+          const instagramCanvas = createCanvas(800, 800);
           const instagramCtx = instagramCanvas.getContext('2d');
           
           // Draw black background
@@ -749,70 +749,7 @@ router.post('/generate-all', async (req, res) => {
         fs.promises.unlink(dateImagePath).catch(() => {});
         
         // Get high-quality buffer for Facebook/Twitter
-        const fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
-        
-        // Create unique filenames for each platform
-        const fbFileName = `facebook-${recordId}-${timestamp}.jpg`;
-        const twFileName = `twitter-${recordId}-${timestamp}.jpg`;
-        const igFileName = `instagram-${recordId}-${timestamp}.jpg`;
-        
-        // Upload images to Cloudinary (in parallel for speed)
-        const [fbUrl, twUrl, igUrl] = await Promise.all([
-          uploadImage(fbtwBuffer, fbFileName),
-          uploadImage(fbtwBuffer, twFileName),
-          uploadImage(igBuffer, igFileName)
-        ]);
-        
-        // Create update object with Cloudinary URLs
-        const updateFields = {
-          social_image_facebook: [{
-            filename: fbFileName,
-            url: fbUrl
-          }],
-          social_image_twitter: [{
-            filename: twFileName,
-            url: twUrl
-          }],
-          social_image_instagram: [{
-            filename: igFileName,
-            url: igUrl
-          }]
-        };
-        
-        // Update Airtable record
-        await base('Redes Sociales').update(recordId, updateFields);
-        
-        // Prepare results for response
-        const platformResults = [];
-        platformResults.push({
-          platform: 'facebook',
-          success: true,
-          title: title,
-          imageUrl: fbUrl
-        });
-        platformResults.push({
-          platform: 'twitter',
-          success: true,
-          title: title,
-          imageUrl: twUrl
-        });
-        platformResults.push({
-          platform: 'instagram',
-          success: true,
-          title: title,
-          imageUrl: igUrl
-        });
-        
-        return res.json({
-          success: true,
-          message: 'Generated and uploaded social media images for all platforms',
-          data: {
-            recordId,
-            results: platformResults,
-            title,
-            previewWithTitle: previewDataUrl
-          }
-        });
+        fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
       } catch (textError) {
         logger.error('Error creating text with ImageMagick:', textError);
         
@@ -836,14 +773,6 @@ router.post('/generate-all', async (req, res) => {
           ctx.fillText(char, xPos, titleY);
         }
         
-        // Add ASCII-only date
-        const today = new Date();
-        const dateStr = today.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric', 
-          year: 'numeric'
-        }).replace(/[^\x00-\x7F]/g, '');
-        
         // Draw date character by character
         const dateY = height - 25;
         const dateFontSize = Math.floor(width * 0.02);
@@ -861,21 +790,151 @@ router.post('/generate-all', async (req, res) => {
         // Restore context
         ctx.restore();
         
+        // Create a preview
+        const previewCanvas = createCanvas(600, 315);
+        const previewCtx = previewCanvas.getContext('2d');
+        previewCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 600, 315);
+        previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.8);
+        
         // Create Instagram-specific canvas with character-by-character rendering
         if (platforms.includes('instagram')) {
           const instagramCanvas = createCanvas(800, 800);
           const instagramCtx = instagramCanvas.getContext('2d');
           
-          // Draw Instagram image with same fallback text approach
-          // (Copy similar image rendering code from above)
+          // Draw black background
+          instagramCtx.fillStyle = '#000000';
+          instagramCtx.fillRect(0, 0, 800, 800);
           
-          // Use default canvas buffer if Instagram creation fails
+          // Draw the image proportionally
+          const imgAspect = image.width / image.height;
+          
+          let ix, iy, iw, ih;
+          if (imgAspect > 1) {
+            // Image is wider than tall, crop sides
+            ih = image.height;
+            iw = image.height;
+            iy = 0;
+            ix = (image.width - iw) / 2;
+          } else {
+            // Image is taller than wide, crop top/bottom
+            iw = image.width;
+            ih = image.width;
+            ix = 0;
+            iy = (image.height - ih) / 2;
+          }
+          
+          // Draw the image
+          instagramCtx.drawImage(image, ix, iy, iw, ih, 0, 0, 800, 800);
+          
+          // Add the logo
+          await addLogo(instagramCtx, 800, 800);
+          
+          // Add solid color background for text
+          instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+          instagramCtx.fillRect(0, 680, 800, 120);
+          
+          // Draw title character by character
+          const igCenterX = 400;
+          const igTitleY = 730;
+          const igFontSize = Math.floor(800 * 0.04);
+          const igCharWidth = igFontSize * 0.6;
+          
+          instagramCtx.fillStyle = '#FFFFFF';
+          
+          for (let i = 0; i < shortTitle.length; i++) {
+            const char = shortTitle[i];
+            const xPos = igCenterX - ((shortTitle.length * igCharWidth) / 2) + (i * igCharWidth);
+            
+            instagramCtx.font = `bold ${igFontSize}px Roboto, sans-serif`;
+            instagramCtx.fillText(char, xPos, igTitleY);
+          }
+          
+          // Draw date character by character
+          const igDateY = 770;
+          const igDateFontSize = Math.floor(800 * 0.02);
+          const igDateCharWidth = igDateFontSize * 0.6;
+          
+          for (let i = 0; i < dateStr.length; i++) {
+            const char = dateStr[i];
+            const xPos = igCenterX - ((dateStr.length * igDateCharWidth) / 2) + (i * igDateCharWidth);
+            
+            instagramCtx.font = `${igDateFontSize}px Roboto, sans-serif`;
+            instagramCtx.fillText(char, xPos, igDateY);
+          }
+          
+          // Get Instagram buffer for Cloudinary
+          igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
+        } else {
+          // If Instagram is not in the platforms list, just use the default canvas
           igBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
         }
         
-        // Continue with image upload to Cloudinary
-        // (Similar code as above)
+        // Get high-quality buffer for Facebook/Twitter
+        fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
       }
+      
+      // Create unique filenames for each platform
+      const fbFileName = `facebook-${recordId}-${timestamp}.jpg`;
+      const twFileName = `twitter-${recordId}-${timestamp}.jpg`;
+      const igFileName = `instagram-${recordId}-${timestamp}.jpg`;
+      
+      // Upload images to Cloudinary (in parallel for speed)
+      const [fbUrl, twUrl, igUrl] = await Promise.all([
+        uploadImage(fbtwBuffer, fbFileName),
+        uploadImage(fbtwBuffer, twFileName),
+        uploadImage(igBuffer, igFileName)
+      ]);
+      
+      // Create update object with Cloudinary URLs
+      const updateFields = {
+        social_image_facebook: [{
+          filename: fbFileName,
+          url: fbUrl
+        }],
+        social_image_twitter: [{
+          filename: twFileName,
+          url: twUrl
+        }],
+        social_image_instagram: [{
+          filename: igFileName,
+          url: igUrl
+        }]
+      };
+      
+      // Update Airtable record
+      await base('Redes Sociales').update(recordId, updateFields);
+      
+      // Prepare results for response
+      const platformResults = [];
+      platformResults.push({
+        platform: 'facebook',
+        success: true,
+        title: title,
+        imageUrl: fbUrl
+      });
+      platformResults.push({
+        platform: 'twitter',
+        success: true,
+        title: title,
+        imageUrl: twUrl
+      });
+      platformResults.push({
+        platform: 'instagram',
+        success: true,
+        title: title,
+        imageUrl: igUrl
+      });
+      
+      return res.json({
+        success: true,
+        message: 'Generated and uploaded social media images for all platforms',
+        data: {
+          recordId,
+          results: platformResults,
+          title,
+          previewWithTitle: previewDataUrl
+        }
+      });
     } catch (error) {
       logger.error('Error generating or uploading images:', error);
       
