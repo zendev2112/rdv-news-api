@@ -117,6 +117,20 @@ if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir, { recursive: true });
 }
 
+// Check if ImageMagick is installed
+let imagemagickAvailable = false;
+try {
+  const { stdout } = await execAsync('which convert');
+  if (stdout) {
+    imagemagickAvailable = true;
+    logger.info('ImageMagick detected, will use for text rendering');
+  } else {
+    logger.warn('ImageMagick not found in PATH');
+  }
+} catch (error) {
+  logger.warn('ImageMagick not installed or accessible:', error.message);
+}
+
 /**
  * Create text image using ImageMagick and return the path to the temporary file
  * @param {string} text - Text to render
@@ -125,6 +139,11 @@ if (!fs.existsSync(imagesDir)) {
  * @returns {Promise<string>} Path to the created text image
  */
 async function createTextImage(text, width, options = {}) {
+  // If ImageMagick is not available, throw an error to fall back to character-by-character rendering
+  if (!imagemagickAvailable) {
+    throw new Error('ImageMagick not available');
+  }
+  
   try {
     const {
       fontSize = 40,
@@ -144,21 +163,65 @@ async function createTextImage(text, width, options = {}) {
     const tempFile = path.join(os.tmpdir(), `text-${Date.now()}.png`);
     
     // Construct ImageMagick command for transparent background with text
-    const command = `convert -background "${bgColor}" -fill "${color}" \
-      -font ${fontFamily} -pointsize ${fontSize} -weight ${fontWeight} \
-      -size ${width}x -gravity center caption:"${safeText}" \
-      "${tempFile}"`;
+    // Simplified command that should work on most systems
+    const command = `convert -size ${width}x -background ${bgColor} -fill ${color} -gravity center caption:"${safeText}" "${tempFile}"`;
     
     // Execute the command
     logger.info(`Executing ImageMagick command for text: ${safeText.substring(0, 20)}...`);
-    await execAsync(command);
-    logger.info(`Created text image at ${tempFile}`);
+    const { stderr } = await execAsync(command);
     
+    if (stderr) {
+      logger.warn('ImageMagick warning:', stderr);
+    }
+    
+    // Verify the file was created
+    if (!fs.existsSync(tempFile)) {
+      throw new Error('ImageMagick did not create the text image file');
+    }
+    
+    logger.info(`Created text image at ${tempFile}`);
     return tempFile;
   } catch (error) {
     logger.error('Error creating text image with ImageMagick:', error);
     throw error;
   }
+}
+
+/**
+ * Direct text rendering on canvas with special handling to ensure visibility
+ */
+function renderTextDirectly(ctx, text, x, y, options = {}) {
+  const {
+    fontSize = 24,
+    fontFamily = 'Roboto, Arial, sans-serif',
+    color = '#FFFFFF',
+    bold = false,
+    maxWidth = null
+  } = options;
+  
+  // Save current state
+  ctx.save();
+  
+  // Create background shape for text
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  const bgPadding = fontSize * 0.5;
+  const textWidth = maxWidth || (text.length * fontSize * 0.6);
+  ctx.fillRect(x - textWidth/2 - bgPadding, y - fontSize - bgPadding, 
+               textWidth + bgPadding*2, fontSize*2 + bgPadding);
+  
+  // Set text style
+  ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontFamily}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  
+  // Draw text
+  ctx.fillText(text, x, y, maxWidth);
+  
+  // Restore state
+  ctx.restore();
+  
+  return true;
 }
 
 /**
@@ -208,11 +271,6 @@ function roundRect(ctx, x, y, width, height, radius) {
   ctx.arcTo(x, y, x + width, y, radius);
   ctx.closePath();
   ctx.fill();
-}
-
-// Modify the getFont function to use most basic fonts possible
-function getFont(size, bold = false) {
-  return bold ? `bold ${size}px sans-serif` : `${size}px sans-serif`;
 }
 
 // Test GET endpoint
@@ -350,83 +408,28 @@ router.post('/generate', async (req, res) => {
       const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
       const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
-      try {
-        // Create title text image using ImageMagick
-        const titleImagePath = await createTextImage(shortTitle, width - 100, {
-          fontSize: Math.floor(width * 0.04),
-          color: 'white',
-          bgColor: 'none',
-          fontWeight: 'bold'
-        });
-        
-        // Create date text image using ImageMagick
-        const today = new Date();
-        const dateStr = today.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric', 
-          year: 'numeric'
-        }).replace(/[^\x00-\x7F]/g, '');
-        
-        const dateImagePath = await createTextImage(dateStr, width / 2, {
-          fontSize: Math.floor(width * 0.02),
-          color: 'white',
-          bgColor: 'none'
-        });
-        
-        // Load the text images
-        const titleImage = await loadImage(titleImagePath);
-        const dateImage = await loadImage(dateImagePath);
-        
-        // Draw the text images onto the main canvas
-        ctx.drawImage(titleImage, 50, height - 100, width - 100, 60);
-        ctx.drawImage(dateImage, width / 2 - (width / 4), height - 35, width / 2, 25);
-        
-        // Clean up temporary files asynchronously
-        fs.promises.unlink(titleImagePath).catch(() => {});
-        fs.promises.unlink(dateImagePath).catch(() => {});
-      } catch (textError) {
-        logger.error('Error creating text with ImageMagick:', textError);
-        
-        // Fallback to character-by-character rendering if ImageMagick fails
-        const centerX = width / 2;
-        const titleY = height - 60;
-        const fontSize = Math.floor(width * 0.04);
-        const charWidth = fontSize * 0.6;
-        
-        ctx.fillStyle = '#FFFFFF';
-        
-        // Draw each character individually
-        for (let i = 0; i < shortTitle.length; i++) {
-          const char = shortTitle[i];
-          const xPos = centerX - ((shortTitle.length * charWidth) / 2) + (i * charWidth);
-          
-          // Draw a single character
-          ctx.font = `bold ${fontSize}px Roboto, sans-serif`;
-          ctx.fillText(char, xPos, titleY);
-        }
-        
-        // Add ASCII-only date
-        const today = new Date();
-        const dateStr = today.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric', 
-          year: 'numeric'
-        }).replace(/[^\x00-\x7F]/g, '');
-        
-        // Draw date character by character
-        const dateY = height - 25;
-        const dateFontSize = Math.floor(width * 0.02);
-        const dateCharWidth = dateFontSize * 0.6;
-        
-        for (let i = 0; i < dateStr.length; i++) {
-          const char = dateStr[i];
-          const xPos = centerX - ((dateStr.length * dateCharWidth) / 2) + (i * dateCharWidth);
-          
-          // Draw a single character
-          ctx.font = `${dateFontSize}px Roboto, sans-serif`;
-          ctx.fillText(char, xPos, dateY);
-        }
-      }
+      // Add ASCII-only date
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric', 
+        year: 'numeric'
+      }).replace(/[^\x00-\x7F]/g, '');
+      
+      // Since we've had persistent issues with text rendering, directly render the text
+      // with simpler but more reliable approach:
+      
+      // Draw title text
+      renderTextDirectly(ctx, shortTitle, width / 2, height - 60, {
+        fontSize: Math.floor(width * 0.04),
+        bold: true,
+        maxWidth: width * 0.9
+      });
+      
+      // Draw date text
+      renderTextDirectly(ctx, dateStr, width / 2, height - 25, {
+        fontSize: Math.floor(width * 0.02)
+      });
       
     } catch (drawError) {
       logger.error('Error drawing image:', drawError);
@@ -632,7 +635,7 @@ router.post('/generate-all', async (req, res) => {
       const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
       const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
-      // Create date string outside try-catch for both paths
+      // Create date string 
       const today = new Date();
       const dateStr = today.toLocaleDateString('en-US', {
         month: 'short',
@@ -640,237 +643,84 @@ router.post('/generate-all', async (req, res) => {
         year: 'numeric'
       }).replace(/[^\x00-\x7F]/g, '');
       
-      let fbtwBuffer, igBuffer; // Initialize both buffers to make sure they're defined
+      // Directly render the text using our simplified approach
+      renderTextDirectly(ctx, shortTitle, width / 2, height - 60, {
+        fontSize: Math.floor(width * 0.04),
+        bold: true,
+        maxWidth: width * 0.9
+      });
       
-      try {
-        // Create title text image using ImageMagick
-        const titleImagePath = await createTextImage(shortTitle, width - 100, {
-          fontSize: Math.floor(width * 0.04),
-          color: 'white',
-          bgColor: 'none',
-          fontWeight: 'bold'
+      // Draw date text
+      renderTextDirectly(ctx, dateStr, width / 2, height - 25, {
+        fontSize: Math.floor(width * 0.02)
+      });
+      
+      // Create a preview data URL
+      const previewCanvas = createCanvas(600, 315);
+      const previewCtx = previewCanvas.getContext('2d');
+      previewCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 600, 315);
+      previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.8);
+      
+      // Get high-quality buffer for Facebook/Twitter
+      const fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
+      
+      // Create Instagram square image if needed
+      let igBuffer;
+      
+      if (platforms.includes('instagram')) {
+        // Create Instagram-specific canvas (square format)
+        const instagramCanvas = createCanvas(800, 800);
+        const instagramCtx = instagramCanvas.getContext('2d');
+        
+        // Draw black background
+        instagramCtx.fillStyle = '#000000';
+        instagramCtx.fillRect(0, 0, 800, 800);
+        
+        // Draw the image proportionally
+        const imgAspect = image.width / image.height;
+        
+        let ix, iy, iw, ih;
+        if (imgAspect > 1) {
+          // Image is wider than tall, crop sides
+          ih = image.height;
+          iw = image.height;
+          iy = 0;
+          ix = (image.width - iw) / 2;
+        } else {
+          // Image is taller than wide, crop top/bottom
+          iw = image.width;
+          ih = image.width;
+          ix = 0;
+          iy = (image.height - ih) / 2;
+        }
+        
+        // Draw the image
+        instagramCtx.drawImage(image, ix, iy, iw, ih, 0, 0, 800, 800);
+        
+        // Add the logo to Instagram image
+        await addLogo(instagramCtx, 800, 800);
+        
+        // Add solid color background for text
+        instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        instagramCtx.fillRect(0, 680, 800, 120);
+        
+        // Draw Instagram text with direct rendering approach
+        renderTextDirectly(instagramCtx, shortTitle, 400, 730, {
+          fontSize: Math.floor(800 * 0.04),
+          bold: true,
+          maxWidth: 700
         });
         
-        // Create date text image using ImageMagick
-        const dateImagePath = await createTextImage(dateStr, width / 2, {
-          fontSize: Math.floor(width * 0.02),
-          color: 'white',
-          bgColor: 'none'
+        // Draw date text
+        renderTextDirectly(instagramCtx, dateStr, 400, 770, {
+          fontSize: Math.floor(800 * 0.02)
         });
         
-        // Load the text images
-        const titleImage = await loadImage(titleImagePath);
-        const dateImage = await loadImage(dateImagePath);
-        
-        // Draw the text images onto the main canvas
-        ctx.drawImage(titleImage, 50, height - 100, width - 100, 60);
-        ctx.drawImage(dateImage, width / 2 - (width / 4), height - 35, width / 2, 25);
-        
-        // Create a preview data URL
-        const previewCanvas = createCanvas(600, 315);
-        const previewCtx = previewCanvas.getContext('2d');
-        previewCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 600, 315);
-        previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.8);
-        
-        // Create Instagram square image if needed
-        if (platforms.includes('instagram')) {
-          // Create Instagram-specific canvas (square format)
-          const instagramCanvas = createCanvas(800, 800);
-          const instagramCtx = instagramCanvas.getContext('2d');
-          
-          // Draw black background
-          instagramCtx.fillStyle = '#000000';
-          instagramCtx.fillRect(0, 0, 800, 800);
-          
-          // Draw the image proportionally
-          const imgAspect = image.width / image.height;
-          
-          let ix, iy, iw, ih;
-          if (imgAspect > 1) {
-            // Image is wider than tall, crop sides
-            ih = image.height;
-            iw = image.height;
-            iy = 0;
-            ix = (image.width - iw) / 2;
-          } else {
-            // Image is taller than wide, crop top/bottom
-            iw = image.width;
-            ih = image.width;
-            ix = 0;
-            iy = (image.height - ih) / 2;
-          }
-          
-          // Draw the image
-          instagramCtx.drawImage(image, ix, iy, iw, ih, 0, 0, 800, 800);
-          
-          // Add the logo to Instagram image
-          await addLogo(instagramCtx, 800, 800);
-          
-          // Add solid color background for text
-          instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-          instagramCtx.fillRect(0, 680, 800, 120);
-          
-          // Create Instagram title text image
-          const igTitleImagePath = await createTextImage(shortTitle, 700, {
-            fontSize: Math.floor(800 * 0.04),
-            color: 'white',
-            bgColor: 'none',
-            fontWeight: 'bold'
-          });
-          
-          // Create Instagram date text image
-          const igDateImagePath = await createTextImage(dateStr, 400, {
-            fontSize: Math.floor(800 * 0.02),
-            color: 'white',
-            bgColor: 'none'
-          });
-          
-          // Load the text images
-          const igTitleImage = await loadImage(igTitleImagePath);
-          const igDateImage = await loadImage(igDateImagePath);
-          
-          // Draw the text images onto the Instagram canvas
-          instagramCtx.drawImage(igTitleImage, 50, 700, 700, 60);
-          instagramCtx.drawImage(igDateImage, 400 - 200, 765, 400, 25);
-          
-          // Get Instagram buffer for Cloudinary
-          igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
-          
-          // Clean up temporary files asynchronously
-          fs.promises.unlink(igTitleImagePath).catch(() => {});
-          fs.promises.unlink(igDateImagePath).catch(() => {});
-        } else {
-          // If Instagram is not in the platforms list, just use the default canvas
-          igBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
-        }
-        
-        // Clean up temporary files asynchronously
-        fs.promises.unlink(titleImagePath).catch(() => {});
-        fs.promises.unlink(dateImagePath).catch(() => {});
-        
-        // Get high-quality buffer for Facebook/Twitter
-        fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
-      } catch (textError) {
-        logger.error('Error creating text with ImageMagick:', textError);
-        
-        // Fallback to character-by-character rendering if ImageMagick fails
-        const centerX = width / 2;
-        const titleY = height - 60;
-        const fontSize = Math.floor(width * 0.04);
-        const charWidth = fontSize * 0.6;
-        
-        // Save context state
-        ctx.save();
-        ctx.fillStyle = '#FFFFFF';
-        
-        // Draw each character individually
-        for (let i = 0; i < shortTitle.length; i++) {
-          const char = shortTitle[i];
-          const xPos = centerX - ((shortTitle.length * charWidth) / 2) + (i * charWidth);
-          
-          // Draw a single character
-          ctx.font = `bold ${fontSize}px Roboto, sans-serif`;
-          ctx.fillText(char, xPos, titleY);
-        }
-        
-        // Draw date character by character
-        const dateY = height - 25;
-        const dateFontSize = Math.floor(width * 0.02);
-        const dateCharWidth = dateFontSize * 0.6;
-        
-        for (let i = 0; i < dateStr.length; i++) {
-          const char = dateStr[i];
-          const xPos = centerX - ((dateStr.length * dateCharWidth) / 2) + (i * dateCharWidth);
-          
-          // Draw a single character
-          ctx.font = `${dateFontSize}px Roboto, sans-serif`;
-          ctx.fillText(char, xPos, dateY);
-        }
-        
-        // Restore context
-        ctx.restore();
-        
-        // Create a preview
-        const previewCanvas = createCanvas(600, 315);
-        const previewCtx = previewCanvas.getContext('2d');
-        previewCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 600, 315);
-        previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.8);
-        
-        // Create Instagram-specific canvas with character-by-character rendering
-        if (platforms.includes('instagram')) {
-          const instagramCanvas = createCanvas(800, 800);
-          const instagramCtx = instagramCanvas.getContext('2d');
-          
-          // Draw black background
-          instagramCtx.fillStyle = '#000000';
-          instagramCtx.fillRect(0, 0, 800, 800);
-          
-          // Draw the image proportionally
-          const imgAspect = image.width / image.height;
-          
-          let ix, iy, iw, ih;
-          if (imgAspect > 1) {
-            // Image is wider than tall, crop sides
-            ih = image.height;
-            iw = image.height;
-            iy = 0;
-            ix = (image.width - iw) / 2;
-          } else {
-            // Image is taller than wide, crop top/bottom
-            iw = image.width;
-            ih = image.width;
-            ix = 0;
-            iy = (image.height - ih) / 2;
-          }
-          
-          // Draw the image
-          instagramCtx.drawImage(image, ix, iy, iw, ih, 0, 0, 800, 800);
-          
-          // Add the logo
-          await addLogo(instagramCtx, 800, 800);
-          
-          // Add solid color background for text
-          instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-          instagramCtx.fillRect(0, 680, 800, 120);
-          
-          // Draw title character by character
-          const igCenterX = 400;
-          const igTitleY = 730;
-          const igFontSize = Math.floor(800 * 0.04);
-          const igCharWidth = igFontSize * 0.6;
-          
-          instagramCtx.fillStyle = '#FFFFFF';
-          
-          for (let i = 0; i < shortTitle.length; i++) {
-            const char = shortTitle[i];
-            const xPos = igCenterX - ((shortTitle.length * igCharWidth) / 2) + (i * igCharWidth);
-            
-            instagramCtx.font = `bold ${igFontSize}px Roboto, sans-serif`;
-            instagramCtx.fillText(char, xPos, igTitleY);
-          }
-          
-          // Draw date character by character
-          const igDateY = 770;
-          const igDateFontSize = Math.floor(800 * 0.02);
-          const igDateCharWidth = igDateFontSize * 0.6;
-          
-          for (let i = 0; i < dateStr.length; i++) {
-            const char = dateStr[i];
-            const xPos = igCenterX - ((dateStr.length * igDateCharWidth) / 2) + (i * igDateCharWidth);
-            
-            instagramCtx.font = `${igDateFontSize}px Roboto, sans-serif`;
-            instagramCtx.fillText(char, xPos, igDateY);
-          }
-          
-          // Get Instagram buffer for Cloudinary
-          igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
-        } else {
-          // If Instagram is not in the platforms list, just use the default canvas
-          igBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
-        }
-        
-        // Get high-quality buffer for Facebook/Twitter
-        fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
+        // Get Instagram buffer for Cloudinary
+        igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
+      } else {
+        // If Instagram is not in the platforms list, just use the default canvas
+        igBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
       }
       
       // Create unique filenames for each platform
