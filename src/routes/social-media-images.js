@@ -56,6 +56,59 @@ if (!fontRegistered) {
   }
 }
 
+// After your imports, add this function to download and register a font:
+
+/**
+ * Download and register a Google font for reliable text rendering
+ */
+async function setupReliableFonts() {
+  try {
+    // Check if we already have the font
+    const robotoRegularPath = path.join(fontDir, 'Roboto-Regular.ttf');
+    const robotoBoldPath = path.join(fontDir, 'Roboto-Bold.ttf');
+    
+    // Download fonts if they don't exist
+    if (!fs.existsSync(robotoRegularPath)) {
+      logger.info('Downloading Roboto Regular font...');
+      const regularResponse = await fetch('https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Regular.ttf');
+      if (regularResponse.ok) {
+        const buffer = await regularResponse.arrayBuffer();
+        fs.writeFileSync(robotoRegularPath, Buffer.from(buffer));
+        logger.info('Roboto Regular font downloaded successfully');
+      }
+    }
+    
+    if (!fs.existsSync(robotoBoldPath)) {
+      logger.info('Downloading Roboto Bold font...');
+      const boldResponse = await fetch('https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf');
+      if (boldResponse.ok) {
+        const buffer = await boldResponse.arrayBuffer();
+        fs.writeFileSync(robotoBoldPath, Buffer.from(buffer));
+        logger.info('Roboto Bold font downloaded successfully');
+      }
+    }
+    
+    // Register the fonts
+    if (fs.existsSync(robotoRegularPath)) {
+      registerFont(robotoRegularPath, { family: 'Roboto' });
+      logger.info('Registered Roboto Regular font');
+    }
+    
+    if (fs.existsSync(robotoBoldPath)) {
+      registerFont(robotoBoldPath, { family: 'Roboto', weight: 'bold' });
+      logger.info('Registered Roboto Bold font');
+    }
+    
+    return true;
+  } catch (error) {
+    logger.error('Error setting up reliable fonts:', error);
+    return false;
+  }
+}
+
+// Call this function before defining your routes
+await setupReliableFonts();
+
 // Create images directory if needed
 const imagesDir = path.join(__dirname, '../../assets/images');
 if (!fs.existsSync(imagesDir)) {
@@ -252,7 +305,7 @@ router.post('/generate', async (req, res) => {
       const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
       // Draw title text with most basic font approach
-      ctx.font = `bold ${Math.floor(width * 0.04)}px sans-serif`;
+      ctx.font = `bold ${Math.floor(width * 0.04)}px Roboto, sans-serif`;
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -266,7 +319,7 @@ router.post('/generate', async (req, res) => {
         year: 'numeric'
       }).replace(/[^\x00-\x7F]/g, '');
       
-      ctx.font = `${Math.floor(width * 0.02)}px sans-serif`;
+      ctx.font = `${Math.floor(width * 0.02)}px Roboto, sans-serif`;
       ctx.fillText(dateStr, width / 2, height - 25);
       
     } catch (drawError) {
@@ -474,7 +527,7 @@ router.post('/generate-all', async (req, res) => {
       const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
       // Draw title text with most basic font approach
-      ctx.font = `bold ${Math.floor(width * 0.04)}px sans-serif`;
+      ctx.font = `bold ${Math.floor(width * 0.04)}px Roboto, sans-serif`;
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -488,7 +541,7 @@ router.post('/generate-all', async (req, res) => {
         year: 'numeric'
       }).replace(/[^\x00-\x7F]/g, '');
       
-      ctx.font = `${Math.floor(width * 0.02)}px sans-serif`;
+      ctx.font = `${Math.floor(width * 0.02)}px Roboto, sans-serif`;
       ctx.fillText(dateStr, width / 2, height - 25);
       
       // Create a preview data URL
@@ -539,14 +592,14 @@ router.post('/generate-all', async (req, res) => {
         instagramCtx.fillRect(0, 680, 800, 120);
         
         // Draw title text - simple approach
-        instagramCtx.font = `bold ${Math.floor(800 * 0.04)}px sans-serif`;
+        instagramCtx.font = `bold ${Math.floor(800 * 0.04)}px Roboto, sans-serif`;
         instagramCtx.fillStyle = '#FFFFFF';
         instagramCtx.textAlign = 'center';
         instagramCtx.textBaseline = 'middle';
         instagramCtx.fillText(shortTitle, 400, 730);
         
         // Add date
-        instagramCtx.font = `${Math.floor(800 * 0.02)}px sans-serif`;
+        instagramCtx.font = `${Math.floor(800 * 0.02)}px Roboto, sans-serif`;
         instagramCtx.textAlign = 'center';
         instagramCtx.fillText(dateStr, 400, 770);
         
