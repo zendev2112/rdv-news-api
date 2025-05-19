@@ -243,30 +243,30 @@ router.post('/generate', async (req, res) => {
       // Add the logo
       await addLogo(ctx, width, height);
       
-      // Add a solid color background for text
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      // Add a solid color background for text (more opaque)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
       ctx.fillRect(0, height - 120, width, 120);
       
-      // Use extremely basic text settings
+      // Use ASCII characters only for maximum compatibility
+      const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
+      const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
+      
+      // Draw title text with most basic font approach
       ctx.font = `bold ${Math.floor(width * 0.04)}px sans-serif`;
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      
-      // Draw title text (simplified, no wrapping)
-      const shortTitle = title.length > 60 ? title.substring(0, 57) + '...' : title;
       ctx.fillText(shortTitle, width / 2, height - 60);
       
-      // Add publication date
+      // Add ASCII-only date
       const today = new Date();
       const dateStr = today.toLocaleDateString('en-US', {
         month: 'short',
-        day: 'numeric',
+        day: 'numeric', 
         year: 'numeric'
-      });
+      }).replace(/[^\x00-\x7F]/g, '');
       
       ctx.font = `${Math.floor(width * 0.02)}px sans-serif`;
-      ctx.textAlign = 'center';
       ctx.fillText(dateStr, width / 2, height - 25);
       
     } catch (drawError) {
@@ -465,30 +465,30 @@ router.post('/generate-all', async (req, res) => {
       // Add the logo
       await addLogo(ctx, width, height);
       
-      // Add a solid color background for text
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      // Add a solid color background for text (more opaque)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
       ctx.fillRect(0, height - 120, width, 120);
       
-      // Use extremely basic text settings
+      // Use ASCII characters only for maximum compatibility
+      const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
+      const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
+      
+      // Draw title text with most basic font approach
       ctx.font = `bold ${Math.floor(width * 0.04)}px sans-serif`;
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      
-      // Draw title text (simplified, no wrapping)
-      const shortTitle = title.length > 60 ? title.substring(0, 57) + '...' : title;
       ctx.fillText(shortTitle, width / 2, height - 60);
       
-      // Add date
+      // Add ASCII-only date
       const today = new Date();
       const dateStr = today.toLocaleDateString('en-US', {
         month: 'short',
-        day: 'numeric',
+        day: 'numeric', 
         year: 'numeric'
-      });
+      }).replace(/[^\x00-\x7F]/g, '');
       
       ctx.font = `${Math.floor(width * 0.02)}px sans-serif`;
-      ctx.textAlign = 'center';
       ctx.fillText(dateStr, width / 2, height - 25);
       
       // Create a preview data URL
