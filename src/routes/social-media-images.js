@@ -56,6 +56,47 @@ if (!fontRegistered) {
   }
 }
 
+// Create images directory if needed
+const imagesDir = path.join(__dirname, '../../assets/images');
+if (!fs.existsSync(imagesDir)) {
+  fs.mkdirSync(imagesDir, { recursive: true });
+}
+
+/**
+ * Add logo to the canvas
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} width - Canvas width
+ * @param {number} height - Canvas height
+ * @returns {Promise<void>}
+ */
+async function addLogo(ctx, width, height) {
+  try {
+    // Path to the logo file - update this with your actual logo filename
+    const logoPath = path.join(__dirname, '../../assets/images/rdv-negro.png');
+    
+    if (fs.existsSync(logoPath)) {
+      // Load the logo
+      const logo = await loadImage(logoPath);
+      
+      // Set logo size (10% of the image height)
+      const logoHeight = Math.floor(height * 0.1);
+      const logoWidth = (logo.width / logo.height) * logoHeight;
+      
+      // Position in top left with some padding
+      const padding = 20;
+      
+      // Draw the logo
+      ctx.drawImage(logo, padding, padding, logoWidth, logoHeight);
+      
+      logger.info('Logo added to image');
+    } else {
+      logger.warn(`Logo not found at ${logoPath}`);
+    }
+  } catch (error) {
+    logger.error('Error adding logo:', error);
+  }
+}
+
 const router = express.Router();
 
 // Define the roundRect function outside of your route handlers so it's available everywhere
@@ -198,6 +239,9 @@ router.post('/generate', async (req, res) => {
       
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
+      
+      // Add the logo
+      await addLogo(ctx, width, height);
       
       // Add a solid color background for text
       ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
@@ -418,6 +462,9 @@ router.post('/generate-all', async (req, res) => {
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
       
+      // Add the logo
+      await addLogo(ctx, width, height);
+      
       // Add a solid color background for text
       ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
       ctx.fillRect(0, height - 120, width, 120);
@@ -483,6 +530,9 @@ router.post('/generate-all', async (req, res) => {
         
         // Draw the image
         instagramCtx.drawImage(image, ix, iy, iw, ih, 0, 0, 800, 800);
+        
+        // Add the logo to Instagram image
+        await addLogo(instagramCtx, 800, 800);
         
         // Add solid color background for text
         instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
