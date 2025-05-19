@@ -35,13 +35,12 @@ function roundRect(ctx, x, y, width, height, radius) {
   ctx.fill();
 }
 
-// Update the getFont function to only use the most basic font setting
+// Modify the getFont function to use only system fonts
 function getFont(size, bold = false) {
-  if (bold) {
-    return `bold ${size}px monospace`;
-  } else {
-    return `${size}px monospace`;
-  }
+  // Use system fonts in order of preference
+  return bold 
+    ? `bold ${size}px monospace` 
+    : `${size}px monospace`;
 }
 
 // Test GET endpoint
@@ -168,17 +167,19 @@ router.post('/generate', async (req, res) => {
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
       
-      // Add semi-transparent black overlay at the bottom for text
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';  
+      // Create a simple dark overlay for text
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.fillRect(0, height - 150, width, 150);
 
-      // Set very basic text properties
-      ctx.font = 'bold 36px monospace';  // Use monospace which is available on virtually all systems
+      // Set font directly (don't use getFont helper)
+      ctx.font = 'bold 36px monospace';
+
+      // Set text properties
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      // Simple text display without complex wrapping
+      // Draw title text (simplified with truncation)
       const shortTitle = title.length > 50 ? title.substring(0, 47) + '...' : title;
       ctx.fillText(shortTitle, width / 2, height - 75);
       
@@ -198,11 +199,11 @@ router.post('/generate', async (req, res) => {
         year: 'numeric'
       });
       
-      ctx.font = `16px sans-serif`;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      // Add date with simpler font
+      ctx.font = '16px monospace';
+      ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText(dateStr, width * 0.07, height - 130);
+      ctx.fillText(dateStr, width * 0.07, height - 25);
       
     } catch (drawError) {
       logger.error('Error drawing image:', drawError);
@@ -399,17 +400,19 @@ router.post('/generate-all', async (req, res) => {
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
       
-      // Add semi-transparent black overlay at the bottom for text
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';  
+      // Create a simple dark overlay for text
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.fillRect(0, height - 150, width, 150);
 
-      // Set very basic text properties
-      ctx.font = 'bold 36px monospace';  // Use monospace which is available on virtually all systems
+      // Set font directly (don't use getFont helper)
+      ctx.font = 'bold 36px monospace';
+
+      // Set text properties
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      // Simple text display without complex wrapping
+      // Draw title text (simplified with truncation)
       const shortTitle = title.length > 50 ? title.substring(0, 47) + '...' : title;
       ctx.fillText(shortTitle, width / 2, height - 75);
       
@@ -421,11 +424,11 @@ router.post('/generate-all', async (req, res) => {
         year: 'numeric'
       });
       
-      ctx.font = `16px sans-serif`;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      // Add date with simpler font
+      ctx.font = '16px monospace';
+      ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText(dateStr, width * 0.07, height - 130);
+      ctx.fillText(dateStr, width * 0.07, height - 25);
       
       // Reset shadow for other operations
       ctx.shadowColor = 'transparent';
