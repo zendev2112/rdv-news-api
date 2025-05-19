@@ -117,111 +117,32 @@ if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir, { recursive: true });
 }
 
-// Check if ImageMagick is installed
-let imagemagickAvailable = false;
-try {
-  const { stdout } = await execAsync('which convert');
-  if (stdout) {
-    imagemagickAvailable = true;
-    logger.info('ImageMagick detected, will use for text rendering');
-  } else {
-    logger.warn('ImageMagick not found in PATH');
-  }
-} catch (error) {
-  logger.warn('ImageMagick not installed or accessible:', error.message);
-}
-
 /**
- * Create text image using ImageMagick and return the path to the temporary file
- * @param {string} text - Text to render
- * @param {number} width - Width of the text image
- * @param {object} options - Text options (fontSize, color, etc)
- * @returns {Promise<string>} Path to the created text image
+ * Draw solid colored rectangles as text replacement
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} x - X position (center)
+ * @param {number} y - Y position (center)
+ * @param {number} width - Width of text block
+ * @param {number} height - Height of text block
+ * @param {string} color - Text color
  */
-async function createTextImage(text, width, options = {}) {
-  // If ImageMagick is not available, throw an error to fall back to character-by-character rendering
-  if (!imagemagickAvailable) {
-    throw new Error('ImageMagick not available');
-  }
+function drawTextRectangles(ctx, x, y, width, height, color = '#FFFFFF') {
+  const charCount = Math.floor(width / (height * 0.5)); // Simulate characters
+  const charWidth = height * 0.5;
+  const charSpacing = height * 0.1;
+  const totalWidth = charCount * (charWidth + charSpacing);
   
-  try {
-    const {
-      fontSize = 40,
-      color = 'white',
-      bgColor = 'none',
-      fontWeight = 'bold',
-      fontFamily = 'Arial'
-    } = options;
-    
-    // Strip special characters for safety in shell command
-    const safeText = text
-      .replace(/[^\x00-\x7F]/g, '') // ASCII only
-      .replace(/["'`]/g, '') // Remove quotes
-      .replace(/\\/g, ''); // Remove backslashes
-    
-    // Create temporary file path
-    const tempFile = path.join(os.tmpdir(), `text-${Date.now()}.png`);
-    
-    // Construct ImageMagick command for transparent background with text
-    // Simplified command that should work on most systems
-    const command = `convert -size ${width}x -background ${bgColor} -fill ${color} -gravity center caption:"${safeText}" "${tempFile}"`;
-    
-    // Execute the command
-    logger.info(`Executing ImageMagick command for text: ${safeText.substring(0, 20)}...`);
-    const { stderr } = await execAsync(command);
-    
-    if (stderr) {
-      logger.warn('ImageMagick warning:', stderr);
-    }
-    
-    // Verify the file was created
-    if (!fs.existsSync(tempFile)) {
-      throw new Error('ImageMagick did not create the text image file');
-    }
-    
-    logger.info(`Created text image at ${tempFile}`);
-    return tempFile;
-  } catch (error) {
-    logger.error('Error creating text image with ImageMagick:', error);
-    throw error;
-  }
-}
-
-/**
- * Direct text rendering on canvas with special handling to ensure visibility
- */
-function renderTextDirectly(ctx, text, x, y, options = {}) {
-  const {
-    fontSize = 24,
-    fontFamily = 'Roboto, Arial, sans-serif',
-    color = '#FFFFFF',
-    bold = false,
-    maxWidth = null
-  } = options;
+  const startX = x - (totalWidth / 2);
   
-  // Save current state
-  ctx.save();
-  
-  // Create background shape for text
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-  const bgPadding = fontSize * 0.5;
-  const textWidth = maxWidth || (text.length * fontSize * 0.6);
-  ctx.fillRect(x - textWidth/2 - bgPadding, y - fontSize - bgPadding, 
-               textWidth + bgPadding*2, fontSize*2 + bgPadding);
-  
-  // Set text style
-  ctx.font = `${bold ? 'bold ' : ''}${fontSize}px ${fontFamily}`;
   ctx.fillStyle = color;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
   
-  // Draw text
-  ctx.fillText(text, x, y, maxWidth);
-  
-  // Restore state
-  ctx.restore();
-  
-  return true;
+  for (let i = 0; i < charCount; i++) {
+    const rectX = startX + (i * (charWidth + charSpacing));
+    const rectY = y - (height / 2);
+    
+    // Draw rectangle for each "character"
+    ctx.fillRect(rectX, rectY, charWidth, height);
+  }
 }
 
 /**
@@ -260,18 +181,6 @@ async function addLogo(ctx, width, height) {
 }
 
 const router = express.Router();
-
-// Define the roundRect function outside of your route handlers so it's available everywhere
-function roundRect(ctx, x, y, width, height, radius) {
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + width, y, x + width, y + height, radius);
-  ctx.arcTo(x + width, y + height, x, y + height, radius);
-  ctx.arcTo(x, y + height, x, y, radius);
-  ctx.arcTo(x, y, x + width, y, radius);
-  ctx.closePath();
-  ctx.fill();
-}
 
 // Test GET endpoint
 router.get('/generate', (req, res) => {
@@ -408,38 +317,18 @@ router.post('/generate', async (req, res) => {
       const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
       const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
-      // Add ASCII-only date
-      const today = new Date();
-      const dateStr = today.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric', 
-        year: 'numeric'
-      }).replace(/[^\x00-\x7F]/g, '');
+      // Since text rendering is problematic, draw rectangles for title
+      drawTextRectangles(ctx, width / 2, height - 60, width * 0.8, Math.floor(width * 0.04), '#FFFFFF');
       
-      // Since we've had persistent issues with text rendering, directly render the text
-      // with simpler but more reliable approach:
-      
-      // Draw title text
-      renderTextDirectly(ctx, shortTitle, width / 2, height - 60, {
-        fontSize: Math.floor(width * 0.04),
-        bold: true,
-        maxWidth: width * 0.9
-      });
-      
-      // Draw date text
-      renderTextDirectly(ctx, dateStr, width / 2, height - 25, {
-        fontSize: Math.floor(width * 0.02)
-      });
+      // Draw rectangles for date (smaller)
+      drawTextRectangles(ctx, width / 2, height - 25, width * 0.4, Math.floor(width * 0.02), '#FFFFFF');
       
     } catch (drawError) {
       logger.error('Error drawing image:', drawError);
       
-      // Just draw title text on black background
-      ctx.font = `bold 24px sans-serif`;
+      // Just draw placeholder on black background
       ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(title.substring(0, 50), width / 2, height / 2);
+      ctx.fillRect(width / 2 - 200, height / 2 - 20, 400, 40);
     }
     
     // Get the high-quality preview image for the response
@@ -513,7 +402,9 @@ router.post('/generate', async (req, res) => {
           platform,
           title: title,
           previewWithTitle: previewDataUrl,
-          imageUrl: publicUrl
+          imageUrl: publicUrl,
+          titleText: shortTitle, // Include the title text for client-side rendering
+          plainText: true // Flag to indicate plain text rendering
         }
       });
     } catch (uploadError) {
@@ -635,25 +526,11 @@ router.post('/generate-all', async (req, res) => {
       const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
       const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
-      // Create date string 
-      const today = new Date();
-      const dateStr = today.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric', 
-        year: 'numeric'
-      }).replace(/[^\x00-\x7F]/g, '');
+      // Since text rendering is problematic, draw rectangles for title
+      drawTextRectangles(ctx, width / 2, height - 60, width * 0.8, Math.floor(width * 0.04), '#FFFFFF');
       
-      // Directly render the text using our simplified approach
-      renderTextDirectly(ctx, shortTitle, width / 2, height - 60, {
-        fontSize: Math.floor(width * 0.04),
-        bold: true,
-        maxWidth: width * 0.9
-      });
-      
-      // Draw date text
-      renderTextDirectly(ctx, dateStr, width / 2, height - 25, {
-        fontSize: Math.floor(width * 0.02)
-      });
+      // Draw rectangles for date (smaller)
+      drawTextRectangles(ctx, width / 2, height - 25, width * 0.4, Math.floor(width * 0.02), '#FFFFFF');
       
       // Create a preview data URL
       const previewCanvas = createCanvas(600, 315);
@@ -664,7 +541,7 @@ router.post('/generate-all', async (req, res) => {
       // Get high-quality buffer for Facebook/Twitter
       const fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
       
-      // Create Instagram square image if needed
+      // Create Instagram square image
       let igBuffer;
       
       if (platforms.includes('instagram')) {
@@ -704,17 +581,11 @@ router.post('/generate-all', async (req, res) => {
         instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         instagramCtx.fillRect(0, 680, 800, 120);
         
-        // Draw Instagram text with direct rendering approach
-        renderTextDirectly(instagramCtx, shortTitle, 400, 730, {
-          fontSize: Math.floor(800 * 0.04),
-          bold: true,
-          maxWidth: 700
-        });
+        // Draw rectangles for title
+        drawTextRectangles(instagramCtx, 400, 730, 700, Math.floor(800 * 0.04), '#FFFFFF');
         
-        // Draw date text
-        renderTextDirectly(instagramCtx, dateStr, 400, 770, {
-          fontSize: Math.floor(800 * 0.02)
-        });
+        // Draw rectangles for date (smaller)
+        drawTextRectangles(instagramCtx, 400, 770, 350, Math.floor(800 * 0.02), '#FFFFFF');
         
         // Get Instagram buffer for Cloudinary
         igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
@@ -754,6 +625,14 @@ router.post('/generate-all', async (req, res) => {
       // Update Airtable record
       await base('Redes Sociales').update(recordId, updateFields);
       
+      // Get today's date in readable format
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric', 
+        year: 'numeric'
+      }).replace(/[^\x00-\x7F]/g, '');
+      
       // Prepare results for response
       const platformResults = [];
       platformResults.push({
@@ -782,6 +661,9 @@ router.post('/generate-all', async (req, res) => {
           recordId,
           results: platformResults,
           title,
+          titleText: shortTitle, // Include the title text
+          dateText: dateStr, // Include the date text
+          plainText: true, // Flag to indicate plain text rendering
           previewWithTitle: previewDataUrl
         }
       });
