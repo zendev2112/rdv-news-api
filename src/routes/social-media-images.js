@@ -4,7 +4,7 @@ import logger from '../utils/logger.js';
 import config from '../config/index.js';
 import imageGenerator from '../services/image-generator.js';
 import { uploadImage } from '../services/cloudinary.js';
-import { registerFont } from 'canvas';
+import { createCanvas, loadImage, registerFont } from 'canvas';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -39,7 +39,8 @@ function roundRect(ctx, x, y, width, height, radius) {
 // Try our registered fonts first, then fallback to system defaults
 function getFont(size, bold = false) {
   const weight = bold ? 'bold' : 'normal';
-  return `${weight} ${size}px DejaVuSans, LiberationSans, sans-serif`;
+  // Simplified to guarantee rendering - using only 'sans-serif' as fallback
+  return `${weight} ${size}px sans-serif`;
 }
 
 // Test GET endpoint
@@ -110,7 +111,6 @@ router.post('/generate', async (req, res) => {
     
     // Generate the image preview (this doesn't get saved, but can be used in frontend)
     logger.info('Generating image preview with title overlay');
-    const { createCanvas, loadImage } = await import('canvas');
     
     // Use better dimensions for preview image
     let width, height;
@@ -167,101 +167,52 @@ router.post('/generate', async (req, res) => {
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
       
-      // Add a more sophisticated overlay for better readability
-      const bottomGradientHeight = height * 0.5; // Use bottom half for gradient
-      const gradient = ctx.createLinearGradient(0, height - bottomGradientHeight, 0, height);
+      // SIMPLIFY TITLE RENDERING - START
+      
+      // Add a dark overlay for better text readability
+      const gradient = ctx.createLinearGradient(0, height * 0.5, 0, height);
       gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
       ctx.fillStyle = gradient;
-      ctx.fillRect(0, height - bottomGradientHeight, width, bottomGradientHeight);
+      ctx.fillRect(0, height * 0.5, width, height * 0.5);
       
-      // Add a subtle border/frame
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(5, 5, width - 10, height - 10);
+      // Draw text with shadow for better visibility
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetX = 3;
+      ctx.shadowOffsetY = 3;
       
-      // Add your site's branding/logo
-      ctx.fillStyle = '#ffffff';
-      ctx.font = getFont(20, true);
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText('RDV NEWS', 20, 20);
+      const displayTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
       
-      // For platform badge, make it more modern with a pill shape
-      const platformText = platform.toUpperCase();
-      const platformTextWidth = ctx.measureText(platformText).width;
-      const badgeWidth = platformTextWidth + 20;
-      const badgeHeight = 28;
-      const badgeX = width - badgeWidth - 20;
-      const badgeY = 20;
-      
-      // Draw badge background
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      // Round rectangle function
-      roundRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14);
-      
-      // Draw platform text
-      ctx.fillStyle = '#ffffff';
-      ctx.font = getFont(14, true);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(platformText, badgeX + badgeWidth/2, badgeY + badgeHeight/2);
-      
-      // Enhance title text styling
-      // For the title, use a more modern approach:
-      const formattedTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
-      
-      // Calculate font size based on canvas width - use dynamic sizing
-      const titleLines = formattedTitle.split(' ').length;
-      const fontSize = Math.min(
-        Math.floor(width * 0.07), // Size based on width
-        Math.floor(height * 0.1)  // Size based on height
-      );
-      
-      // Add text shadow for better visibility
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetX = 2;
-      ctx.shadowOffsetY = 2;
-      
-      ctx.font = getFont(fontSize, true);
+      // Use simple font with fallback and larger size
+      ctx.font = `bold ${Math.floor(width * 0.05)}px sans-serif`;
       ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'left';  // Left align looks more news-like
-      ctx.textBaseline = 'bottom';  // Position from bottom
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
       
-      // Text wrapping - keep lines shorter for better readability
-      const words = formattedTitle.split(' ');
-      const lines = [];
-      let currentLine = words[0];
+      // Simple text wrapping with maximum 2 lines
+      const words = displayTitle.split(' ');
+      const maxCharsPerLine = Math.floor(width * 0.05);
+      const firstLineEnd = Math.min(words.length, Math.floor(words.length / 2));
       
-      const maxLineWidth = width * 0.85; // 85% of canvas width
+      let line1 = words.slice(0, firstLineEnd).join(' ');
+      let line2 = words.slice(firstLineEnd).join(' ');
       
-      for (let i = 1; i < words.length; i++) {
-        const word = words[i];
-        const testLine = currentLine + ' ' + word;
-        const metrics = ctx.measureText(testLine);
-        
-        if (metrics.width > maxLineWidth) {
-          lines.push(currentLine);
-          currentLine = word;
-        } else {
-          currentLine = testLine;
-        }
-      }
-      lines.push(currentLine);
-      
-      // Draw each line of text at the bottom of the image
-      const lineHeight = fontSize * 1.2;
-      const totalTextHeight = lineHeight * lines.length;
-      const startY = height - 40;  // Position from bottom with padding
-      
-      // Draw each line of text
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const y = startY - ((lines.length - 1 - i) * lineHeight);
-        ctx.fillText(lines[i], width * 0.07, y);  // Left padding
+      // Draw lines
+      ctx.fillText(line1, width * 0.07, height - 80);
+      if (line2) {
+        ctx.fillText(line2, width * 0.07, height - 30);
       }
       
-      // Add publication date or category (optional)
+      // Reset shadow
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      
+      // SIMPLIFY TITLE RENDERING - END
+      
+      // Add publication date
       const today = new Date();
       const dateStr = today.toLocaleDateString('en-US', {
         month: 'short',
@@ -269,23 +220,17 @@ router.post('/generate', async (req, res) => {
         year: 'numeric'
       });
       
-      ctx.font = getFont(16);
+      ctx.font = `16px sans-serif`;
       ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(dateStr, width * 0.07, height - totalTextHeight - 50);
-      
-      // Reset shadow for other operations
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
+      ctx.fillText(dateStr, width * 0.07, height - 130);
       
     } catch (drawError) {
       logger.error('Error drawing image:', drawError);
       
       // Just draw title text on black background
-      ctx.font = getFont(24, true);
+      ctx.font = `bold 24px sans-serif`;
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -431,32 +376,25 @@ router.post('/generate-all', async (req, res) => {
     const airtable = new Airtable({ apiKey: apiToken });
     const base = airtable.base(baseId);
     
-    // Process each platform
-    const results = [];
-    const updateFields = {};
-    
-    // Import canvas package
-    const { createCanvas, loadImage } = await import('canvas');
+    // Import canvas package if not already imported
     
     // Create timestamp for filenames
     const timestamp = new Date().toISOString().substring(0, 10);
     
-    // Generate a preview image for the response (using Twitter dimensions)
+    // Create a preview data URL for response
     let previewDataUrl = null;
     
-    // Generate a single image for all platforms (since they're all the same content)
-    const width = 1200;
-    const height = 628; // Default format
-    
-    // Create canvas
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext('2d');
-    
-    // Draw black background
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, width, height);
-    
     try {
+      // Create canvas for Facebook/Twitter
+      const width = 1200;
+      const height = 628;
+      const canvas = createCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      
+      // Draw black background
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, width, height);
+      
       // Load the source image
       const image = await loadImage(imageUrl);
       
@@ -483,101 +421,42 @@ router.post('/generate-all', async (req, res) => {
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
       
-      // Add a more sophisticated overlay for better readability
-      const bottomGradientHeight = height * 0.5; // Use bottom half for gradient
-      const gradient = ctx.createLinearGradient(0, height - bottomGradientHeight, 0, height);
+      // Add a dark overlay for better text readability
+      const gradient = ctx.createLinearGradient(0, height * 0.5, 0, height);
       gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
       ctx.fillStyle = gradient;
-      ctx.fillRect(0, height - bottomGradientHeight, width, bottomGradientHeight);
+      ctx.fillRect(0, height * 0.5, width, height * 0.5);
       
-      // Add a subtle border/frame
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(5, 5, width - 10, height - 10);
+      // Draw text with shadow for better visibility
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetX = 3;
+      ctx.shadowOffsetY = 3;
       
-      // Add your site's branding/logo
-      ctx.fillStyle = '#ffffff';
-      ctx.font = getFont(20, true);
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText('RDV NEWS', 20, 20);
+      const displayTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
       
-      // For platform badge, make it more modern with a pill shape
-      const platformText = 'SOCIAL MEDIA';
-      const platformTextWidth = ctx.measureText(platformText).width;
-      const badgeWidth = platformTextWidth + 20;
-      const badgeHeight = 28;
-      const badgeX = width - badgeWidth - 20;
-      const badgeY = 20;
-      
-      // Draw badge background
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      // Round rectangle function
-      roundRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 14);
-      
-      // Draw platform text
-      ctx.fillStyle = '#ffffff';
-      ctx.font = getFont(14, true);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(platformText, badgeX + badgeWidth/2, badgeY + badgeHeight/2);
-      
-      // Enhance title text styling
-      // For the title, use a more modern approach:
-      const formattedTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
-      
-      // Calculate font size based on canvas width - use dynamic sizing
-      const titleLines = formattedTitle.split(' ').length;
-      const fontSize = Math.min(
-        Math.floor(width * 0.07), // Size based on width
-        Math.floor(height * 0.1)  // Size based on height
-      );
-      
-      // Add text shadow for better visibility
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetX = 2;
-      ctx.shadowOffsetY = 2;
-      
-      ctx.font = getFont(fontSize, true);
+      // Use simple font with fallback and larger size
+      ctx.font = `bold ${Math.floor(width * 0.05)}px sans-serif`;
       ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'left';  // Left align looks more news-like
-      ctx.textBaseline = 'bottom';  // Position from bottom
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
       
-      // Text wrapping - keep lines shorter for better readability
-      const words = formattedTitle.split(' ');
-      const lines = [];
-      let currentLine = words[0];
+      // Simple text wrapping with maximum 2 lines
+      const words = displayTitle.split(' ');
+      const maxCharsPerLine = Math.floor(width * 0.05);
+      const firstLineEnd = Math.min(words.length, Math.floor(words.length / 2));
       
-      const maxLineWidth = width * 0.85; // 85% of canvas width
+      let line1 = words.slice(0, firstLineEnd).join(' ');
+      let line2 = words.slice(firstLineEnd).join(' ');
       
-      for (let i = 1; i < words.length; i++) {
-        const word = words[i];
-        const testLine = currentLine + ' ' + word;
-        const metrics = ctx.measureText(testLine);
-        
-        if (metrics.width > maxLineWidth) {
-          lines.push(currentLine);
-          currentLine = word;
-        } else {
-          currentLine = testLine;
-        }
-      }
-      lines.push(currentLine);
-      
-      // Draw each line of text at the bottom of the image
-      const lineHeight = fontSize * 1.2;
-      const totalTextHeight = lineHeight * lines.length;
-      const startY = height - 40;  // Position from bottom with padding
-      
-      // Draw each line of text
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const y = startY - ((lines.length - 1 - i) * lineHeight);
-        ctx.fillText(lines[i], width * 0.07, y);  // Left padding
+      // Draw lines
+      ctx.fillText(line1, width * 0.07, height - 80);
+      if (line2) {
+        ctx.fillText(line2, width * 0.07, height - 30);
       }
       
-      // Add publication date or category (optional)
+      // Add date
       const today = new Date();
       const dateStr = today.toLocaleDateString('en-US', {
         month: 'short',
@@ -585,11 +464,11 @@ router.post('/generate-all', async (req, res) => {
         year: 'numeric'
       });
       
-      ctx.font = getFont(16);
+      ctx.font = `16px sans-serif`;
       ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(dateStr, width * 0.07, height - totalTextHeight - 50);
+      ctx.fillText(dateStr, width * 0.07, height - 130);
       
       // Reset shadow for other operations
       ctx.shadowColor = 'transparent';
@@ -597,249 +476,13 @@ router.post('/generate-all', async (req, res) => {
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
       
-      // Create a high quality preview
-      const previewCanvas = createCanvas(600, 335);
+      // Create a preview data URL
+      const previewCanvas = createCanvas(600, 315);
       const previewCtx = previewCanvas.getContext('2d');
-      previewCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 600, 335);
-      previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.9);
+      previewCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 600, 315);
+      previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.8);
       
-      // Create a smaller size for Airtable uploads to address size limitations
-      const smallerWidth = Math.floor(width/2);
-      const smallerHeight = Math.floor(height/2);
-      const smallerCanvas = createCanvas(smallerWidth, smallerHeight);
-      const smallerCtx = smallerCanvas.getContext('2d');
-      smallerCtx.drawImage(canvas, 0, 0, width, height, 0, 0, smallerWidth, smallerHeight);
-      
-      // Get the smaller size image as buffer and base64
-      const facebookTwitterBuffer = smallerCanvas.toBuffer('image/jpeg', { quality: 0.6 });
-      const facebookTwitterBase64 = facebookTwitterBuffer.toString('base64');
-      
-      // Create platform-specific versions if needed (e.g. for Instagram)
-      // For Instagram, we need a square image but also smaller
-      if (platforms.includes('instagram')) {
-        const instagramCanvas = createCanvas(400, 400); // Half the original size
-        const instagramCtx = instagramCanvas.getContext('2d');
-        
-        // Draw black background
-        instagramCtx.fillStyle = '#000000';
-        instagramCtx.fillRect(0, 0, 400, 400);
-        
-        // Draw the image proportionally - fixed variables
-        const instagramImage = await loadImage(imageUrl);
-        const imgAspect = instagramImage.width / instagramImage.height;
-        
-        let ix, iy, iw, ih;
-        if (imgAspect > 1) {
-          // Image is wider than tall, crop sides
-          ih = instagramImage.height;
-          iw = instagramImage.height;
-          iy = 0;
-          ix = (instagramImage.width - iw) / 2;
-        } else {
-          // Image is taller than wide, crop top/bottom
-          iw = instagramImage.width;
-          ih = instagramImage.width;
-          ix = 0;
-          iy = (instagramImage.height - ih) / 2;
-        }
-        
-        // Draw the image
-        instagramCtx.drawImage(instagramImage, ix, iy, iw, ih, 0, 0, 400, 400);
-        
-        // Add gradient
-        const instagramGradient = instagramCtx.createLinearGradient(0, 200, 0, 400);
-        instagramGradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-        instagramGradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
-        instagramCtx.fillStyle = instagramGradient;
-        instagramCtx.fillRect(0, 200, 400, 200);
-        
-        // Add border
-        instagramCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        instagramCtx.lineWidth = 2;
-        instagramCtx.strokeRect(5, 5, 390, 390);
-        
-        // Add branding
-        instagramCtx.fillStyle = '#ffffff';
-        instagramCtx.font = getFont(16, true);
-        instagramCtx.textAlign = 'left';
-        instagramCtx.textBaseline = 'top';
-        instagramCtx.fillText('RDV NEWS', 20, 20);
-        
-        // Add Instagram badge
-        const igText = 'INSTAGRAM';
-        const igTextWidth = instagramCtx.measureText(igText).width;
-        const igBadgeWidth = igTextWidth + 20;
-        const igBadgeHeight = 28;
-        const igBadgeX = 400 - igBadgeWidth - 20;
-        const igBadgeY = 20;
-        
-        // Draw badge background
-        instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        roundRect(instagramCtx, igBadgeX, igBadgeY, igBadgeWidth, igBadgeHeight, 14);
-        
-        // Draw platform text
-        instagramCtx.fillStyle = '#ffffff';
-        instagramCtx.font = getFont(14, true);
-        instagramCtx.textAlign = 'center';
-        instagramCtx.textBaseline = 'middle';
-        instagramCtx.fillText(igText, igBadgeX + igBadgeWidth/2, igBadgeY + igBadgeHeight/2);
-        
-        // Add title
-        instagramCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        instagramCtx.shadowBlur = 8;
-        instagramCtx.shadowOffsetX = 2;
-        instagramCtx.shadowOffsetY = 2;
-        
-        instagramCtx.font = getFont(Math.floor(400 * 0.06), true);
-        instagramCtx.fillStyle = '#FFFFFF';
-        instagramCtx.textAlign = 'left';
-        instagramCtx.textBaseline = 'bottom';
-        
-        // Text wrapping
-        const igWords = formattedTitle.split(' ');
-        const igLines = [];
-        let igCurrentLine = igWords[0];
-        
-        const igMaxLineWidth = 400 * 0.85;
-        
-        for (let i = 1; i < igWords.length; i++) {
-          const word = igWords[i];
-          const testLine = igCurrentLine + ' ' + word;
-          const metrics = instagramCtx.measureText(testLine);
-          
-          if (metrics.width > igMaxLineWidth) {
-            igLines.push(igCurrentLine);
-            igCurrentLine = word;
-          } else {
-            igCurrentLine = testLine;
-          }
-        }
-        igLines.push(igCurrentLine);
-        
-        // Draw each line of text
-        const igLineHeight = Math.floor(400 * 0.06) * 1.2;
-        const igTotalTextHeight = igLineHeight * igLines.length;
-        const igStartY = 400 - 40;
-        
-        for (let i = igLines.length - 1; i >= 0; i--) {
-          const y = igStartY - ((igLines.length - 1 - i) * igLineHeight);
-          instagramCtx.fillText(igLines[i], 400 * 0.07, y);
-        }
-        
-        // Add date
-        instagramCtx.font = getFont(14);
-        instagramCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        instagramCtx.textAlign = 'left';
-        instagramCtx.textBaseline = 'bottom';
-        instagramCtx.fillText(dateStr, 400 * 0.07, 400 - igTotalTextHeight - 50);
-        
-        // Reset shadow
-        instagramCtx.shadowColor = 'transparent';
-        instagramCtx.shadowBlur = 0;
-        instagramCtx.shadowOffsetX = 0;
-        instagramCtx.shadowOffsetY = 0;
-        
-        // Get the Instagram-specific image buffer
-        const igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.6 });
-        const igBase64 = igBuffer.toString('base64');
-        
-        // Set Instagram image
-        updateFields.social_image_instagram = [{
-          filename: `instagram-${timestamp}.jpg`,
-          type: 'image/jpeg',
-          content: igBase64
-        }];
-      } else {
-        // Just use the standard image for Instagram as well
-        updateFields.social_image_instagram = [{
-          filename: `instagram-${timestamp}.jpg`,
-          type: 'image/jpeg',
-          content: facebookTwitterBase64
-        }];
-      }
-      
-      // Set Twitter and Facebook images
-      updateFields.social_image_twitter = [{
-        filename: `twitter-${timestamp}.jpg`,
-        type: 'image/jpeg',
-        content: facebookTwitterBase64
-      }];
-      
-      updateFields.social_image_facebook = [{
-        filename: `facebook-${timestamp}.jpg`,
-        type: 'image/jpeg',
-        content: facebookTwitterBase64
-      }];
-      
-      platforms.forEach(platform => {
-        results.push({
-          platform,
-          success: true,
-          title: title
-        });
-      });
-      
-    } catch (previewError) {
-      logger.error('Error creating image:', previewError);
-      
-      // Create a simple fallback preview
-      const fallbackCanvas = createCanvas(600, 335);
-      const fallbackCtx = fallbackCanvas.getContext('2d');
-      
-      fallbackCtx.fillStyle = '#000000';
-      fallbackCtx.fillRect(0, 0, 600, 335);
-      fallbackCtx.fillStyle = '#FFFFFF';
-      fallbackCtx.font = getFont(24, true);
-      fallbackCtx.textAlign = 'center';
-      fallbackCtx.textBaseline = 'middle';
-      fallbackCtx.fillText(title.substring(0, 50), 300, 168);
-      fallbackCtx.font = getFont(16);
-      fallbackCtx.fillText('Error processing image', 300, 200);
-      
-      previewDataUrl = fallbackCanvas.toDataURL('image/jpeg');
-      
-      // Set fallback images in Airtable (plain black with text)
-      // Make sure they're small for Airtable
-      const fallbackBuffer = fallbackCanvas.toBuffer('image/jpeg', { quality: 0.5 });
-      const fallbackBase64 = fallbackBuffer.toString('base64');
-      
-      updateFields.social_image_facebook = [{
-        filename: `facebook-${timestamp}.jpg`,
-        type: 'image/jpeg',
-        content: fallbackBase64
-      }];
-      
-      updateFields.social_image_twitter = [{
-        filename: `twitter-${timestamp}.jpg`,
-        type: 'image/jpeg',
-        content: fallbackBase64
-      }];
-      
-      updateFields.social_image_instagram = [{
-        filename: `instagram-${timestamp}.jpg`,
-        type: 'image/jpeg',
-        content: fallbackBase64
-      }];
-      
-      platforms.forEach(platform => {
-        results.push({
-          platform,
-          success: false,
-          error: previewError.message,
-          title: title
-        });
-      });
-    }
-    
-    // Update the /generate-all endpoint to use Cloudinary
-
-    // In the /generate-all endpoint, replace the Airtable attachment section with:
-
-    try {
-      // Get high-quality buffers for each platform
-      const fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
-      
-      // Create Instagram-specific image if needed
+      // Create Instagram square image if needed
       let instagramCanvas;
       let igBuffer;
       
@@ -848,133 +491,69 @@ router.post('/generate-all', async (req, res) => {
         instagramCanvas = createCanvas(800, 800);
         const instagramCtx = instagramCanvas.getContext('2d');
         
-        // Add this line to define formattedTitle
-        const formattedTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
-        
-        // Add this line to define dateStr for Instagram image
-        const today = new Date();
-        const dateStr = today.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric'
-        });
-        
-        // Draw black background
-        instagramCtx.fillStyle = '#000000';
-        
-        // ...rest of the Instagram image creation code
         // Draw black background
         instagramCtx.fillStyle = '#000000';
         instagramCtx.fillRect(0, 0, 800, 800);
         
         // Draw the image proportionally
-        const instagramImage = await loadImage(imageUrl);
-        const imgAspect = instagramImage.width / instagramImage.height;
+        const imgAspect = image.width / image.height;
         
         let ix, iy, iw, ih;
         if (imgAspect > 1) {
           // Image is wider than tall, crop sides
-          ih = instagramImage.height;
-          iw = instagramImage.height;
+          ih = image.height;
+          iw = image.height;
           iy = 0;
-          ix = (instagramImage.width - iw) / 2;
+          ix = (image.width - iw) / 2;
         } else {
           // Image is taller than wide, crop top/bottom
-          iw = instagramImage.width;
-          ih = instagramImage.width;
+          iw = image.width;
+          ih = image.width;
           ix = 0;
-          iy = (instagramImage.height - ih) / 2;
+          iy = (image.height - ih) / 2;
         }
         
         // Draw the image
-        instagramCtx.drawImage(instagramImage, ix, iy, iw, ih, 0, 0, 800, 800);
+        instagramCtx.drawImage(image, ix, iy, iw, ih, 0, 0, 800, 800);
         
-        // Add gradient
+        // Add gradient overlay
         const instagramGradient = instagramCtx.createLinearGradient(0, 400, 0, 800);
         instagramGradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
         instagramGradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
         instagramCtx.fillStyle = instagramGradient;
         instagramCtx.fillRect(0, 400, 800, 400);
         
-        // Add border
-        instagramCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        instagramCtx.lineWidth = 2;
-        instagramCtx.strokeRect(5, 5, 790, 790);
+        // Add shadow for text
+        instagramCtx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+        instagramCtx.shadowBlur = 10;
+        instagramCtx.shadowOffsetX = 3;
+        instagramCtx.shadowOffsetY = 3;
         
-        // Add branding
-        instagramCtx.fillStyle = '#ffffff';
-        instagramCtx.font = getFont(20, true);
-        instagramCtx.textAlign = 'left';
-        instagramCtx.textBaseline = 'top';
-        instagramCtx.fillText('RDV NEWS', 20, 20);
-        
-        // Add Instagram badge
-        const igText = 'INSTAGRAM';
-        const igTextWidth = instagramCtx.measureText(igText).width;
-        const igBadgeWidth = igTextWidth + 20;
-        const igBadgeHeight = 28;
-        const igBadgeX = 800 - igBadgeWidth - 20;
-        const igBadgeY = 20;
-        
-        // Draw badge background using the roundRect function
-        instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        roundRect(instagramCtx, igBadgeX, igBadgeY, igBadgeWidth, igBadgeHeight, 14);
-        
-        // Draw platform text
-        instagramCtx.fillStyle = '#ffffff';
-        instagramCtx.font = getFont(14, true);
-        instagramCtx.textAlign = 'center';
-        instagramCtx.textBaseline = 'middle';
-        instagramCtx.fillText(igText, igBadgeX + igBadgeWidth/2, igBadgeY + igBadgeHeight/2);
-        
-        // Add title
-        instagramCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        instagramCtx.shadowBlur = 8;
-        instagramCtx.shadowOffsetX = 2;
-        instagramCtx.shadowOffsetY = 2;
-        
-        instagramCtx.font = getFont(Math.floor(800 * 0.05), true);
+        // Draw title text - simple approach
+        instagramCtx.font = `bold 40px sans-serif`;
         instagramCtx.fillStyle = '#FFFFFF';
         instagramCtx.textAlign = 'left';
         instagramCtx.textBaseline = 'bottom';
         
-        // Text wrapping
-        const igWords = formattedTitle.split(' ');
-        const igLines = [];
-        let igCurrentLine = igWords[0];
+        // Simple wrapping for Instagram
+        const igWords = displayTitle.split(' ');
+        const igFirstLineEnd = Math.min(igWords.length, Math.floor(igWords.length / 2));
         
-        const igMaxLineWidth = 800 * 0.85;
+        let igLine1 = igWords.slice(0, igFirstLineEnd).join(' ');
+        let igLine2 = igWords.slice(igFirstLineEnd).join(' ');
         
-        for (let i = 1; i < igWords.length; i++) {
-          const word = igWords[i];
-          const testLine = igCurrentLine + ' ' + word;
-          const metrics = instagramCtx.measureText(testLine);
-          
-          if (metrics.width > igMaxLineWidth) {
-            igLines.push(igCurrentLine);
-            igCurrentLine = word;
-          } else {
-            igCurrentLine = testLine;
-          }
-        }
-        igLines.push(igCurrentLine);
-        
-        // Draw each line of text
-        const igLineHeight = Math.floor(800 * 0.05) * 1.2;
-        const igTotalTextHeight = igLineHeight * igLines.length;
-        const igStartY = 800 - 40;
-        
-        for (let i = igLines.length - 1; i >= 0; i--) {
-          const y = igStartY - ((igLines.length - 1 - i) * igLineHeight);
-          instagramCtx.fillText(igLines[i], 800 * 0.07, y);
+        // Draw text on Instagram canvas
+        instagramCtx.fillText(igLine1, 40, 700);
+        if (igLine2) {
+          instagramCtx.fillText(igLine2, 40, 750);
         }
         
         // Add date
-        instagramCtx.font = getFont(16);
+        instagramCtx.font = `16px sans-serif`;
         instagramCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         instagramCtx.textAlign = 'left';
         instagramCtx.textBaseline = 'bottom';
-        instagramCtx.fillText(dateStr, 800 * 0.07, 800 - igTotalTextHeight - 50);
+        instagramCtx.fillText(dateStr, 40, 650);
         
         // Reset shadow
         instagramCtx.shadowColor = 'transparent';
@@ -986,8 +565,11 @@ router.post('/generate-all', async (req, res) => {
         igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
       } else {
         // If Instagram is not in the platforms list, just use the default canvas
-        igBuffer = fbtwBuffer;
+        igBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
       }
+      
+      // Get high-quality buffer for Facebook/Twitter
+      const fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
       
       // Create unique filenames for each platform
       const fbFileName = `facebook-${recordId}-${timestamp}.jpg`;
@@ -1051,32 +633,32 @@ router.post('/generate-all', async (req, res) => {
           previewWithTitle: previewDataUrl
         }
       });
-    } catch (uploadError) {
-      logger.error('Error uploading images:', uploadError);
+    } catch (error) {
+      logger.error('Error generating or uploading images:', error);
       
       // Add error results
       const errorResults = platforms.map(platform => ({
         platform,
         success: false,
-        error: uploadError.message,
+        error: error.message,
         title: title
       }));
       
       return res.status(500).json({
         success: false,
-        error: `Failed to upload images: ${uploadError.message}`,
+        error: `Failed to generate images: ${error.message}`,
         data: {
           recordId,
           results: errorResults,
-          previewWithTitle: previewDataUrl
+          previewWithTitle: null
         }
       });
     }
   } catch (error) {
-    logger.error('Error attaching social media images:', error);
+    logger.error('Error in generate-all endpoint:', error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'Failed to attach social media images'
+      error: error.message || 'Failed to process request'
     });
   }
 });
