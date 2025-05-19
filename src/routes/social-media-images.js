@@ -35,12 +35,13 @@ function roundRect(ctx, x, y, width, height, radius) {
   ctx.fill();
 }
 
-// When setting fonts, use a font fallback chain:
-// Try our registered fonts first, then fallback to system defaults
+// Update the getFont function to only use the most basic font setting
 function getFont(size, bold = false) {
-  const weight = bold ? 'bold' : 'normal';
-  // Simplified to guarantee rendering - using only 'sans-serif' as fallback
-  return `${weight} ${size}px sans-serif`;
+  if (bold) {
+    return `bold ${size}px monospace`;
+  } else {
+    return `${size}px monospace`;
+  }
 }
 
 // Test GET endpoint
@@ -167,42 +168,19 @@ router.post('/generate', async (req, res) => {
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
       
-      // SIMPLIFY TITLE RENDERING - START
-      
-      // Add a dark overlay for better text readability
-      const gradient = ctx.createLinearGradient(0, height * 0.5, 0, height);
-      gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, height * 0.5, width, height * 0.5);
-      
-      // Draw text with shadow for better visibility
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-      ctx.shadowBlur = 10;
-      ctx.shadowOffsetX = 3;
-      ctx.shadowOffsetY = 3;
-      
-      const displayTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
-      
-      // Use simple font with fallback and larger size
-      ctx.font = `bold ${Math.floor(width * 0.05)}px sans-serif`;
+      // Add semi-transparent black overlay at the bottom for text
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';  
+      ctx.fillRect(0, height - 150, width, 150);
+
+      // Set very basic text properties
+      ctx.font = 'bold 36px monospace';  // Use monospace which is available on virtually all systems
       ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      
-      // Simple text wrapping with maximum 2 lines
-      const words = displayTitle.split(' ');
-      const maxCharsPerLine = Math.floor(width * 0.05);
-      const firstLineEnd = Math.min(words.length, Math.floor(words.length / 2));
-      
-      let line1 = words.slice(0, firstLineEnd).join(' ');
-      let line2 = words.slice(firstLineEnd).join(' ');
-      
-      // Draw lines
-      ctx.fillText(line1, width * 0.07, height - 80);
-      if (line2) {
-        ctx.fillText(line2, width * 0.07, height - 30);
-      }
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Simple text display without complex wrapping
+      const shortTitle = title.length > 50 ? title.substring(0, 47) + '...' : title;
+      ctx.fillText(shortTitle, width / 2, height - 75);
       
       // Reset shadow
       ctx.shadowColor = 'transparent';
@@ -421,40 +399,19 @@ router.post('/generate-all', async (req, res) => {
       // Draw the image
       ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
       
-      // Add a dark overlay for better text readability
-      const gradient = ctx.createLinearGradient(0, height * 0.5, 0, height);
-      gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, height * 0.5, width, height * 0.5);
-      
-      // Draw text with shadow for better visibility
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-      ctx.shadowBlur = 10;
-      ctx.shadowOffsetX = 3;
-      ctx.shadowOffsetY = 3;
-      
-      const displayTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
-      
-      // Use simple font with fallback and larger size
-      ctx.font = `bold ${Math.floor(width * 0.05)}px sans-serif`;
+      // Add semi-transparent black overlay at the bottom for text
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';  
+      ctx.fillRect(0, height - 150, width, 150);
+
+      // Set very basic text properties
+      ctx.font = 'bold 36px monospace';  // Use monospace which is available on virtually all systems
       ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      
-      // Simple text wrapping with maximum 2 lines
-      const words = displayTitle.split(' ');
-      const maxCharsPerLine = Math.floor(width * 0.05);
-      const firstLineEnd = Math.min(words.length, Math.floor(words.length / 2));
-      
-      let line1 = words.slice(0, firstLineEnd).join(' ');
-      let line2 = words.slice(firstLineEnd).join(' ');
-      
-      // Draw lines
-      ctx.fillText(line1, width * 0.07, height - 80);
-      if (line2) {
-        ctx.fillText(line2, width * 0.07, height - 30);
-      }
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Simple text display without complex wrapping
+      const shortTitle = title.length > 50 ? title.substring(0, 47) + '...' : title;
+      ctx.fillText(shortTitle, width / 2, height - 75);
       
       // Add date
       const today = new Date();
@@ -530,23 +487,19 @@ router.post('/generate-all', async (req, res) => {
         instagramCtx.shadowOffsetY = 3;
         
         // Draw title text - simple approach
-        instagramCtx.font = `bold 40px sans-serif`;
+        instagramCtx.font = `bold 36px monospace`;
         instagramCtx.fillStyle = '#FFFFFF';
-        instagramCtx.textAlign = 'left';
-        instagramCtx.textBaseline = 'bottom';
+        instagramCtx.textAlign = 'center';
+        instagramCtx.textBaseline = 'middle';
         
-        // Simple wrapping for Instagram
-        const igWords = displayTitle.split(' ');
-        const igFirstLineEnd = Math.min(igWords.length, Math.floor(igWords.length / 2));
-        
-        let igLine1 = igWords.slice(0, igFirstLineEnd).join(' ');
-        let igLine2 = igWords.slice(igFirstLineEnd).join(' ');
-        
-        // Draw text on Instagram canvas
-        instagramCtx.fillText(igLine1, 40, 700);
-        if (igLine2) {
-          instagramCtx.fillText(igLine2, 40, 750);
-        }
+        // Simple text display without complex wrapping
+        instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        instagramCtx.fillRect(0, 700, 800, 100);
+        instagramCtx.font = 'bold 36px monospace';
+        instagramCtx.fillStyle = '#FFFFFF';
+        instagramCtx.textAlign = 'center';
+        instagramCtx.textBaseline = 'middle';
+        instagramCtx.fillText(shortTitle, 400, 750);
         
         // Add date
         instagramCtx.font = `16px sans-serif`;
