@@ -4,112 +4,17 @@ import logger from '../utils/logger.js';
 import config from '../config/index.js';
 import imageGenerator from '../services/image-generator.js';
 import { uploadImage } from '../services/cloudinary.js';
-import { createCanvas, loadImage, registerFont } from 'canvas';
+import { createCanvas, loadImage } from 'canvas';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
+import textRenderer from '../services/text-renderer.js';
 
 const execAsync = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Create fonts directory if needed
-const fontDir = path.join(__dirname, '../../assets/fonts');
-if (!fs.existsSync(fontDir)) {
-  fs.mkdirSync(fontDir, { recursive: true });
-}
-
-// Try multiple font registration approaches
-let fontRegistered = false;
-
-// First try project bundled fonts (if they exist)
-const fontPath = path.join(fontDir, 'Arial.ttf');
-const fontPathBold = path.join(fontDir, 'Arial-Bold.ttf');
-
-try {
-  if (fs.existsSync(fontPath)) {
-    registerFont(fontPath, { family: 'Arial' });
-    fontRegistered = true;
-    logger.info('Registered bundled Arial font');
-  }
-} catch (err) {
-  logger.warn('Failed to register bundled font:', err.message);
-}
-
-// Then try system fonts
-if (!fontRegistered) {
-  try {
-    // Try to register system fonts if possible
-    registerFont('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', { family: 'DejaVuSans' });
-    registerFont('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf', { family: 'LiberationSans' });
-    fontRegistered = true;
-    logger.info('Registered system fonts');
-  } catch (err) {
-    logger.warn('Could not register system fonts:', err.message);
-  }
-}
-
-// Last resort - register a fake font to avoid errors
-if (!fontRegistered) {
-  try {
-    logger.warn('No fonts registered, using node-canvas built-in fonts');
-  } catch (err) {
-    logger.error('Font registration completely failed:', err.message);
-  }
-}
-
-/**
- * Download and register a Google font for reliable text rendering
- */
-async function setupReliableFonts() {
-  try {
-    // Check if we already have the font
-    const robotoRegularPath = path.join(fontDir, 'Roboto-Regular.ttf');
-    const robotoBoldPath = path.join(fontDir, 'Roboto-Bold.ttf');
-    
-    // Download fonts if they don't exist
-    if (!fs.existsSync(robotoRegularPath)) {
-      logger.info('Downloading Roboto Regular font...');
-      const regularResponse = await fetch('https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Regular.ttf');
-      if (regularResponse.ok) {
-        const buffer = await regularResponse.arrayBuffer();
-        fs.writeFileSync(robotoRegularPath, Buffer.from(buffer));
-        logger.info('Roboto Regular font downloaded successfully');
-      }
-    }
-    
-    if (!fs.existsSync(robotoBoldPath)) {
-      logger.info('Downloading Roboto Bold font...');
-      const boldResponse = await fetch('https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf');
-      if (boldResponse.ok) {
-        const buffer = await boldResponse.arrayBuffer();
-        fs.writeFileSync(robotoBoldPath, Buffer.from(buffer));
-        logger.info('Roboto Bold font downloaded successfully');
-      }
-    }
-    
-    // Register the fonts
-    if (fs.existsSync(robotoRegularPath)) {
-      registerFont(robotoRegularPath, { family: 'Roboto' });
-      logger.info('Registered Roboto Regular font');
-    }
-    
-    if (fs.existsSync(robotoBoldPath)) {
-      registerFont(robotoBoldPath, { family: 'Roboto', weight: 'bold' });
-      logger.info('Registered Roboto Bold font');
-    }
-    
-    return true;
-  } catch (error) {
-    logger.error('Error setting up reliable fonts:', error);
-    return false;
-  }
-}
-
-// Call this function before defining your routes
-await setupReliableFonts();
 
 // Create images directory if needed
 const imagesDir = path.join(__dirname, '../../assets/images');
@@ -117,32 +22,57 @@ if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir, { recursive: true });
 }
 
+// Log the font status
+logger.info(`Using font: ${textRenderer.getBestAvailableFont()}`);
+
 /**
- * Draw solid colored rectangles as text replacement
+ * Draw text on image with proper fallbacks
  * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {string} text - Text to draw
  * @param {number} x - X position (center)
  * @param {number} y - Y position (center)
- * @param {number} width - Width of text block
- * @param {number} height - Height of text block
- * @param {string} color - Text color
+ * @param {Object} options - Font options
  */
-function drawTextRectangles(ctx, x, y, width, height, color = '#FFFFFF') {
-  const charCount = Math.floor(width / (height * 0.5)); // Simulate characters
-  const charWidth = height * 0.5;
-  const charSpacing = height * 0.1;
-  const totalWidth = charCount * (charWidth + charSpacing);
+function drawTextWithFallback(ctx, text, x, y, options = {}) {
+  const { 
+    fontSize = 24, 
+    color = '#FFFFFF',
+    fontWeight = 'normal',
+    maxWidth = undefined
+  } = options;
   
-  const startX = x - (totalWidth / 2);
+  textRenderer.drawText(ctx, text, x, y, {
+    fontSize,
+    color,
+    fontWeight,
+    textAlign: 'center',
+    maxWidth
+  });
+}
+
+/**
+ * Draw wrapped text with proper fallbacks
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {string} text - Text to draw
+ * @param {number} x - X position (center)
+ * @param {number} y - Y position (top)
+ * @param {number} maxWidth - Maximum width
+ * @param {Object} options - Font options
+ */
+function drawWrappedTextWithFallback(ctx, text, x, y, maxWidth, options = {}) {
+  const { 
+    fontSize = 24, 
+    lineHeight = fontSize * 1.2,
+    color = '#FFFFFF',
+    fontWeight = 'normal'
+  } = options;
   
-  ctx.fillStyle = color;
-  
-  for (let i = 0; i < charCount; i++) {
-    const rectX = startX + (i * (charWidth + charSpacing));
-    const rectY = y - (height / 2);
-    
-    // Draw rectangle for each "character"
-    ctx.fillRect(rectX, rectY, charWidth, height);
-  }
+  textRenderer.drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, {
+    fontSize,
+    color,
+    fontWeight,
+    textAlign: 'center'
+  });
 }
 
 /**
@@ -150,11 +80,11 @@ function drawTextRectangles(ctx, x, y, width, height, color = '#FFFFFF') {
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {number} width - Canvas width
  * @param {number} height - Canvas height
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} Whether logo was added successfully
  */
 async function addLogo(ctx, width, height) {
   try {
-    // Path to the logo file - update this with your actual logo filename
+    // Path to the logo file
     const logoPath = path.join(__dirname, '../../assets/images/rdv-negro.png');
     
     if (fs.existsSync(logoPath)) {
@@ -172,11 +102,36 @@ async function addLogo(ctx, width, height) {
       ctx.drawImage(logo, padding, padding, logoWidth, logoHeight);
       
       logger.info('Logo added to image');
+      return true;
     } else {
-      logger.warn(`Logo not found at ${logoPath}`);
+      // Try to create a text logo instead
+      logger.warn(`Logo not found at ${logoPath}, using text logo fallback`);
+      
+      ctx.save();
+      
+      // Create a semi-transparent background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(10, 10, Math.floor(width * 0.25), Math.floor(height * 0.08));
+      
+      // Add text in place of logo
+      drawTextWithFallback(
+        ctx, 
+        "RADIO DEL VOLGA",
+        Math.floor(width * 0.13), 
+        Math.floor(height * 0.05),
+        { 
+          fontSize: Math.floor(height * 0.04),
+          color: '#FFFFFF',
+          fontWeight: 'bold'
+        }
+      );
+      
+      ctx.restore();
+      return true;
     }
   } catch (error) {
     logger.error('Error adding logo:', error);
+    return false;
   }
 }
 
@@ -309,20 +264,47 @@ router.post('/generate', async (req, res) => {
       // Add the logo
       await addLogo(ctx, width, height);
       
-      // Add a solid color background for text (more opaque)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+      // Add a solid color background for text at the bottom
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
       ctx.fillRect(0, height - 120, width, 120);
       
       // Use ASCII characters only for maximum compatibility
-      const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
+      const safeTitle = title.replace(/[^\x00-\x7F]/g, ' ');
       const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
-      // Since text rendering is problematic, draw rectangles for title
-      drawTextRectangles(ctx, width / 2, height - 60, width * 0.8, Math.floor(width * 0.04), '#FFFFFF');
+      // Draw title text with fallback
+      drawTextWithFallback(
+        ctx,
+        shortTitle,
+        width / 2,
+        height - 60,
+        {
+          fontSize: Math.floor(width * 0.04),
+          color: '#FFFFFF',
+          fontWeight: 'bold',
+          maxWidth: width * 0.9
+        }
+      );
       
-      // Draw rectangles for date (smaller)
-      drawTextRectangles(ctx, width / 2, height - 25, width * 0.4, Math.floor(width * 0.02), '#FFFFFF');
+      // Use current date for the timestamp
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('es-ES', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      }).replace(/[^\x00-\x7F]/g, ' ');
       
+      // Draw date text with fallback
+      drawTextWithFallback(
+        ctx,
+        dateStr,
+        width / 2,
+        height - 25,
+        {
+          fontSize: Math.floor(width * 0.025),
+          color: '#cccccc'
+        }
+      );
     } catch (drawError) {
       logger.error('Error drawing image:', drawError);
       
@@ -519,18 +501,46 @@ router.post('/generate-all', async (req, res) => {
       await addLogo(ctx, width, height);
       
       // Add a solid color background for text (more opaque)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
       ctx.fillRect(0, height - 120, width, 120);
       
       // Use ASCII characters only for maximum compatibility
-      const safeTitle = title.replace(/[^\x00-\x7F]/g, '');
+      const safeTitle = title.replace(/[^\x00-\x7F]/g, ' ');
       const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
-      // Since text rendering is problematic, draw rectangles for title
-      drawTextRectangles(ctx, width / 2, height - 60, width * 0.8, Math.floor(width * 0.04), '#FFFFFF');
+      // Draw title text with fallback
+      drawTextWithFallback(
+        ctx,
+        shortTitle,
+        width / 2,
+        height - 60,
+        {
+          fontSize: Math.floor(width * 0.04),
+          color: '#FFFFFF',
+          fontWeight: 'bold',
+          maxWidth: width * 0.9
+        }
+      );
       
-      // Draw rectangles for date (smaller)
-      drawTextRectangles(ctx, width / 2, height - 25, width * 0.4, Math.floor(width * 0.02), '#FFFFFF');
+      // Use current date for the timestamp
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('es-ES', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      }).replace(/[^\x00-\x7F]/g, ' ');
+      
+      // Draw date text with fallback
+      drawTextWithFallback(
+        ctx,
+        dateStr,
+        width / 2,
+        height - 25,
+        {
+          fontSize: Math.floor(width * 0.025),
+          color: '#cccccc'
+        }
+      );
       
       // Create a preview data URL
       const previewCanvas = createCanvas(600, 315);
@@ -581,11 +591,31 @@ router.post('/generate-all', async (req, res) => {
         instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         instagramCtx.fillRect(0, 680, 800, 120);
         
-        // Draw rectangles for title
-        drawTextRectangles(instagramCtx, 400, 730, 700, Math.floor(800 * 0.04), '#FFFFFF');
+        // Draw title text with fallback
+        drawTextWithFallback(
+          instagramCtx,
+          shortTitle,
+          400,
+          730,
+          {
+            fontSize: Math.floor(800 * 0.04),
+            color: '#FFFFFF',
+            fontWeight: 'bold',
+            maxWidth: 750
+          }
+        );
         
-        // Draw rectangles for date (smaller)
-        drawTextRectangles(instagramCtx, 400, 770, 350, Math.floor(800 * 0.02), '#FFFFFF');
+        // Draw date text with fallback
+        drawTextWithFallback(
+          instagramCtx,
+          dateStr,
+          400,
+          770,
+          {
+            fontSize: Math.floor(800 * 0.025),
+            color: '#cccccc'
+          }
+        );
         
         // Get Instagram buffer for Cloudinary
         igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
@@ -624,14 +654,6 @@ router.post('/generate-all', async (req, res) => {
       
       // Update Airtable record
       await base('Redes Sociales').update(recordId, updateFields);
-      
-      // Get today's date in readable format
-      const today = new Date();
-      const dateStr = today.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric', 
-        year: 'numeric'
-      }).replace(/[^\x00-\x7F]/g, '');
       
       // Prepare results for response
       const platformResults = [];

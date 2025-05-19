@@ -1,5 +1,6 @@
 import { createCanvas, loadImage } from 'canvas';
 import logger from '../utils/logger.js';
+import textRenderer from './text-renderer.js';
 
 /**
  * Generate a social media image with title overlay
@@ -72,47 +73,27 @@ export async function generateSocialMediaImage(data) {
     }
     
     // Add a semi-transparent overlay for better text visibility
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.fillRect(0, 0, width, height);
     
-    // Add the title text (simplified)
+    // Add the title text
     const formattedTitle = title.length > 100 ? title.substring(0, 97) + '...' : title;
     
-    ctx.font = `bold ${Math.floor(width * 0.05)}px Arial, sans-serif`;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // Simple text wrapping
-    const words = formattedTitle.split(' ');
-    const lines = [];
-    let currentLine = words[0];
-    
-    const maxLineWidth = width * 0.8; // 80% of canvas width
-    
-    for (let i = 1; i < words.length; i++) {
-      const word = words[i];
-      const testLine = currentLine + ' ' + word;
-      const metrics = ctx.measureText(testLine);
-      
-      if (metrics.width > maxLineWidth) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        currentLine = testLine;
+    // Use text renderer with proper fallbacks
+    textRenderer.drawWrappedText(
+      ctx, 
+      formattedTitle, 
+      width / 2, 
+      height / 2, 
+      width * 0.8, 
+      Math.floor(width * 0.06), // Line height
+      {
+        fontSize: Math.floor(width * 0.05),
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+        textAlign: 'center'
       }
-    }
-    lines.push(currentLine);
-    
-    // Draw each line
-    const lineHeight = Math.floor(width * 0.055);
-    const totalTextHeight = lineHeight * lines.length;
-    const startY = (height / 2) - (totalTextHeight / 2) + (height * 0.05);
-    
-    lines.forEach((line, i) => {
-      const y = startY + (i * lineHeight);
-      ctx.fillText(line, width / 2, y);
-    });
+    );
     
     logger.info('Image generation completed successfully');
     
