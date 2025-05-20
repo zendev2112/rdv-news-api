@@ -351,7 +351,7 @@ router.post('/generate', async (req, res) => {
     }
     
     // Get the high-quality preview image for the response
-    const previewDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    const previewDataUrl = canvas.toDataURL('image/jpeg', 1.0);
     
     // Initialize Airtable
     const airtable = new Airtable({ apiKey: apiToken });
@@ -362,7 +362,7 @@ router.post('/generate', async (req, res) => {
     
     try {
       // Get high-quality buffer for Cloudinary - INCREASE QUALITY
-      const uploadBuffer = canvas.toBuffer('image/jpeg', { quality: 0.95 });
+      const uploadBuffer = canvas.toBuffer('image/jpeg', { quality: 1.0 });
       
       // Upload to Cloudinary
       const fileName = `${platform.toLowerCase()}-${recordId}-${timestamp}.jpg`;
@@ -597,10 +597,10 @@ router.post('/generate-all', async (req, res) => {
       const previewCanvas = createCanvas(600, 315);
       const previewCtx = previewCanvas.getContext('2d');
       previewCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 600, 315);
-      previewDataUrl = previewCanvas.toDataURL('image/jpeg', 0.8);
+      previewDataUrl = previewCanvas.toDataURL('image/jpeg', 1.0);
       
       // Get high-quality buffer for Facebook/Twitter
-      const fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
+      const fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 1.0 });
       
       // Create Instagram square image
       let igBuffer;
@@ -669,10 +669,10 @@ router.post('/generate-all', async (req, res) => {
         );
         
         // Get Instagram buffer for Cloudinary
-        igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 0.85 });
+        igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 1.0 });
       } else {
         // If Instagram is not in the platforms list, just use the default canvas
-        igBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
+        igBuffer = canvas.toBuffer('image/jpeg', { quality: 1.0 });
       }
       
       // Create unique filenames for each platform
