@@ -240,43 +240,71 @@ async function createImageWithSVGText(imageBuffer, title, date, width, height) {
     const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const safeDate = date.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     
-    // Create an SVG that embeds the base image and adds text on top
+    // Create an SVG that embeds the base image and adds text on top using web-safe fonts
     const svgText = `
-      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
         <!-- Embed the base image -->
         <image href="data:image/png;base64,${imageBuffer.toString('base64')}" width="${width}" height="${height}" />
         
-        <!-- Add semi-transparent background for text - ONLY NEEDED IN SVG, NOT IN BASE IMAGE -->
-        <rect x="0" y="${height - 120}" width="${width}" height="120" fill="rgba(0,0,0,0.8)" />
+        <!-- Add solid background for text -->
+        <rect x="0" y="${height - 120}" width="${width}" height="120" fill="rgba(0, 0, 0, 0.85)" />
         
-        <!-- Add title text with highly visible styling -->
+        <!-- Define text styles once -->
+        <style type="text/css">
+          @font-face {
+            font-family: 'CustomFont';
+            src: url('https://fonts.gstatic.com/s/opensans/v29/memSYaGs126MiZpBA-UvWbX2vVnXBbObj2OVZyOOSr4dVJWUgsjZ0B4gaVI.woff2') format('woff2');
+          }
+          .title-text {
+            font-family: 'CustomFont', Arial, sans-serif;
+            font-size: ${Math.floor(width * 0.055)}px;
+            font-weight: bold;
+            fill: white;
+            text-anchor: middle;
+          }
+          .date-text {
+            font-family: 'CustomFont', Arial, sans-serif;
+            font-size: ${Math.floor(width * 0.035)}px;
+            fill: #cccccc;
+            text-anchor: middle;
+          }
+        </style>
+        
+        <!-- Draw text outline for visibility -->
         <text 
           x="${width / 2}" 
           y="${height - 60}" 
-          font-family="Arial, Helvetica, sans-serif" 
-          font-size="${Math.floor(width * 0.04)}px" 
-          font-weight="bold" 
-          fill="white" 
-          text-anchor="middle">
-          <tspan dominant-baseline="middle">${safeTitle}</tspan>
+          stroke="#000000"
+          stroke-width="4"
+          stroke-linejoin="round"
+          class="title-text"
+          opacity="0.8">
+          ${safeTitle}
         </text>
         
-        <!-- Add date text -->
+        <!-- Draw title text -->
+        <text 
+          x="${width / 2}" 
+          y="${height - 60}" 
+          class="title-text">
+          ${safeTitle}
+        </text>
+        
+        <!-- Draw date text -->
         <text 
           x="${width / 2}" 
           y="${height - 25}" 
-          font-family="Arial, Helvetica, sans-serif" 
-          font-size="${Math.floor(width * 0.025)}px" 
-          fill="#cccccc" 
-          text-anchor="middle">
-          <tspan dominant-baseline="middle">${safeDate}</tspan>
+          class="date-text">
+          ${safeDate}
         </text>
       </svg>
     `;
 
-    // Use sharp to convert SVG to PNG with maximum quality
+    // Convert SVG to PNG with Sharp ensuring highest quality
     const outputBuffer = await sharp(Buffer.from(svgText))
-      .png({ quality: 100 })
+      // Ensure proper rendering
+      .png({ compressionLevel: 0 }) // 0 = no compression
       .toBuffer();
     
     return outputBuffer;
@@ -296,56 +324,73 @@ async function createInstagramImageWithSVGText(imageBuffer, title, date, width, 
     
     // Create an SVG that embeds the base image and adds text on top
     const svgText = `
-      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
         <!-- Embed the base image -->
         <image href="data:image/png;base64,${imageBuffer.toString('base64')}" width="${width}" height="${height}" />
         
-        <!-- Add semi-transparent background for text -->
-        <rect x="0" y="${height - 120}" width="${width}" height="120" fill="rgba(0,0,0,0.8)" />
+        <!-- Add black background for text -->
+        <rect x="0" y="${height - 120}" width="${width}" height="120" fill="rgba(0, 0, 0, 0.85)" />
         
-        <!-- Add shadow effect to make text pop more -->
-        <defs>
-          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.5" />
-          </filter>
-        </defs>
+        <!-- Define text styles once -->
+        <style type="text/css">
+          @font-face {
+            font-family: 'CustomFont';
+            src: url('https://fonts.gstatic.com/s/opensans/v29/memSYaGs126MiZpBA-UvWbX2vVnXBbObj2OVZyOOSr4dVJWUgsjZ0B4gaVI.woff2') format('woff2');
+          }
+          .title-text {
+            font-family: 'CustomFont', Arial, sans-serif;
+            font-size: ${Math.floor(width * 0.055)}px;
+            font-weight: bold;
+            fill: white;
+            text-anchor: middle;
+          }
+          .date-text {
+            font-family: 'CustomFont', Arial, sans-serif;
+            font-size: ${Math.floor(width * 0.035)}px;
+            fill: #cccccc;
+            text-anchor: middle;
+          }
+        </style>
         
-        <!-- Add title text with shadow -->
+        <!-- Draw text outline for visibility -->
         <text 
           x="${width / 2}" 
           y="${height - 60}" 
-          font-family="Arial, Helvetica, sans-serif" 
-          font-size="${Math.floor(width * 0.04)}px" 
-          font-weight="bold" 
-          fill="white" 
-          text-anchor="middle"
-          filter="url(#shadow)">
-          <tspan dominant-baseline="middle">${safeTitle}</tspan>
+          stroke="#000000"
+          stroke-width="4"
+          stroke-linejoin="round"
+          class="title-text"
+          opacity="0.8">
+          ${safeTitle}
         </text>
         
-        <!-- Add date text with shadow -->
+        <!-- Draw title text -->
+        <text 
+          x="${width / 2}" 
+          y="${height - 60}" 
+          class="title-text">
+          ${safeTitle}
+        </text>
+        
+        <!-- Draw date text -->
         <text 
           x="${width / 2}" 
           y="${height - 25}" 
-          font-family="Arial, Helvetica, sans-serif" 
-          font-size="${Math.floor(width * 0.025)}px" 
-          fill="#cccccc" 
-          text-anchor="middle"
-          filter="url(#shadow)">
-          <tspan dominant-baseline="middle">${safeDate}</tspan>
+          class="date-text">
+          ${safeDate}
         </text>
       </svg>
     `;
 
     // Use sharp to convert SVG to PNG with maximum quality
     const outputBuffer = await sharp(Buffer.from(svgText))
-      .png({ quality: 100 })
+      .png({ compressionLevel: 0 })
       .toBuffer();
     
     return outputBuffer;
   } catch (error) {
     logger.error('Error creating Instagram image with SVG text:', error);
-    // Return the original image if there was an error
     return imageBuffer;
   }
 }
@@ -395,7 +440,7 @@ router.post('/generate', async (req, res) => {
       const imageResponse = await fetch(imageUrl, { method: 'HEAD' });
       if (!imageResponse.ok) {
         return res.status(400).json({
-          success: false,
+          success: false, 
           error: `Image URL returned status ${imageResponse.status}`
         });
       }
@@ -441,6 +486,15 @@ router.post('/generate', async (req, res) => {
         height = 628; // Default format
     }
     
+    // CRITICAL: Define safeTitle and dateStr HERE, before any code that uses them
+    // Use ASCII characters only for maximum compatibility
+    const safeTitle = title.replace(/[^\x00-\x7F]/g, ' ');
+    const dateStr = new Date().toLocaleDateString('es-ES', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    }).replace(/[^\x00-\x7F]/g, ' ');
+    
     // Create canvas
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
@@ -449,15 +503,8 @@ router.post('/generate', async (req, res) => {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, width, height);
     
-    try {
-      // Use ASCII characters only for maximum compatibility
-      const safeTitle = title.replace(/[^\x00-\x7F]/g, ' ');
-      const dateStr = new Date().toLocaleDateString('es-ES', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      }).replace(/[^\x00-\x7F]/g, ' ');
 
+    try {
       // Load the source image
       const image = await loadImage(imageUrl);
       
@@ -741,6 +788,11 @@ router.post('/generate-all', async (req, res) => {
       
       // Use ASCII characters only for maximum compatibility
       const safeTitle = title.replace(/[^\x00-\x7F]/g, ' ');
+      const dateStr = new Date().toLocaleDateString('es-ES', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      }).replace(/[^\x00-\x7F]/g, ' ');
       
       // Draw title text with fallback
       drawTextWithFallback(
@@ -758,11 +810,7 @@ router.post('/generate-all', async (req, res) => {
       
       // Use current date for the timestamp
       const today = new Date();
-      const dateStr = today.toLocaleDateString('es-ES', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      }).replace(/[^\x00-\x7F]/g, ' ');
+
       
       // Draw date text with fallback
       drawTextWithFallback(
