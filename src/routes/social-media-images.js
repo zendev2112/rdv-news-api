@@ -70,20 +70,72 @@ function drawTextWithFallback(ctx, text, x, y, options = {}) {
     maxWidth = undefined
   } = options;
   
+  // IMPORTANT: Save context state
   ctx.save();
   
-  // Use our embedded font
-  ctx.font = `${fontWeight} ${fontSize}px Roboto, sans-serif`;
-  ctx.fillStyle = color;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  
-  if (maxWidth) {
-    ctx.fillText(text, x, y, maxWidth);
-  } else {
-    ctx.fillText(text, x, y);
+  try {
+    // Add a background behind text for better contrast
+    const textWidth = maxWidth || (text.length * fontSize * 0.6);
+    const textHeight = fontSize * 1.4;
+    
+    // Draw semi-transparent background behind text
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(
+      x - textWidth / 2 - 10, 
+      y - textHeight / 2 - 5, 
+      textWidth + 20, 
+      textHeight + 10
+    );
+    
+    // Set text shadow for better visibility
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
+    
+    // Try multiple fonts in order - ONE should work
+    // The key is to be explicit and try multiple options
+    const fontFamily = fontWeight === 'bold' ? 
+      'bold Arial, bold Helvetica, bold Roboto, bold sans-serif' : 
+      'Arial, Helvetica, Roboto, sans-serif';
+    
+    ctx.font = `${fontSize}px ${fontFamily}`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // Log the exact font being used
+    logger.info(`Drawing text: "${text}" with font: ${ctx.font}`);
+    
+    if (maxWidth) {
+      // Draw text multiple times for better visibility
+      ctx.fillText(text, x, y, maxWidth);
+      ctx.fillText(text, x, y, maxWidth); // Second pass
+    } else {
+      ctx.fillText(text, x, y);
+      ctx.fillText(text, x, y); // Second pass
+    }
+    
+    // Add a subtle white outline to make text pop
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    if (maxWidth) {
+      ctx.strokeText(text, x, y, maxWidth);
+    } else {
+      ctx.strokeText(text, x, y);
+    }
+  } catch (error) {
+    logger.error(`Text rendering failed: ${error.message}, falling back to rectangle`);
+    
+    // Last resort - create a white rectangle with proportional size
+    const rectWidth = maxWidth || Math.min(text.length * fontSize * 0.6, ctx.canvas.width * 0.8);
+    const rectHeight = fontSize * 0.4;
+    
+    ctx.fillStyle = color;
+    ctx.fillRect(x - rectWidth/2, y - rectHeight/2, rectWidth, rectHeight);
   }
   
+  // IMPORTANT: Restore context state to prevent issues
   ctx.restore();
 }
 
@@ -361,12 +413,16 @@ router.post('/generate', async (req, res) => {
     const timestamp = new Date().toISOString().substring(0, 10);
     
     try {
-      // Get high-quality buffer for Cloudinary - INCREASE QUALITY
-      const uploadBuffer = canvas.toBuffer('image/jpeg', { quality: 1.0 });
+      // Try using PNG format instead of JPEG for better quality
+      const uploadBuffer = canvas.toBuffer('image/png');
       
-      // Upload to Cloudinary
-      const fileName = `${platform.toLowerCase()}-${recordId}-${timestamp}.jpg`;
-      const publicUrl = await uploadImage(uploadBuffer, fileName);
+      // Upload to Cloudinary with specific settings for text preservation
+      const fileName = `${platform.toLowerCase()}-${recordId}-${timestamp}.png`;
+      const publicUrl = await uploadImage(uploadBuffer, fileName, {
+        format: 'png',
+        quality: 100,
+        flags: 'preserve_text'
+      });
       
       // Create update object with the Cloudinary URL
       const updateFields = {};
