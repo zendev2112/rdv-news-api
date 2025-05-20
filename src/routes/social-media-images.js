@@ -499,6 +499,285 @@ async function createFinalInstagramImageWithTextImages(imageBuffer, title, date,
   }
 }
 
+/**
+ * Create text image with verified font rendering
+ * @param {string} text - Text to render
+ * @param {number} width - Image width
+ * @param {string} fontFamily - Font family to use
+ * @param {Object} options - Additional options
+ * @returns {Promise<Buffer>} - PNG buffer of rendered text
+ */
+async function renderTextAsImage(text, width, options = {}) {
+  try {
+    const {
+      fontSize = 32,
+      fontFamily = 'sans-serif',
+      fontWeight = 'normal',
+      color = '#FFFFFF',
+      backgroundColor = 'rgba(0,0,0,0)'
+    } = options;
+    
+    // Create a temporary canvas just for this text
+    const height = fontSize * 1.5; // Enough space for the text
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    // Clear the canvas
+    ctx.clearRect(0, 0, width, height);
+    
+    // Fill with background if specified
+    if (backgroundColor !== 'rgba(0,0,0,0)') {
+      ctx.fillStyle = backgroundColor;
+      ctx.fillRect(0, 0, width, height);
+    }
+    
+    // Configure text rendering
+    ctx.fillStyle = color;
+    ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle'; 
+    
+    // Add shadow for better visibility
+    ctx.shadowColor = 'rgba(0,0,0,0.7)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    
+    // Draw the text in the center
+    ctx.fillText(text, width / 2, height / 2, width * 0.9);
+    
+    // Draw again for better visibility
+    ctx.fillText(text, width / 2, height / 2, width * 0.9);
+    
+    // Return as PNG buffer
+    return canvas.toBuffer('image/png');
+  } catch (error) {
+    logger.error('Error rendering text as image:', error);
+    
+    // Create simple fallback image with rectangle
+    const canvas = createCanvas(width, 40);
+    const ctx = canvas.getContext('2d');
+    
+    ctx.fillStyle = color || '#FFFFFF';
+    ctx.fillRect(Math.floor(width/4), 10, Math.floor(width/2), 20);
+    
+    return canvas.toBuffer('image/png');
+  }
+}
+
+/**
+ * Create an image with text overlay using our verified text rendering method
+ * @param {Buffer} imageBuffer - Base image buffer
+ * @param {string} title - Title text
+ * @param {string} date - Date text
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @returns {Promise<Buffer>} - Final image buffer
+ */
+async function createImageWithVerifiedText(imageBuffer, title, date, width, height) {
+  try {
+    // Create a canvas for the final image
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    // Draw the base image
+    const baseImage = await loadImage(imageBuffer);
+    ctx.drawImage(baseImage, 0, 0, width, height);
+    
+    // Add a nice gradient background for text area
+    const gradient = ctx.createLinearGradient(0, height - 150, 0, height);
+    gradient.addColorStop(0, 'rgba(0,0,0,0.6)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, height - 130, width, 130);
+    
+    // Calculate font sizes
+    const titleFontSize = Math.floor(width * 0.055);
+    const dateFontSize = Math.floor(width * 0.035);
+    
+    // Create text images separately with verified method
+    const titleTextBuffer = await renderTextAsImage(title, width, {
+      fontSize: titleFontSize,
+      fontWeight: 'bold',
+      color: '#FFFFFF',
+      backgroundColor: 'transparent'
+    });
+    
+    const dateTextBuffer = await renderTextAsImage(date, width, {
+      fontSize: dateFontSize,
+      color: '#CCCCCC',
+      backgroundColor: 'transparent'
+    });
+    
+    // Load text images
+    const titleImage = await loadImage(titleTextBuffer);
+    const dateImage = await loadImage(dateTextBuffer);
+    
+    // Composite text onto main image
+    ctx.drawImage(
+      titleImage, 
+      0, 0, titleImage.width, titleImage.height,
+      0, height - 100, width, titleFontSize * 2
+    );
+    
+    ctx.drawImage(
+      dateImage,
+      0, 0, dateImage.width, dateImage.height,
+      0, height - 40, width, dateFontSize * 2
+    );
+    
+    // Return high quality PNG
+    return canvas.toBuffer('image/png');
+  } catch (error) {
+    logger.error('Error creating image with verified text:', error);
+    return imageBuffer;
+  }
+}
+
+// Same for Instagram
+async function createInstagramImageWithVerifiedText(imageBuffer, title, date, width, height) {
+  // Same implementation with adjusted dimensions for Instagram
+  try {
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    const baseImage = await loadImage(imageBuffer);
+    ctx.drawImage(baseImage, 0, 0, width, height);
+    
+    const gradient = ctx.createLinearGradient(0, height - 150, 0, height);
+    gradient.addColorStop(0, 'rgba(0,0,0,0.6)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, height - 130, width, 130);
+    
+    const titleFontSize = Math.floor(width * 0.055);
+    const dateFontSize = Math.floor(width * 0.035);
+    
+    const titleTextBuffer = await renderTextAsImage(title, width, {
+      fontSize: titleFontSize,
+      fontWeight: 'bold',
+      color: '#FFFFFF',
+      backgroundColor: 'transparent'
+    });
+    
+    const dateTextBuffer = await renderTextAsImage(date, width, {
+      fontSize: dateFontSize,
+      color: '#CCCCCC',
+      backgroundColor: 'transparent'
+    });
+    
+    const titleImage = await loadImage(titleTextBuffer);
+    const dateImage = await loadImage(dateTextBuffer);
+    
+    ctx.drawImage(
+      titleImage, 
+      0, 0, titleImage.width, titleImage.height,
+      0, height - 100, width, titleFontSize * 2
+    );
+    
+    ctx.drawImage(
+      dateImage,
+      0, 0, dateImage.width, dateImage.height,
+      0, height - 40, width, dateFontSize * 2
+    );
+    
+    return canvas.toBuffer('image/png');
+  } catch (error) {
+    logger.error('Error creating Instagram image with verified text:', error);
+    return imageBuffer;
+  }
+}
+
+// Add this function to your file
+
+/**
+ * Generate text image using temporary file approach (like test-text-rendering.js)
+ * @param {string} text - Text to render
+ * @param {number} width - Image width
+ * @param {string} dateStr - Date string 
+ * @param {string} imageUrl - Original image URL
+ * @returns {Promise<string>} - Path to generated image file
+ */
+async function generateImageWithTextToFile(text, dateStr, imageUrl, options = {}) {
+  try {
+    const { width = 1200, height = 628, platform = 'facebook' } = options;
+    
+    // Create canvas
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    // Fill with black background
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Load and draw the source image
+    const image = await loadImage(imageUrl);
+    
+    // Calculate aspect ratios
+    const imageAspect = image.width / image.height;
+    const canvasAspect = width / height;
+    
+    let sx, sy, sWidth, sHeight;
+    
+    if (imageAspect > canvasAspect) {
+      // Image is wider than canvas (crop sides)
+      sHeight = image.height;
+      sWidth = image.height * canvasAspect;
+      sy = 0;
+      sx = (image.width - sWidth) / 2;
+    } else {
+      // Image is taller than canvas (crop top/bottom)
+      sWidth = image.width;
+      sHeight = image.width / canvasAspect;
+      sx = 0;
+      sy = (image.height - sHeight) / 3; // Crop more from bottom than top
+    }
+    
+    // Draw the image
+    ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
+    
+    // Add the logo
+    await addLogo(ctx, width, height);
+    
+    // Add a gradient background for text area
+    const gradient = ctx.createLinearGradient(0, height - 150, 0, height);
+    gradient.addColorStop(0, 'rgba(0,0,0,0.6)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, height - 130, width, 130);
+    
+    // Draw title text using the method that works in test-text-rendering.js
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${Math.floor(width * 0.045)}px ${textRenderer.getBestAvailableFont()}`;
+    ctx.fillText(text, width / 2, height - 60, width * 0.9);
+    
+    // Draw date
+    ctx.fillStyle = '#cccccc';
+    ctx.font = `${Math.floor(width * 0.03)}px ${textRenderer.getBestAvailableFont()}`;
+    ctx.fillText(dateStr, width / 2, height - 25, width * 0.9);
+    
+    // Save to temporary file
+    const timestamp = Date.now();
+    const tempDir = path.join(os.tmpdir(), 'rdv-images');
+    
+    // Create temp directory if it doesn't exist
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    const outputPath = path.join(tempDir, `${platform}-${timestamp}.png`);
+    const buffer = canvas.toBuffer('image/png');
+    fs.writeFileSync(outputPath, buffer);
+    
+    logger.info(`Generated image saved to: ${outputPath}`);
+    return outputPath;
+  } catch (error) {
+    logger.error('Error generating image with text to file:', error);
+    throw error;
+  }
+}
+
 const router = express.Router();
 
 // Test GET endpoint
@@ -692,20 +971,31 @@ router.post('/generate', async (req, res) => {
       const baseBuffer = canvas.toBuffer('image/png');
       
       // Use SVG to add text reliably
-      const uploadBuffer = await createFinalImageWithTextImages(
-        baseBuffer,
-        safeTitle,
-        dateStr,
-        width,
-        height
+      const imagePath = await generateImageWithTextToFile(
+        safeTitle, 
+        dateStr, 
+        imageUrl, 
+        { 
+          width, 
+          height, 
+          platform: platform.toLowerCase() 
+        }
       );
-      
-      // Upload to Cloudinary with specific settings
+
+      // Upload the file directly to Cloudinary
       const fileName = `${platform.toLowerCase()}-${recordId}-${timestamp}.png`;
-      const publicUrl = await uploadImage(uploadBuffer, fileName, {
+      const publicUrl = await uploadImage(imagePath, fileName, {
         format: 'png',
-        quality: 100
+        quality: 100,
+        useFilePath: true  // Add this flag to the uploadImage function
       });
+
+      // Clean up temporary file
+      try {
+        fs.unlinkSync(imagePath);
+      } catch (cleanupError) {
+        logger.warn(`Could not delete temporary image: ${cleanupError.message}`);
+      }
       
       // Create update object with the Cloudinary URL
       const updateFields = {};
@@ -1009,22 +1299,27 @@ router.post('/generate-all', async (req, res) => {
       }
       
       // Use SVG to add text reliably
-      const fbtwBuffer = await createImageWithCanvasText(
-        fbtwBaseBuffer,
-        safeTitle,
-        dateStr,
-        width,
-        height
+      const fbImagePath = await generateImageWithTextToFile(
+        safeTitle, 
+        dateStr, 
+        imageUrl, 
+        { width, height, platform: 'facebook' }
       );
-      
-      const igBuffer = await createInstagramImageWithCanvasText(
-        igBaseBuffer,
-        safeTitle,
-        dateStr,
-        800,
-        800
+
+      const twImagePath = await generateImageWithTextToFile(
+        safeTitle, 
+        dateStr, 
+        imageUrl, 
+        { width, height, platform: 'twitter' }
       );
-      
+
+      const igImagePath = await generateImageWithTextToFile(
+        safeTitle, 
+        dateStr, 
+        imageUrl, 
+        { width: 800, height: 800, platform: 'instagram' }
+      );
+
       // Create unique filenames for each platform
       const fbFileName = `facebook-${recordId}-${timestamp}.png`;
       const twFileName = `twitter-${recordId}-${timestamp}.png`;
@@ -1032,10 +1327,19 @@ router.post('/generate-all', async (req, res) => {
       
       // Upload images to Cloudinary (in parallel)
       const [fbUrl, twUrl, igUrl] = await Promise.all([
-        uploadImage(fbtwBuffer, fbFileName),
-        uploadImage(fbtwBuffer, twFileName),
-        uploadImage(igBuffer, igFileName)
+        uploadImage(fbImagePath, fbFileName, { useFilePath: true }),
+        uploadImage(twImagePath, twFileName, { useFilePath: true }),
+        uploadImage(igImagePath, igFileName, { useFilePath: true })
       ]);
+
+      // Clean up temporary files
+      try {
+        fs.unlinkSync(fbImagePath);
+        fs.unlinkSync(twImagePath);
+        fs.unlinkSync(igImagePath);
+      } catch (cleanupError) {
+        logger.warn(`Could not delete temporary images: ${cleanupError.message}`);
+      }
       
       // Create update object with Cloudinary URLs
       const updateFields = {

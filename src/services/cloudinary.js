@@ -12,17 +12,26 @@ cloudinary.config({
 });
 
 /**
- * Upload image buffer to Cloudinary
- * @param {Buffer} buffer - The image buffer to upload
+ * Upload image buffer or file path to Cloudinary
+ * @param {Buffer|string} source - The image buffer or file path to upload
  * @param {string} fileName - Name for the file (will be used as public_id)
  * @param {object} options - Additional options for upload
  * @returns {Promise<string>} Public URL of the uploaded image
  */
-export async function uploadImage(buffer, fileName, options = {}) {
+export async function uploadImage(source, fileName, options = {}) {
   try {
-    // Create a temporary file to upload
-    const tempFilePath = path.join(os.tmpdir(), fileName);
-    fs.writeFileSync(tempFilePath, buffer);
+    // Check if we're using a file path or buffer
+    const useFilePath = options.useFilePath || false;
+    let tempFilePath;
+    
+    if (useFilePath) {
+      // Use the provided file path directly
+      tempFilePath = source;
+    } else {
+      // Create a temporary file from buffer
+      tempFilePath = path.join(os.tmpdir(), fileName);
+      fs.writeFileSync(tempFilePath, source);
+    }
     
     // Add timestamp to ensure unique filename
     const timestamp = new Date().getTime();
@@ -43,8 +52,10 @@ export async function uploadImage(buffer, fileName, options = {}) {
     
     const result = await cloudinary.uploader.upload(tempFilePath, uploadOptions);
     
-    // Delete the temporary file
-    fs.unlinkSync(tempFilePath);
+    // Delete the temporary file only if we created it
+    if (!useFilePath) {
+      fs.unlinkSync(tempFilePath);
+    }
     
     // Return the secure URL
     return result.secure_url;
