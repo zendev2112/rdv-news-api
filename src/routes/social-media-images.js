@@ -1652,7 +1652,7 @@ export default router;
 
 
 /**
- * Generate final image using GraphicsMagick (most reliable text rendering)
+ * Generate final image using GraphicsMagick with fallback to canvas
  * @param {string} imageUrl - URL to source image
  * @param {string} text - Title text
  * @param {string} dateStr - Date text
@@ -1679,31 +1679,126 @@ async function generateImageWithGm(imageUrl, text, dateStr, options = {}) {
     const imageBuffer = await imageResponse.arrayBuffer();
     fs.writeFileSync(sourceImagePath, Buffer.from(imageBuffer));
     
-    // Format text for command line - escape quotes and special characters
-    const escapedTitle = text.replace(/(["\s'$`\\])/g, '\\$1');
-    const escapedDate = dateStr.replace(/(["\s'$`\\])/g, '\\$1');
-    
-    // Create GraphicsMagick command
-    const command = `gm convert "${sourceImagePath}" -resize ${width}x${height}^ -gravity center -extent ${width}x${height} ` +
-      // Add black gradient at bottom
-      `\\( -size ${width}x130 gradient:none-black -gravity south -geometry +0+0 -compose over \\) -composite ` +
-      // Add title text 
-      `-fill white -font Arial -pointsize ${Math.floor(width * 0.045)} -gravity south -annotate +0+60 "${escapedTitle}" ` +
-      // Add date text
-      `-fill "#cccccc" -font Arial -pointsize ${Math.floor(width * 0.03)} -gravity south -annotate +0+20 "${escapedDate}" ` +
-      `"${outputPath}"`;
-    
-    // Execute the command
-    logger.info(`Executing GraphicsMagick command...`);
-    await execAsync(command);
-    logger.info(`Image generated with GM at ${outputPath}`);
-    
-    // Clean up source image
-    fs.unlinkSync(sourceImagePath);
-    
-    return outputPath;
+    // Check if GraphicsMagick is installed
+    try {
+      logger.info('Checking for GraphicsMagick installation...');
+      await execAsync('which gm');
+      logger.info('GraphicsMagick is installed');
+      
+      // Format text for command line - escape quotes and special characters
+      const escapedTitle = text.replace(/(["\s'$`\\])/g, '\\$1');
+      const escapedDate = dateStr.replace(/(["\s'$`\\])/g, '\\$1');
+      
+      // Create GraphicsMagick command
+      const command = `gm convert "${sourceImagePath}" -resize ${width}x${height}^ -gravity center -extent ${width}x${height} ` +
+        // Add black gradient at bottom
+        `\\( -size ${width}x130 gradient:none-black -gravity south -geometry +0+0 -compose over \\) -composite ` +
+        // Add title text 
+        `-fill white -font Arial -pointsize ${Math.floor(width * 0.045)} -gravity south -annotate +0+60 "${escapedTitle}" ` +
+        // Add date text
+        `-fill "#cccccc" -font Arial -pointsize ${Math.floor(width * 0.03)} -gravity south -annotate +0+20 "${escapedDate}" ` +
+        `"${outputPath}"`;
+      
+      // Execute the command
+      logger.info(`Executing GraphicsMagick command...`);
+      try {
+        await execAsync(command);
+        logger.info(`Image generated with GM at ${outputPath}`);
+        
+        // Clean up source image
+        fs.unlinkSync(sourceImagePath);
+        
+        return outputPath;
+      } catch (gmError) {
+        // If GM execution fails, log error and throw to use canvas fallback
+        logger.error(`GraphicsMagick execution failed: ${gmError.message}`);
+        throw new Error(`GraphicsMagick execution failed: ${gmError.message}`);
+      }
+    } catch (gmNotFound) {
+      // GraphicsMagick not installed, try to install it
+      logger.warn('GraphicsMagick not found, attempting to install...');
+      
+      try {
+        // Try to install GraphicsMagick
+        logger.info('Installing GraphicsMagick...');
+        await execAsync('apt-get update && apt-get install -y graphicsmagick');
+        logger.info('GraphicsMagick installed successfully');
+        
+        // Retry the GM command now that it's installed
+        const escapedTitle = text.replace(/(["\s'$`\\])/g, '\\$1');
+        const escapedDate = dateStr.replace(/(["\s'$`\\])/g, '\\$1');
+        
+        const command = `gm convert "${sourceImagePath}" -resize ${width}x${height}^ -gravity center -extent ${width}x${height} ` +
+          `\\( -size ${width}x130 gradient:none-black -gravity south -geometry +0+0 -compose over \\) -composite ` +
+          `-fill white -font Arial -pointsize ${Math.floor(width * 0.045)} -gravity south -annotate +0+60 "${escapedTitle}" ` +
+          `-fill "#cccccc" -font Arial -pointsize ${Math.floor(width * 0.03)} -gravity south -annotate +0+20 "${escapedDate}" ` +
+          `"${outputPath}"`;
+        
+        await execAsync(command);
+        logger.info(`Image generated with newly installed GM at ${outputPath}`);
+        
+        // Clean up source image
+        fs.unlinkSync(sourceImagePath);
+        
+        return outputPath;
+      } catch (installError) {
+        // If installation fails, throw error to use canvas fallback
+        logger.error(`Failed to install GraphicsMagick: ${installError.message}`);
+        throw new Error(`Failed to install GraphicsMagick: ${installError.message}`);
+      }
+    }
   } catch (error) {
-    logger.error('Error generating image with GraphicsMagick:', error);
-    throw error;
+    // Log the error and use canvas fallback
+    logger.error(`Error with GraphicsMagick: ${error.message}, using Canvas fallback`);
+    
+    // Use the existing source image path from above
+    const sourceImagePath = path.join(os.tmpdir(), `source-${Date.now()}.jpg`);
+    
+    // Generate with canvas as fallback
+    const canvas = createCanvas(options.width || 1200, options.height || 628);
+    const ctx = canvas.getContext('2d');
+    
+    try {
+      // Prepare canvas with base image
+      const image = await loadImage(sourceImagePath);
+      ctx.drawImage(image, 0, 0, options.width || 1200, options.height || 628);
+      
+      // Add gradient background for text
+      const height = options.height || 628;
+      const gradient = ctx.createLinearGradient(0, height - 150, 0, height);
+      gradient.addColorStop(0, 'rgba(0, 0, 0, 0.5)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.95)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, height - 130, options.width || 1200, 130);
+      
+      // Add text with createTextAsImage which we know works reliably
+      const titleTextBuffer = await createTextAsImage(text, options.width || 1200, Math.floor((options.width || 1200) * 0.045), '#FFFFFF');
+      const titleImage = await loadImage(titleTextBuffer);
+      
+      const dateTextBuffer = await createTextAsImage(dateStr, options.width || 1200, Math.floor((options.width || 1200) * 0.03), '#CCCCCC');
+      const dateImage = await loadImage(dateTextBuffer);
+      
+      // Draw text images on canvas
+      ctx.drawImage(
+        titleImage, 
+        0, 0, titleImage.width, titleImage.height,
+        0, height - 100, options.width || 1200, Math.floor((options.width || 1200) * 0.045) * 2
+      );
+      
+      ctx.drawImage(
+        dateImage,
+        0, 0, dateImage.width, dateImage.height,
+        0, height - 40, options.width || 1200, Math.floor((options.width || 1200) * 0.03) * 2
+      );
+      
+      // Save to final file
+      const outputPath = path.join(os.tmpdir(), 'rdv-images', `${options.platform || 'generic'}-${Date.now()}.png`);
+      fs.writeFileSync(outputPath, canvas.toBuffer('image/png'));
+      
+      return outputPath;
+    } catch (canvasError) {
+      logger.error(`Canvas fallback also failed: ${canvasError.message}`);
+      throw new Error(`Failed to generate image: ${canvasError.message}`);
+    }
   }
 }
