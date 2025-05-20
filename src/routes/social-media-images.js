@@ -1164,7 +1164,7 @@ router.post('/generate', async (req, res) => {
       const baseBuffer = canvas.toBuffer('image/png');
       
       // Use SVG to add text reliably
-      const imagePath = await generateSocialMediaImageFile(
+      const imagePath = await generateImageWithGm(
         imageUrl,
         safeTitle, 
         dateStr, 
@@ -1492,21 +1492,21 @@ router.post('/generate-all', async (req, res) => {
       }
       
       // Use SVG to add text reliably
-      const fbImagePath = await generateSocialMediaImageFile(
+      const fbImagePath = await generateImageWithGm(
         imageUrl,
         safeTitle, 
         dateStr, 
         { width, height, platform: 'facebook' }
       );
 
-      const twImagePath = await generateSocialMediaImageFile(
+      const twImagePath = await generateImageWithGm(
         imageUrl,
         safeTitle, 
         dateStr, 
         { width, height, platform: 'twitter' }
       );
 
-      const igImagePath = await generateSocialMediaImageFile(
+      const igImagePath = await generateImageWithGm(
         imageUrl,
         safeTitle, 
         dateStr, 
@@ -1646,3 +1646,65 @@ router.post('/generate-all', async (req, res) => {
 });
 
 export default router;
+
+// Add this function near the top after imports
+
+import { exec } from 'child_process';
+
+
+/**
+ * Generate final image using GraphicsMagick (most reliable text rendering)
+ * @param {string} imageUrl - URL to source image
+ * @param {string} text - Title text
+ * @param {string} dateStr - Date text
+ * @param {Object} options - Options including dimensions
+ * @returns {Promise<string>} - Path to generated image
+ */
+async function generateImageWithGm(imageUrl, text, dateStr, options = {}) {
+  try {
+    const { width = 1200, height = 628, platform = 'facebook' } = options;
+    
+    // Create temp directory
+    const tempDir = path.join(os.tmpdir(), 'rdv-images');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    // Define file paths
+    const timestamp = Date.now();
+    const sourceImagePath = path.join(tempDir, `source-${timestamp}.jpg`);
+    const outputPath = path.join(tempDir, `${platform}-${timestamp}.png`);
+    
+    // Download source image
+    const imageResponse = await fetch(imageUrl);
+    const imageBuffer = await imageResponse.arrayBuffer();
+    fs.writeFileSync(sourceImagePath, Buffer.from(imageBuffer));
+    
+    // Format text for command line - escape quotes and special characters
+    const escapedTitle = text.replace(/(["\s'$`\\])/g, '\\$1');
+    const escapedDate = dateStr.replace(/(["\s'$`\\])/g, '\\$1');
+    
+    // Create GraphicsMagick command
+    const command = `gm convert "${sourceImagePath}" -resize ${width}x${height}^ -gravity center -extent ${width}x${height} ` +
+      // Add black gradient at bottom
+      `\\( -size ${width}x130 gradient:none-black -gravity south -geometry +0+0 -compose over \\) -composite ` +
+      // Add title text 
+      `-fill white -font Arial -pointsize ${Math.floor(width * 0.045)} -gravity south -annotate +0+60 "${escapedTitle}" ` +
+      // Add date text
+      `-fill "#cccccc" -font Arial -pointsize ${Math.floor(width * 0.03)} -gravity south -annotate +0+20 "${escapedDate}" ` +
+      `"${outputPath}"`;
+    
+    // Execute the command
+    logger.info(`Executing GraphicsMagick command...`);
+    await execAsync(command);
+    logger.info(`Image generated with GM at ${outputPath}`);
+    
+    // Clean up source image
+    fs.unlinkSync(sourceImagePath);
+    
+    return outputPath;
+  } catch (error) {
+    logger.error('Error generating image with GraphicsMagick:', error);
+    throw error;
+  }
+}
