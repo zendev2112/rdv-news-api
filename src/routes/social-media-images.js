@@ -778,6 +778,188 @@ async function generateImageWithTextToFile(text, dateStr, imageUrl, options = {}
   }
 }
 
+// Add this new function that works like test-text-rendering.js but creates separate image files for text
+
+/**
+ * Create a separate text-only image file and return its path
+ * @param {string} text - Text to render
+ * @param {Object} options - Rendering options
+ * @returns {Promise<string>} - Path to the text image file
+ */
+async function createTextImageFile(text, options = {}) {
+  try {
+    const {
+      width = 1000,
+      fontSize = 42,
+      color = '#FFFFFF',
+      fontWeight = 'bold',
+      backgroundColor = 'rgba(0,0,0,0.8)'
+    } = options;
+    
+    // Create a canvas just for this text
+    const height = fontSize * 2; // Tall enough for the text
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    // Clear canvas with background color
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Configure text rendering - use multiple fonts for fallback
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${fontWeight} ${fontSize}px Arial, sans-serif`;
+    
+    // Add shadow for better visibility
+    ctx.shadowColor = 'rgba(0,0,0,0.7)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    
+    // Draw the text in the center
+    ctx.fillText(text, width / 2, height / 2, width * 0.9);
+    
+    // Save to a temporary file
+    const timestamp = Date.now();
+    const tempDir = path.join(os.tmpdir(), 'rdv-text-images');
+    
+    // Create temp directory if it doesn't exist
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    // Create unique filename
+    const textHash = Buffer.from(text).toString('base64').substring(0, 10);
+    const outputPath = path.join(tempDir, `text-${textHash}-${timestamp}.png`);
+    
+    // Write to file
+    const buffer = canvas.toBuffer('image/png');
+    fs.writeFileSync(outputPath, buffer);
+    
+    logger.info(`Text image saved to: ${outputPath}`);
+    return outputPath;
+  } catch (error) {
+    logger.error('Error creating text image file:', error);
+    throw error;
+  }
+}
+
+/**
+ * Modified function to use text image files
+ */
+async function generateImageWithTextToFile(text, dateStr, imageUrl, options = {}) {
+  try {
+    const { width = 1200, height = 628, platform = 'facebook' } = options;
+    
+    // First create text image files
+    const titleImagePath = await createTextImageFile(text, {
+      width,
+      fontSize: Math.floor(width * 0.05),
+      color: '#FFFFFF',
+      fontWeight: 'bold',
+      backgroundColor: 'transparent'
+    });
+    
+    const dateImagePath = await createTextImageFile(dateStr, {
+      width,
+      fontSize: Math.floor(width * 0.035),
+      color: '#CCCCCC',
+      fontWeight: 'normal',
+      backgroundColor: 'transparent'
+    });
+    
+    // Create the main image canvas
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    // Fill with black background
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Load and draw the source image
+    const image = await loadImage(imageUrl);
+    
+    // Calculate aspect ratios
+    const imageAspect = image.width / image.height;
+    const canvasAspect = width / height;
+    
+    let sx, sy, sWidth, sHeight;
+    
+    if (imageAspect > canvasAspect) {
+      // Image is wider than canvas (crop sides)
+      sHeight = image.height;
+      sWidth = image.height * canvasAspect;
+      sy = 0;
+      sx = (image.width - sWidth) / 2;
+    } else {
+      // Image is taller than canvas (crop top/bottom)
+      sWidth = image.width;
+      sHeight = image.width / canvasAspect;
+      sx = 0;
+      sy = (image.height - sHeight) / 3; // Crop more from bottom than top
+    }
+    
+    // Draw the image
+    ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
+    
+    // Add the logo
+    await addLogo(ctx, width, height);
+    
+    // Add a gradient background for text area
+    const gradient = ctx.createLinearGradient(0, height - 150, 0, height);
+    gradient.addColorStop(0, 'rgba(0,0,0,0.6)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, height - 130, width, 130);
+    
+    // Load text images and draw them exactly like we do with the logo
+    const titleImage = await loadImage(titleImagePath);
+    const dateImage = await loadImage(dateImagePath);
+    
+    // Draw title text image
+    ctx.drawImage(
+      titleImage,
+      0, 0, titleImage.width, titleImage.height,
+      0, height - 100, width, Math.floor(width * 0.05) * 2
+    );
+    
+    // Draw date text image
+    ctx.drawImage(
+      dateImage,
+      0, 0, dateImage.width, dateImage.height,
+      0, height - 40, width, Math.floor(width * 0.035) * 2
+    );
+    
+    // Save to temporary file
+    const timestamp = Date.now();
+    const tempDir = path.join(os.tmpdir(), 'rdv-images');
+    
+    // Create temp directory if it doesn't exist
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    const outputPath = path.join(tempDir, `${platform}-${timestamp}.png`);
+    const buffer = canvas.toBuffer('image/png');
+    fs.writeFileSync(outputPath, buffer);
+    
+    // Clean up text image files
+    try {
+      fs.unlinkSync(titleImagePath);
+      fs.unlinkSync(dateImagePath);
+    } catch (err) {
+      logger.warn('Could not delete text image files:', err);
+    }
+    
+    logger.info(`Generated image saved to: ${outputPath}`);
+    return outputPath;
+  } catch (error) {
+    logger.error('Error generating image with text file approach:', error);
+    throw error;
+  }
+}
+
 const router = express.Router();
 
 // Test GET endpoint
