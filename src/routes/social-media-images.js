@@ -315,6 +315,190 @@ async function createInstagramImageWithCanvasText(imageBuffer, title, date, widt
   }
 }
 
+// Add these new functions after your existing ones
+
+/**
+ * Create a text image with no font dependencies
+ * @param {string} text - Text to render
+ * @param {number} width - Width of the text image
+ * @param {number} fontSize - Font size
+ * @param {string} color - Text color
+ * @returns {Buffer} - PNG buffer with rendered text
+ */
+async function createTextAsImage(text, width, fontSize, color) {
+  try {
+    // Create a canvas just for the text
+    const height = fontSize * 2; // Plenty of room for the text
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    // Clear background with transparency
+    ctx.clearRect(0, 0, width, height);
+    
+    // Set text properties
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    
+    // Draw text shadow for better visibility
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    
+    // Draw the text
+    ctx.fillText(text, width / 2, height / 2, width * 0.9);
+    
+    // Draw again for extra boldness
+    ctx.fillText(text, width / 2, height / 2, width * 0.9);
+    
+    // Return as PNG buffer
+    return canvas.toBuffer('image/png');
+  } catch (error) {
+    logger.error('Failed to create text image:', error);
+    // Return a 1x1 transparent pixel as fallback
+    const fallback = createCanvas(1, 1);
+    return fallback.toBuffer('image/png');
+  }
+}
+
+/**
+ * Create final image with text overlay using separate text images
+ * @param {Buffer} imageBuffer - Base image buffer
+ * @param {string} title - Title text
+ * @param {string} date - Date text
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @returns {Promise<Buffer>} - Final image buffer
+ */
+async function createFinalImageWithTextImages(imageBuffer, title, date, width, height) {
+  try {
+    // Create main canvas
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    // Draw the base image
+    const baseImage = await loadImage(imageBuffer);
+    ctx.drawImage(baseImage, 0, 0, width, height);
+    
+    // Add a semi-transparent black rectangle at the bottom for text
+    const gradient = ctx.createLinearGradient(0, height - 150, 0, height);
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0.5)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.95)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, height - 130, width, 130);
+    
+    // Create text images
+    const titleFontSize = Math.floor(width * 0.055);
+    const dateFontSize = Math.floor(width * 0.035);
+    
+    // Generate text images
+    const titleTextBuffer = await createTextAsImage(title, width, titleFontSize, '#FFFFFF');
+    const dateTextBuffer = await createTextAsImage(date, width, dateFontSize, '#CCCCCC');
+    
+    // Load text images
+    const titleTextImage = await loadImage(titleTextBuffer);
+    const dateTextImage = await loadImage(dateTextBuffer);
+    
+    // Draw title text centered at bottom area
+    ctx.drawImage(
+      titleTextImage,
+      0, // source x
+      0, // source y
+      titleTextImage.width, // source width
+      titleTextImage.height, // source height
+      0, // destination x
+      height - 100, // destination y (adjust as needed)
+      width, // destination width
+      titleFontSize * 2 // destination height
+    );
+    
+    // Draw date text below title
+    ctx.drawImage(
+      dateTextImage,
+      0, // source x
+      0, // source y
+      dateTextImage.width, // source width
+      dateTextImage.height, // source height
+      0, // destination x
+      height - 40, // destination y (adjust as needed)
+      width, // destination width
+      dateFontSize * 2 // destination height
+    );
+    
+    // Return final image buffer
+    return canvas.toBuffer('image/png');
+  } catch (error) {
+    logger.error('Error creating final image with text images:', error);
+    return imageBuffer; // Return original image on error
+  }
+}
+
+// Also create an Instagram version with the same technique
+async function createFinalInstagramImageWithTextImages(imageBuffer, title, date, width, height) {
+  try {
+    // Create main canvas
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    // Draw the base image
+    const baseImage = await loadImage(imageBuffer);
+    ctx.drawImage(baseImage, 0, 0, width, height);
+    
+    // Add a semi-transparent black rectangle at the bottom for text
+    const gradient = ctx.createLinearGradient(0, height - 150, 0, height);
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0.5)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.95)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, height - 130, width, 130);
+    
+    // Create text images
+    const titleFontSize = Math.floor(width * 0.055);
+    const dateFontSize = Math.floor(width * 0.035);
+    
+    // Generate text images
+    const titleTextBuffer = await createTextAsImage(title, width, titleFontSize, '#FFFFFF');
+    const dateTextBuffer = await createTextAsImage(date, width, dateFontSize, '#CCCCCC');
+    
+    // Load text images
+    const titleTextImage = await loadImage(titleTextBuffer);
+    const dateTextImage = await loadImage(dateTextBuffer);
+    
+    // Draw title text centered at bottom area
+    ctx.drawImage(
+      titleTextImage,
+      0, // source x
+      0, // source y
+      titleTextImage.width, // source width
+      titleTextImage.height, // source height
+      0, // destination x
+      height - 100, // destination y (adjust as needed)
+      width, // destination width
+      titleFontSize * 2 // destination height
+    );
+    
+    // Draw date text below title
+    ctx.drawImage(
+      dateTextImage,
+      0, // source x
+      0, // source y
+      dateTextImage.width, // source width
+      dateTextImage.height, // source height
+      0, // destination x
+      height - 40, // destination y (adjust as needed)
+      width, // destination width
+      dateFontSize * 2 // destination height
+    );
+    
+    // Return final image buffer
+    return canvas.toBuffer('image/png');
+  } catch (error) {
+    logger.error('Error creating Instagram image with text images:', error);
+    return imageBuffer; // Return original image on error
+  }
+}
+
 const router = express.Router();
 
 // Test GET endpoint
@@ -508,7 +692,7 @@ router.post('/generate', async (req, res) => {
       const baseBuffer = canvas.toBuffer('image/png');
       
       // Use SVG to add text reliably
-      const uploadBuffer = await createImageWithCanvasText(
+      const uploadBuffer = await createFinalImageWithTextImages(
         baseBuffer,
         safeTitle,
         dateStr,
