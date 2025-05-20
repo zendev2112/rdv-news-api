@@ -450,6 +450,14 @@ router.post('/generate', async (req, res) => {
     ctx.fillRect(0, 0, width, height);
     
     try {
+      // Use ASCII characters only for maximum compatibility
+      const safeTitle = title.replace(/[^\x00-\x7F]/g, ' ');
+      const dateStr = new Date().toLocaleDateString('es-ES', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      }).replace(/[^\x00-\x7F]/g, ' ');
+
       // Load the source image
       const image = await loadImage(imageUrl);
       
@@ -483,9 +491,6 @@ router.post('/generate', async (req, res) => {
       // ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
       // ctx.fillRect(0, height - 120, width, 120);
       
-      // Use ASCII characters only for maximum compatibility
-      const safeTitle = title.replace(/[^\x00-\x7F]/g, ' ');
-      
       // Draw title text with fallback
       drawTextWithFallback(
         ctx,
@@ -500,13 +505,7 @@ router.post('/generate', async (req, res) => {
         }
       );
       
-      // Use current date for the timestamp
-      const today = new Date();
-      const dateStr = today.toLocaleDateString('es-ES', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      }).replace(/[^\x00-\x7F]/g, ' ');
+      // Re-use the dateStr variable that was already declared
       
       // Draw date text with fallback
       drawTextWithFallback(
@@ -739,10 +738,6 @@ router.post('/generate-all', async (req, res) => {
       
       // Add the logo
       await addLogo(ctx, width, height);
-      
-      // Add a solid color background for text (more opaque)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(0, height - 120, width, 120);
       
       // Use ASCII characters only for maximum compatibility
       const safeTitle = title.replace(/[^\x00-\x7F]/g, ' ');
