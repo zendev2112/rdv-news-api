@@ -12,6 +12,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
 import textRenderer from '../services/text-renderer.js';
+import sharp from 'sharp';
 
 const execAsync = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -224,6 +225,118 @@ async function addLogo(ctx, width, height) {
   }
 }
 
+/**
+ * Create an image with text using SVG for reliable text rendering
+ * @param {Buffer} imageBuffer - Base image buffer
+ * @param {string} title - Title text
+ * @param {string} date - Date text
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @returns {Promise<Buffer>} - Final image buffer
+ */
+async function createImageWithSVGText(imageBuffer, title, date, width, height) {
+  try {
+    // Create an SVG that embeds the base image and adds text on top
+    const svgText = `
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <!-- Embed the base image -->
+        <image href="data:image/png;base64,${imageBuffer.toString('base64')}" width="${width}" height="${height}" />
+        
+        <!-- Add semi-transparent background for text -->
+        <rect x="0" y="${height - 120}" width="${width}" height="120" fill="rgba(0,0,0,0.8)" />
+        
+        <!-- Add title text -->
+        <text 
+          x="${width / 2}" 
+          y="${height - 60}" 
+          font-family="Arial, Helvetica, sans-serif" 
+          font-size="${Math.floor(width * 0.04)}px" 
+          font-weight="bold" 
+          fill="white" 
+          text-anchor="middle"
+          dominant-baseline="middle">
+          ${title}
+        </text>
+        
+        <!-- Add date text -->
+        <text 
+          x="${width / 2}" 
+          y="${height - 25}" 
+          font-family="Arial, Helvetica, sans-serif" 
+          font-size="${Math.floor(width * 0.025)}px" 
+          fill="#cccccc" 
+          text-anchor="middle"
+          dominant-baseline="middle">
+          ${date}
+        </text>
+      </svg>
+    `;
+
+    // Use sharp to convert SVG to PNG/JPEG
+    const outputBuffer = await sharp(Buffer.from(svgText))
+      .png({ quality: 100 })
+      .toBuffer();
+    
+    return outputBuffer;
+  } catch (error) {
+    logger.error('Error creating image with SVG text:', error);
+    // Return the original image if there was an error
+    return imageBuffer;
+  }
+}
+
+// Also add an Instagram-specific version
+async function createInstagramImageWithSVGText(imageBuffer, title, date, width, height) {
+  try {
+    // Create an SVG that embeds the base image and adds text on top
+    const svgText = `
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <!-- Embed the base image -->
+        <image href="data:image/png;base64,${imageBuffer.toString('base64')}" width="${width}" height="${height}" />
+        
+        <!-- Add semi-transparent background for text -->
+        <rect x="0" y="${height - 120}" width="${width}" height="120" fill="rgba(0,0,0,0.8)" />
+        
+        <!-- Add title text -->
+        <text 
+          x="${width / 2}" 
+          y="${height - 60}" 
+          font-family="Arial, Helvetica, sans-serif" 
+          font-size="${Math.floor(width * 0.04)}px" 
+          font-weight="bold" 
+          fill="white" 
+          text-anchor="middle"
+          dominant-baseline="middle">
+          ${title}
+        </text>
+        
+        <!-- Add date text -->
+        <text 
+          x="${width / 2}" 
+          y="${height - 25}" 
+          font-family="Arial, Helvetica, sans-serif" 
+          font-size="${Math.floor(width * 0.025)}px" 
+          fill="#cccccc" 
+          text-anchor="middle"
+          dominant-baseline="middle">
+          ${date}
+        </text>
+      </svg>
+    `;
+
+    // Use sharp to convert SVG to PNG/JPEG
+    const outputBuffer = await sharp(Buffer.from(svgText))
+      .png({ quality: 100 })
+      .toBuffer();
+    
+    return outputBuffer;
+  } catch (error) {
+    logger.error('Error creating Instagram image with SVG text:', error);
+    // Return the original image if there was an error
+    return imageBuffer;
+  }
+}
+
 const router = express.Router();
 
 // Test GET endpoint
@@ -411,17 +524,25 @@ router.post('/generate', async (req, res) => {
     
     // Create a timestamp for filenames
     const timestamp = new Date().toISOString().substring(0, 10);
-    
+
     try {
-      // Try using PNG format instead of JPEG for better quality
-      const uploadBuffer = canvas.toBuffer('image/png');
+      // First create a base image without text
+      const baseBuffer = canvas.toBuffer('image/png');
       
-      // Upload to Cloudinary with specific settings for text preservation
+      // Use SVG to add text reliably
+      const uploadBuffer = await createImageWithSVGText(
+        baseBuffer,
+        shortTitle,
+        dateStr,
+        width,
+        height
+      );
+      
+      // Upload to Cloudinary with specific settings
       const fileName = `${platform.toLowerCase()}-${recordId}-${timestamp}.png`;
       const publicUrl = await uploadImage(uploadBuffer, fileName, {
         format: 'png',
-        quality: 100,
-        flags: 'preserve_text'
+        quality: 100
       });
       
       // Create update object with the Cloudinary URL
@@ -656,10 +777,10 @@ router.post('/generate-all', async (req, res) => {
       previewDataUrl = previewCanvas.toDataURL('image/jpeg', 1.0);
       
       // Get high-quality buffer for Facebook/Twitter
-      const fbtwBuffer = canvas.toBuffer('image/jpeg', { quality: 1.0 });
+      const fbtwBaseBuffer = canvas.toBuffer('image/png');
       
       // Create Instagram square image
-      let igBuffer;
+      let igBaseBuffer;
       
       if (platforms.includes('instagram')) {
         // Create Instagram-specific canvas (square format)
@@ -724,19 +845,36 @@ router.post('/generate-all', async (req, res) => {
           }
         );
         
-        // Get Instagram buffer for Cloudinary
-        igBuffer = instagramCanvas.toBuffer('image/jpeg', { quality: 1.0 });
+        // Get buffer without text
+        igBaseBuffer = instagramCanvas.toBuffer('image/png');
       } else {
         // If Instagram is not in the platforms list, just use the default canvas
-        igBuffer = canvas.toBuffer('image/jpeg', { quality: 1.0 });
+        igBaseBuffer = fbtwBaseBuffer;
       }
       
-      // Create unique filenames for each platform
-      const fbFileName = `facebook-${recordId}-${timestamp}.jpg`;
-      const twFileName = `twitter-${recordId}-${timestamp}.jpg`;
-      const igFileName = `instagram-${recordId}-${timestamp}.jpg`;
+      // Use SVG to add text reliably
+      const fbtwBuffer = await createImageWithSVGText(
+        fbtwBaseBuffer,
+        shortTitle,
+        dateStr,
+        width,
+        height
+      );
       
-      // Upload images to Cloudinary (in parallel for speed)
+      const igBuffer = await createInstagramImageWithSVGText(
+        igBaseBuffer,
+        shortTitle,
+        dateStr,
+        800,
+        800
+      );
+      
+      // Create unique filenames for each platform
+      const fbFileName = `facebook-${recordId}-${timestamp}.png`;
+      const twFileName = `twitter-${recordId}-${timestamp}.png`;
+      const igFileName = `instagram-${recordId}-${timestamp}.png`;
+      
+      // Upload images to Cloudinary (in parallel)
       const [fbUrl, twUrl, igUrl] = await Promise.all([
         uploadImage(fbtwBuffer, fbFileName),
         uploadImage(fbtwBuffer, twFileName),
