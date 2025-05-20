@@ -40,8 +40,7 @@ export async function uploadImage(buffer, fileName, options = {}) {
       transformation: [
         {quality: 100, fetch_format: 'auto'}
       ],
-      // Critical to preserve text
-      flags: 'preserve_text'
+   
     };
     
     const result = await cloudinary.uploader.upload(tempFilePath, uploadOptions);
