@@ -485,12 +485,11 @@ router.post('/generate', async (req, res) => {
       
       // Use ASCII characters only for maximum compatibility
       const safeTitle = title.replace(/[^\x00-\x7F]/g, ' ');
-      const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
       // Draw title text with fallback
       drawTextWithFallback(
         ctx,
-        shortTitle,
+        safeTitle,
         width / 2,
         height - 60,
         {
@@ -545,7 +544,7 @@ router.post('/generate', async (req, res) => {
       // Use SVG to add text reliably
       const uploadBuffer = await createImageWithSVGText(
         baseBuffer,
-        shortTitle,
+        safeTitle,
         dateStr,
         width,
         height
@@ -612,7 +611,7 @@ router.post('/generate', async (req, res) => {
           title: title,
           previewWithTitle: previewDataUrl,
           imageUrl: publicUrl,
-          titleText: shortTitle,
+          titleText: safeTitle,
           dateText: dateStr,
           plainText: true,
           textPosition: {
@@ -747,12 +746,11 @@ router.post('/generate-all', async (req, res) => {
       
       // Use ASCII characters only for maximum compatibility
       const safeTitle = title.replace(/[^\x00-\x7F]/g, ' ');
-      const shortTitle = safeTitle.length > 60 ? safeTitle.substring(0, 57) + '...' : safeTitle;
       
       // Draw title text with fallback
       drawTextWithFallback(
         ctx,
-        shortTitle,
+        safeTitle,
         width / 2,
         height - 60,
         {
@@ -833,7 +831,7 @@ router.post('/generate-all', async (req, res) => {
         // Draw title text with fallback
         drawTextWithFallback(
           instagramCtx,
-          shortTitle,
+          safeTitle,
           400,
           730,
           {
@@ -866,7 +864,7 @@ router.post('/generate-all', async (req, res) => {
       // Use SVG to add text reliably
       const fbtwBuffer = await createImageWithSVGText(
         fbtwBaseBuffer,
-        shortTitle,
+        safeTitle,
         dateStr,
         width,
         height
@@ -874,7 +872,7 @@ router.post('/generate-all', async (req, res) => {
       
       const igBuffer = await createInstagramImageWithSVGText(
         igBaseBuffer,
-        shortTitle,
+        safeTitle,
         dateStr,
         800,
         800
@@ -939,7 +937,7 @@ router.post('/generate-all', async (req, res) => {
           recordId,
           results: platformResults,
           title,
-          titleText: shortTitle, // Include the title text
+          titleText: safeTitle, // Include the title text
           dateText: dateStr, // Include the date text
           plainText: true, // Flag to indicate plain text rendering
           previewWithTitle: previewDataUrl,
