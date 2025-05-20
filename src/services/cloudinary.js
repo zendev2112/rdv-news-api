@@ -28,20 +28,17 @@ export async function uploadImage(buffer, fileName, options = {}) {
     const timestamp = new Date().getTime();
     const publicId = `social-media/${timestamp}-${fileName.split('.')[0]}`;
     
-    // Use these options to prevent any transformation
+    // Update the upload options
     const uploadOptions = {
       public_id: publicId,
       resource_type: 'image',
       use_filename: true,
       unique_filename: true,
       overwrite: true,
-      // Instead of using transformation array, use direct options
       quality: 100,
-      format: 'png', 
-      // No additional transformations to preserve the original image exactly
-      transformation: [
-        {quality: 100}
-      ]
+      format: 'png',
+      // Don't use any transformations
+      transformation: []
     };
     
     const result = await cloudinary.uploader.upload(tempFilePath, uploadOptions);

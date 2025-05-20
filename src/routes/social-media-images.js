@@ -234,137 +234,83 @@ async function addLogo(ctx, width, height) {
  * @param {number} height - Image height
  * @returns {Promise<Buffer>} - Final image buffer
  */
-async function createImageWithSVGText(imageBuffer, title, date, width, height) {
+async function createImageWithCanvasText(imageBuffer, title, date, width, height) {
   try {
-    // Encode special characters for proper XML
-    const safeTitle = title.replace(/&/g, '&amp;').replace(/<//g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    const safeDate = date.replace(/&/g, '&amp;').replace(/<//g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    // Create a new canvas with the desired dimensions
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
     
-    // Create an SVG that embeds the base image and adds text on top with system fonts only
-    const svgText = `
-      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-        <!-- Embed the base image -->
-        <image href="data:image/png;base64,${imageBuffer.toString('base64')}" width="${width}" height="${height}" />
-        
-        <!-- Add solid background for text -->
-        <rect x="0" y="${height - 120}" width="${width}" height="120" fill="rgba(0, 0, 0, 0.85)" />
-        
-        <!-- Draw title text using only system fonts -->
-        <text 
-          x="${width / 2}" 
-          y="${height - 60}" 
-          font-family="Arial, Helvetica, sans-serif" 
-          font-size="${Math.floor(width * 0.055)}px" 
-          font-weight="bold" 
-          fill="white" 
-          text-anchor="middle"
-          dominant-baseline="middle">
-          ${safeTitle}
-        </text>
-        
-        <!-- Draw date text using only system fonts -->
-        <text 
-          x="${width / 2}" 
-          y="${height - 25}" 
-          font-family="Arial, Helvetica, sans-serif" 
-          font-size="${Math.floor(width * 0.035)}px" 
-          fill="#cccccc" 
-          text-anchor="middle"
-          dominant-baseline="middle">
-          ${safeDate}
-        </text>
-      </svg>
-    `;
-
-    // Convert SVG to PNG with Sharp
-    const outputBuffer = await sharp(Buffer.from(svgText))
-      .png({ compressionLevel: 0 }) // No compression for better quality
-      .toBuffer();
+    // Load the base image onto the canvas
+    const baseImage = await loadImage(imageBuffer);
+    ctx.drawImage(baseImage, 0, 0, width, height);
     
-    return outputBuffer;
+    // Add a semi-transparent black rectangle at the bottom for text
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(0, height - 120, width, 120);
+    
+    // Set text properties for title
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // Use only the most basic system fonts
+    ctx.font = `bold ${Math.floor(width * 0.055)}px sans-serif`;
+    
+    // Draw title text
+    ctx.fillText(title, width / 2, height - 60, width * 0.9);
+    
+    // Set text properties for date
+    ctx.font = `${Math.floor(width * 0.035)}px sans-serif`;
+    ctx.fillStyle = '#cccccc';
+    
+    // Draw date text
+    ctx.fillText(date, width / 2, height - 25, width * 0.9);
+    
+    // Return the canvas buffer with high quality
+    return canvas.toBuffer('image/png');
   } catch (error) {
-    logger.error('Error creating image with SVG text:', error);
-    // Return the original image if there was an error
+    logger.error('Error creating image with Canvas text:', error);
     return imageBuffer;
   }
 }
 
-// Also add an Instagram-specific version
-async function createInstagramImageWithSVGText(imageBuffer, title, date, width, height) {
+// Also create an Instagram version
+async function createInstagramImageWithCanvasText(imageBuffer, title, date, width, height) {
   try {
-    // Encode special characters for proper XML
-    const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    const safeDate = date.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    // Create a new canvas with the desired dimensions
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
     
-    // Create an SVG that embeds the base image and adds text on top
-    const svgText = `
-      <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-        <!-- Embed the base image -->
-        <image href="data:image/png;base64,${imageBuffer.toString('base64')}" width="${width}" height="${height}" />
-        
-        <!-- Add black background for text -->
-        <rect x="0" y="${height - 120}" width="${width}" height="120" fill="rgba(0, 0, 0, 0.85)" />
-        
-        <!-- Define text styles once -->
-        <style type="text/css">
-          @font-face {
-            font-family: 'CustomFont';
-            src: url('https://fonts.gstatic.com/s/opensans/v29/memSYaGs126MiZpBA-UvWbX2vVnXBbObj2OVZyOOSr4dVJWUgsjZ0B4gaVI.woff2') format('woff2');
-          }
-          .title-text {
-            font-family: 'CustomFont', Arial, sans-serif;
-            font-size: ${Math.floor(width * 0.055)}px;
-            font-weight: bold;
-            fill: white;
-            text-anchor: middle;
-          }
-          .date-text {
-            font-family: 'CustomFont', Arial, sans-serif;
-            font-size: ${Math.floor(width * 0.035)}px;
-            fill: #cccccc;
-            text-anchor: middle;
-          }
-        </style>
-        
-        <!-- Draw text outline for visibility -->
-        <text 
-          x="${width / 2}" 
-          y="${height - 60}" 
-          stroke="#000000"
-          stroke-width="4"
-          stroke-linejoin="round"
-          class="title-text"
-          opacity="0.8">
-          ${safeTitle}
-        </text>
-        
-        <!-- Draw title text -->
-        <text 
-          x="${width / 2}" 
-          y="${height - 60}" 
-          class="title-text">
-          ${safeTitle}
-        </text>
-        
-        <!-- Draw date text -->
-        <text 
-          x="${width / 2}" 
-          y="${height - 25}" 
-          class="date-text">
-          ${safeDate}
-        </text>
-      </svg>
-    `;
-
-    // Use sharp to convert SVG to PNG with maximum quality
-    const outputBuffer = await sharp(Buffer.from(svgText))
-      .png({ compressionLevel: 0 })
-      .toBuffer();
+    // Load the base image onto the canvas
+    const baseImage = await loadImage(imageBuffer);
+    ctx.drawImage(baseImage, 0, 0, width, height);
     
-    return outputBuffer;
+    // Add a semi-transparent black rectangle at the bottom for text
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(0, height - 120, width, 120);
+    
+    // Set text properties for title
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // Use only the most basic system fonts with simplified approach
+    ctx.font = `bold ${Math.floor(width * 0.055)}px sans-serif`;
+    
+    // Draw title text
+    ctx.fillText(title, width / 2, height - 60, width * 0.9);
+    
+    // Set text properties for date
+    ctx.font = `${Math.floor(width * 0.035)}px sans-serif`;
+    ctx.fillStyle = '#cccccc';
+    
+    // Draw date text
+    ctx.fillText(date, width / 2, height - 25, width * 0.9);
+    
+    // Return the canvas buffer with high quality
+    return canvas.toBuffer('image/png');
   } catch (error) {
-    logger.error('Error creating Instagram image with SVG text:', error);
+    logger.error('Error creating Instagram image with Canvas text:', error);
     return imageBuffer;
   }
 }
@@ -562,9 +508,9 @@ router.post('/generate', async (req, res) => {
       const baseBuffer = canvas.toBuffer('image/png');
       
       // Use SVG to add text reliably
-      const uploadBuffer = await createImageWithSVGText(
+      const uploadBuffer = await createImageWithCanvasText(
         baseBuffer,
-        safeTitle, // This is correct, keep using safeTitle
+        safeTitle,
         dateStr,
         width,
         height
@@ -879,17 +825,17 @@ router.post('/generate-all', async (req, res) => {
       }
       
       // Use SVG to add text reliably
-      const fbtwBuffer = await createImageWithSVGText(
+      const fbtwBuffer = await createImageWithCanvasText(
         fbtwBaseBuffer,
-        safeTitle, // This is correct, keep using safeTitle
+        safeTitle,
         dateStr,
         width,
         height
       );
       
-      const igBuffer = await createInstagramImageWithSVGText(
+      const igBuffer = await createInstagramImageWithCanvasText(
         igBaseBuffer,
-        safeTitle, // This is correct, keep using safeTitle
+        safeTitle,
         dateStr,
         800,
         800
