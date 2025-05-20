@@ -864,6 +864,163 @@ async function generateImageWithTextToFile(text, dateStr, imageUrl, options = {}
   }
 }
 
+// Add this new function near your other image generator functions
+
+/**
+ * Create an image with text using separate process files (like test-text-rendering.js)
+ * @param {string} imageUrl - URL to base image 
+ * @param {string} title - Title text
+ * @param {string} dateStr - Date text
+ * @param {Object} options - Image options
+ * @returns {Promise<string>} - Path to the generated image file
+ */
+async function generateSocialMediaImageFile(imageUrl, title, dateStr, options = {}) {
+  try {
+    const { width = 1200, height = 628, platform = 'facebook' } = options;
+    
+    // Create temp directory
+    const tempDir = path.join(os.tmpdir(), 'rdv-images');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    // Create unique filename for output
+    const timestamp = Date.now();
+    const baseImagePath = path.join(tempDir, `base-${timestamp}.png`);
+    const finalImagePath = path.join(tempDir, `final-${platform}-${timestamp}.png`);
+    const scriptPath = path.join(tempDir, `text-script-${timestamp}.js`);
+    
+    // Generate base image without text
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    // Fill with black background
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Load source image
+    const image = await loadImage(imageUrl);
+    
+    // Calculate aspect ratios
+    const imageAspect = image.width / image.height;
+    const canvasAspect = width / height;
+    
+    let sx, sy, sWidth, sHeight;
+    
+    if (imageAspect > canvasAspect) {
+      // Image is wider than canvas (crop sides)
+      sHeight = image.height;
+      sWidth = image.height * canvasAspect;
+      sy = 0;
+      sx = (image.width - sWidth) / 2;
+    } else {
+      // Image is taller than canvas (crop top/bottom)
+      sWidth = image.width;
+      sHeight = image.width / canvasAspect;
+      sx = 0;
+      sy = (image.height - sHeight) / 3;
+    }
+    
+    // Draw the image
+    ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, height);
+    
+    // Add logo
+    await addLogo(ctx, width, height);
+    
+    // Add gradient for text background
+    const gradient = ctx.createLinearGradient(0, height - 150, 0, height);
+    gradient.addColorStop(0, 'rgba(0,0,0,0.6)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, height - 130, width, 130);
+    
+    // Save the base image to a file
+    fs.writeFileSync(baseImagePath, canvas.toBuffer('image/png'));
+    
+    // Create script for text rendering in a separate process
+    const textScript = `
+      const { createCanvas, loadImage, registerFont } = require('canvas');
+      const fs = require('fs');
+      const path = require('path');
+      
+      async function addTextToImage() {
+        try {
+          // Load the base image
+          const baseImage = await loadImage('${baseImagePath}');
+          const width = ${width};
+          const height = ${height};
+          
+          const canvas = createCanvas(width, height);
+          const ctx = canvas.getContext('2d');
+          
+          // Draw base image
+          ctx.drawImage(baseImage, 0, 0);
+          
+          // Set up text rendering
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          
+          // Use the most reliable basic system font
+          ctx.font = 'bold ${Math.floor(width * 0.045)}px Arial, sans-serif';
+          
+          // Add shadow for better visibility
+          ctx.shadowColor = 'rgba(0,0,0,0.7)';
+          ctx.shadowBlur = 4;
+          ctx.shadowOffsetX = 1;
+          ctx.shadowOffsetY = 1;
+          
+          // Draw title text
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillText("${title.replace(/"/g, '\\"')}", ${width / 2}, ${height - 60}, ${width * 0.9});
+          
+          // Draw date text
+          ctx.font = '${Math.floor(width * 0.03)}px Arial, sans-serif';
+          ctx.fillStyle = '#CCCCCC';
+          ctx.fillText("${dateStr.replace(/"/g, '\\"')}", ${width / 2}, ${height - 25}, ${width * 0.9});
+          
+          // Save to output file
+          fs.writeFileSync('${finalImagePath}', canvas.toBuffer('image/png'));
+          console.log('Image with text created successfully: ${finalImagePath}');
+        } catch (err) {
+          console.error('Error in text rendering script:', err);
+          process.exit(1);
+        }
+      }
+      
+      addTextToImage().catch(err => {
+        console.error('Top-level error:', err);
+        process.exit(1);
+      });
+    `;
+    
+    // Save script to file
+    fs.writeFileSync(scriptPath, textScript);
+    
+    // Execute script in separate process
+    logger.info('Running text rendering in separate process...');
+    await execAsync(`node ${scriptPath}`);
+    
+    // Clean up temporary files
+    try {
+      fs.unlinkSync(baseImagePath);
+      fs.unlinkSync(scriptPath);
+    } catch (err) {
+      logger.warn('Error cleaning up temporary files:', err);
+    }
+    
+    // Verify the output file exists
+    if (!fs.existsSync(finalImagePath)) {
+      throw new Error('Text rendering process failed to create output file');
+    }
+    
+    logger.info(`Image with text generated at: ${finalImagePath}`);
+    return finalImagePath;
+  } catch (error) {
+    logger.error('Error generating image with separate process:', error);
+    throw error;
+  }
+}
+
 const router = express.Router();
 
 // Test GET endpoint
@@ -1057,10 +1214,10 @@ router.post('/generate', async (req, res) => {
       const baseBuffer = canvas.toBuffer('image/png');
       
       // Use SVG to add text reliably
-      const imagePath = await generateImageWithTextToFile(
+      const imagePath = await generateSocialMediaImageFile(
+        imageUrl,
         safeTitle, 
         dateStr, 
-        imageUrl, 
         { 
           width, 
           height, 
@@ -1385,24 +1542,24 @@ router.post('/generate-all', async (req, res) => {
       }
       
       // Use SVG to add text reliably
-      const fbImagePath = await generateImageWithTextToFile(
+      const fbImagePath = await generateSocialMediaImageFile(
+        imageUrl,
         safeTitle, 
         dateStr, 
-        imageUrl, 
         { width, height, platform: 'facebook' }
       );
 
-      const twImagePath = await generateImageWithTextToFile(
+      const twImagePath = await generateSocialMediaImageFile(
+        imageUrl,
         safeTitle, 
         dateStr, 
-        imageUrl, 
         { width, height, platform: 'twitter' }
       );
 
-      const igImagePath = await generateImageWithTextToFile(
+      const igImagePath = await generateSocialMediaImageFile(
+        imageUrl,
         safeTitle, 
         dateStr, 
-        imageUrl, 
         { width: 800, height: 800, platform: 'instagram' }
       );
 
