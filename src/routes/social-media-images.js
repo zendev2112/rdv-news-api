@@ -4,7 +4,7 @@ import logger from '../utils/logger.js';
 import config from '../config/index.js';
 import imageGenerator from '../services/image-generator.js';
 import { uploadImage } from '../services/cloudinary.js';
-import { createCanvas, loadImage } from 'canvas';
+import { createCanvas, loadImage, registerFont } from 'canvas';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -20,6 +20,35 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const imagesDir = path.join(__dirname, '../../assets/images');
 if (!fs.existsSync(imagesDir)) {
   fs.mkdirSync(imagesDir, { recursive: true });
+}
+
+// Create fonts directory if it doesn't exist
+const fontDir = path.join(__dirname, '../../assets/fonts');
+if (!fs.existsSync(fontDir)) {
+  fs.mkdirSync(fontDir, { recursive: true });
+}
+
+// Embed a small open-source font directly in your code as Base64
+// This is the Roboto font in compressed Base64 format
+const robotoFontBase64 = "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";
+
+// Write the Base64 font to a file
+const robotoFontPath = path.join(fontDir, 'roboto-embedded.ttf');
+if (!fs.existsSync(robotoFontPath)) {
+  try {
+    fs.writeFileSync(robotoFontPath, Buffer.from(robotoFontBase64, 'base64'));
+    logger.info('Embedded Roboto font written to file');
+  } catch (err) {
+    logger.error('Failed to write embedded font:', err);
+  }
+}
+
+// Register the embedded font
+try {
+  registerFont(robotoFontPath, { family: 'Roboto' });
+  logger.info('Embedded Roboto font registered successfully');
+} catch (err) {
+  logger.error('Failed to register embedded font:', err);
 }
 
 // Log the font status
@@ -41,13 +70,21 @@ function drawTextWithFallback(ctx, text, x, y, options = {}) {
     maxWidth = undefined
   } = options;
   
-  textRenderer.drawText(ctx, text, x, y, {
-    fontSize,
-    color,
-    fontWeight,
-    textAlign: 'center',
-    maxWidth
-  });
+  ctx.save();
+  
+  // Use our embedded font
+  ctx.font = `${fontWeight} ${fontSize}px Roboto, sans-serif`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  
+  if (maxWidth) {
+    ctx.fillText(text, x, y, maxWidth);
+  } else {
+    ctx.fillText(text, x, y);
+  }
+  
+  ctx.restore();
 }
 
 /**
