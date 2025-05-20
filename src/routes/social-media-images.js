@@ -756,28 +756,16 @@ async function createTextImageFile(text, options = {}) {
 }
 
 /**
- * Modified function to use text image files
+ * Generate image with text directly rendered on canvas (no separate text images)
+ * Uses the same approach as the working test-text-rendering.js file
  */
 async function generateImageWithTextToFile(text, dateStr, imageUrl, options = {}) {
   try {
     const { width = 1200, height = 628, platform = 'facebook' } = options;
     
-    // First create text image files
-    const titleImagePath = await createTextImageFile(text, {
-      width,
-      fontSize: Math.floor(width * 0.05),
-      color: '#FFFFFF',
-      fontWeight: 'bold',
-      backgroundColor: 'transparent'
-    });
-    
-    const dateImagePath = await createTextImageFile(dateStr, {
-      width,
-      fontSize: Math.floor(width * 0.035),
-      color: '#CCCCCC',
-      fontWeight: 'normal',
-      backgroundColor: 'transparent'
-    });
+    // Make sure fonts are initialized
+    await textRenderer.initializeFonts();
+    logger.info(`Using font: ${textRenderer.getBestAvailableFont()}`);
     
     // Create the main image canvas
     const canvas = createCanvas(width, height);
@@ -823,22 +811,35 @@ async function generateImageWithTextToFile(text, dateStr, imageUrl, options = {}
     ctx.fillStyle = gradient;
     ctx.fillRect(0, height - 130, width, 130);
     
-    // Load text images and draw them exactly like we do with the logo
-    const titleImage = await loadImage(titleImagePath);
-    const dateImage = await loadImage(dateImagePath);
-    
-    // Draw title text image
-    ctx.drawImage(
-      titleImage,
-      0, 0, titleImage.width, titleImage.height,
-      0, height - 100, width, Math.floor(width * 0.05) * 2
+    // DIRECT TEXT RENDERING USING TEXT RENDERER SERVICE
+    // Draw title text using wrapped text renderer
+    textRenderer.drawWrappedText(
+      ctx,
+      text,
+      width / 2,  // center X
+      height - 90, // Y position
+      width * 0.9, // max width
+      Math.floor(width * 0.05), // line height
+      {
+        fontSize: Math.floor(width * 0.05),
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+        textAlign: 'center'
+      }
     );
     
-    // Draw date text image
-    ctx.drawImage(
-      dateImage,
-      0, 0, dateImage.width, dateImage.height,
-      0, height - 40, width, Math.floor(width * 0.035) * 2
+    // Draw date text using the text renderer
+    textRenderer.drawText(
+      ctx,
+      dateStr,
+      width / 2, // center X
+      height - 30, // Y position
+      {
+        fontSize: Math.floor(width * 0.035),
+        fontWeight: 'normal',
+        color: '#CCCCCC', 
+        textAlign: 'center'
+      }
     );
     
     // Save to temporary file
@@ -854,14 +855,7 @@ async function generateImageWithTextToFile(text, dateStr, imageUrl, options = {}
     const buffer = canvas.toBuffer('image/png');
     fs.writeFileSync(outputPath, buffer);
     
-    // Clean up text image files
-    try {
-      fs.unlinkSync(titleImagePath);
-      fs.unlinkSync(dateImagePath);
-    } catch (err) {
-      logger.warn('Could not delete text image files:', err);
-    }
-    
+    // No cleanup needed for text image files, as we're now rendering directly on canvas
     logger.info(`Generated image saved to: ${outputPath}`);
     return outputPath;
   } catch (error) {
