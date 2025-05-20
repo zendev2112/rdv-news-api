@@ -236,16 +236,20 @@ async function addLogo(ctx, width, height) {
  */
 async function createImageWithSVGText(imageBuffer, title, date, width, height) {
   try {
+    // Encode special characters for proper XML
+    const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const safeDate = date.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    
     // Create an SVG that embeds the base image and adds text on top
     const svgText = `
       <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
         <!-- Embed the base image -->
         <image href="data:image/png;base64,${imageBuffer.toString('base64')}" width="${width}" height="${height}" />
         
-        <!-- Add semi-transparent background for text -->
+        <!-- Add semi-transparent background for text - ONLY NEEDED IN SVG, NOT IN BASE IMAGE -->
         <rect x="0" y="${height - 120}" width="${width}" height="120" fill="rgba(0,0,0,0.8)" />
         
-        <!-- Add title text -->
+        <!-- Add title text with highly visible styling -->
         <text 
           x="${width / 2}" 
           y="${height - 60}" 
@@ -253,9 +257,8 @@ async function createImageWithSVGText(imageBuffer, title, date, width, height) {
           font-size="${Math.floor(width * 0.04)}px" 
           font-weight="bold" 
           fill="white" 
-          text-anchor="middle"
-          dominant-baseline="middle">
-          ${title}
+          text-anchor="middle">
+          <tspan dominant-baseline="middle">${safeTitle}</tspan>
         </text>
         
         <!-- Add date text -->
@@ -265,14 +268,13 @@ async function createImageWithSVGText(imageBuffer, title, date, width, height) {
           font-family="Arial, Helvetica, sans-serif" 
           font-size="${Math.floor(width * 0.025)}px" 
           fill="#cccccc" 
-          text-anchor="middle"
-          dominant-baseline="middle">
-          ${date}
+          text-anchor="middle">
+          <tspan dominant-baseline="middle">${safeDate}</tspan>
         </text>
       </svg>
     `;
 
-    // Use sharp to convert SVG to PNG/JPEG
+    // Use sharp to convert SVG to PNG with maximum quality
     const outputBuffer = await sharp(Buffer.from(svgText))
       .png({ quality: 100 })
       .toBuffer();
@@ -288,6 +290,10 @@ async function createImageWithSVGText(imageBuffer, title, date, width, height) {
 // Also add an Instagram-specific version
 async function createInstagramImageWithSVGText(imageBuffer, title, date, width, height) {
   try {
+    // Encode special characters for proper XML
+    const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const safeDate = date.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    
     // Create an SVG that embeds the base image and adds text on top
     const svgText = `
       <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
@@ -297,7 +303,14 @@ async function createInstagramImageWithSVGText(imageBuffer, title, date, width, 
         <!-- Add semi-transparent background for text -->
         <rect x="0" y="${height - 120}" width="${width}" height="120" fill="rgba(0,0,0,0.8)" />
         
-        <!-- Add title text -->
+        <!-- Add shadow effect to make text pop more -->
+        <defs>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.5" />
+          </filter>
+        </defs>
+        
+        <!-- Add title text with shadow -->
         <text 
           x="${width / 2}" 
           y="${height - 60}" 
@@ -306,11 +319,11 @@ async function createInstagramImageWithSVGText(imageBuffer, title, date, width, 
           font-weight="bold" 
           fill="white" 
           text-anchor="middle"
-          dominant-baseline="middle">
-          ${title}
+          filter="url(#shadow)">
+          <tspan dominant-baseline="middle">${safeTitle}</tspan>
         </text>
         
-        <!-- Add date text -->
+        <!-- Add date text with shadow -->
         <text 
           x="${width / 2}" 
           y="${height - 25}" 
@@ -318,13 +331,13 @@ async function createInstagramImageWithSVGText(imageBuffer, title, date, width, 
           font-size="${Math.floor(width * 0.025)}px" 
           fill="#cccccc" 
           text-anchor="middle"
-          dominant-baseline="middle">
-          ${date}
+          filter="url(#shadow)">
+          <tspan dominant-baseline="middle">${safeDate}</tspan>
         </text>
       </svg>
     `;
 
-    // Use sharp to convert SVG to PNG/JPEG
+    // Use sharp to convert SVG to PNG with maximum quality
     const outputBuffer = await sharp(Buffer.from(svgText))
       .png({ quality: 100 })
       .toBuffer();
@@ -467,8 +480,8 @@ router.post('/generate', async (req, res) => {
       await addLogo(ctx, width, height);
       
       // Add a solid color background for text at the bottom
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(0, height - 120, width, 120);
+      // ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      // ctx.fillRect(0, height - 120, width, 120);
       
       // Use ASCII characters only for maximum compatibility
       const safeTitle = title.replace(/[^\x00-\x7F]/g, ' ');
@@ -816,8 +829,6 @@ router.post('/generate-all', async (req, res) => {
         await addLogo(instagramCtx, 800, 800);
         
         // Add solid color background for text
-        instagramCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        instagramCtx.fillRect(0, 680, 800, 120);
         
         // Draw title text with fallback
         drawTextWithFallback(
