@@ -324,8 +324,8 @@ router.post('/generate', async (req, res) => {
     const timestamp = new Date().toISOString().substring(0, 10);
     
     try {
-      // Get high-quality buffer for Cloudinary
-      const uploadBuffer = canvas.toBuffer('image/jpeg', { quality: 0.85 });
+      // Get high-quality buffer for Cloudinary - INCREASE QUALITY
+      const uploadBuffer = canvas.toBuffer('image/jpeg', { quality: 0.95 });
       
       // Upload to Cloudinary
       const fileName = `${platform.toLowerCase()}-${recordId}-${timestamp}.jpg`;
@@ -385,8 +385,22 @@ router.post('/generate', async (req, res) => {
           title: title,
           previewWithTitle: previewDataUrl,
           imageUrl: publicUrl,
-          titleText: shortTitle, // Include the title text for client-side rendering
-          plainText: true // Flag to indicate plain text rendering
+          titleText: shortTitle,
+          dateText: dateStr,
+          plainText: true,
+          textPosition: {
+            title: {
+              x: width / 2,
+              y: height - 60,
+              fontSize: Math.floor(width * 0.04),
+              maxWidth: width * 0.9
+            },
+            date: {
+              x: width / 2,
+              y: height - 25,
+              fontSize: Math.floor(width * 0.025)
+            }
+          }
         }
       });
     } catch (uploadError) {
@@ -686,7 +700,35 @@ router.post('/generate-all', async (req, res) => {
           titleText: shortTitle, // Include the title text
           dateText: dateStr, // Include the date text
           plainText: true, // Flag to indicate plain text rendering
-          previewWithTitle: previewDataUrl
+          previewWithTitle: previewDataUrl,
+          textPosition: {
+            facebook: {
+              title: {
+                x: width / 2,
+                y: height - 60,
+                fontSize: Math.floor(width * 0.04),
+                maxWidth: width * 0.9
+              },
+              date: {
+                x: width / 2,
+                y: height - 25,
+                fontSize: Math.floor(width * 0.025)
+              }
+            },
+            instagram: {
+              title: {
+                x: 400,
+                y: 730,
+                fontSize: Math.floor(800 * 0.04),
+                maxWidth: 750
+              },
+              date: {
+                x: 400,
+                y: 770,
+                fontSize: Math.floor(800 * 0.025)
+              }
+            }
+          }
         }
       });
     } catch (error) {
