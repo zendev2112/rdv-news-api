@@ -237,74 +237,48 @@ async function addLogo(ctx, width, height) {
 async function createImageWithSVGText(imageBuffer, title, date, width, height) {
   try {
     // Encode special characters for proper XML
-    const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    const safeDate = date.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const safeTitle = title.replace(/&/g, '&amp;').replace(/<//g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const safeDate = date.replace(/&/g, '&amp;').replace(/<//g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     
-    // Create an SVG that embeds the base image and adds text on top using web-safe fonts
+    // Create an SVG that embeds the base image and adds text on top with system fonts only
     const svgText = `
-      <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
         <!-- Embed the base image -->
         <image href="data:image/png;base64,${imageBuffer.toString('base64')}" width="${width}" height="${height}" />
         
         <!-- Add solid background for text -->
         <rect x="0" y="${height - 120}" width="${width}" height="120" fill="rgba(0, 0, 0, 0.85)" />
         
-        <!-- Define text styles once -->
-        <style type="text/css">
-          @font-face {
-            font-family: 'CustomFont';
-            src: url('https://fonts.gstatic.com/s/opensans/v29/memSYaGs126MiZpBA-UvWbX2vVnXBbObj2OVZyOOSr4dVJWUgsjZ0B4gaVI.woff2') format('woff2');
-          }
-          .title-text {
-            font-family: 'CustomFont', Arial, sans-serif;
-            font-size: ${Math.floor(width * 0.055)}px;
-            font-weight: bold;
-            fill: white;
-            text-anchor: middle;
-          }
-          .date-text {
-            font-family: 'CustomFont', Arial, sans-serif;
-            font-size: ${Math.floor(width * 0.035)}px;
-            fill: #cccccc;
-            text-anchor: middle;
-          }
-        </style>
-        
-        <!-- Draw text outline for visibility -->
+        <!-- Draw title text using only system fonts -->
         <text 
           x="${width / 2}" 
           y="${height - 60}" 
-          stroke="#000000"
-          stroke-width="4"
-          stroke-linejoin="round"
-          class="title-text"
-          opacity="0.8">
+          font-family="Arial, Helvetica, sans-serif" 
+          font-size="${Math.floor(width * 0.055)}px" 
+          font-weight="bold" 
+          fill="white" 
+          text-anchor="middle"
+          dominant-baseline="middle">
           ${safeTitle}
         </text>
         
-        <!-- Draw title text -->
-        <text 
-          x="${width / 2}" 
-          y="${height - 60}" 
-          class="title-text">
-          ${safeTitle}
-        </text>
-        
-        <!-- Draw date text -->
+        <!-- Draw date text using only system fonts -->
         <text 
           x="${width / 2}" 
           y="${height - 25}" 
-          class="date-text">
+          font-family="Arial, Helvetica, sans-serif" 
+          font-size="${Math.floor(width * 0.035)}px" 
+          fill="#cccccc" 
+          text-anchor="middle"
+          dominant-baseline="middle">
           ${safeDate}
         </text>
       </svg>
     `;
 
-    // Convert SVG to PNG with Sharp ensuring highest quality
+    // Convert SVG to PNG with Sharp
     const outputBuffer = await sharp(Buffer.from(svgText))
-      // Ensure proper rendering
-      .png({ compressionLevel: 0 }) // 0 = no compression
+      .png({ compressionLevel: 0 }) // No compression for better quality
       .toBuffer();
     
     return outputBuffer;

@@ -35,12 +35,13 @@ export async function uploadImage(buffer, fileName, options = {}) {
       use_filename: true,
       unique_filename: true,
       overwrite: true,
+      // Instead of using transformation array, use direct options
       quality: 100,
-      format: 'png',
+      format: 'png', 
+      // No additional transformations to preserve the original image exactly
       transformation: [
-        {quality: 100, fetch_format: 'auto'}
-      ],
-   
+        {quality: 100}
+      ]
     };
     
     const result = await cloudinary.uploader.upload(tempFilePath, uploadOptions);
