@@ -14,11 +14,20 @@ const NEWS_SECTIONS = [
   {
     id: 'local',
     name: 'Local',
-    tableName: 'Local',
+    tableName: 'local',
     rssUrl: 'https://rss.app/feeds/v1.1/_rTmgX8PFY2BtleFb.json',
     color: '#D32F2F',
     icon: 'gavel',
     priority: 2,
+  },
+  {
+    id: 'local-facebook',
+    name: 'Local Facebook',
+    tableName: 'local-facebook',
+    rssUrl: 'https://rss.app/feeds/v1.1/_rTmgX8PFY2BtleFb.json',
+    color: '#D32F2F',
+    icon: 'gavel',
+    priority: 3,
   },
   {
     id: 'la-sexta',
@@ -27,7 +36,7 @@ const NEWS_SECTIONS = [
     rssUrl: 'https://rss.app/feeds/v1.1/_rTmgX8PFY2BtleFb.json',
     color: '#D32F2F',
     icon: 'gavel',
-    priority: 3,
+    priority: 4,
   },
   {
     id: 'instituciones',
@@ -36,7 +45,7 @@ const NEWS_SECTIONS = [
     rssUrl: 'https://rss.app/feeds/v1.1/_iVEs2ol109NjJyce.json',
     color: '#388E3C',
     icon: 'agriculture',
-    priority: 4,
+    priority: 5,
   },
   {
     id: 'agro',
@@ -45,7 +54,7 @@ const NEWS_SECTIONS = [
     rssUrl: 'https://rss.app/feeds/v1.1/_20zJLx8JIZ4cnqkE.json',
     color: '#388E3C',
     icon: 'agriculture',
-    priority: 5,
+    priority: 6,
   },
   {
     id: 'deportes',
@@ -54,7 +63,7 @@ const NEWS_SECTIONS = [
     rssUrl: 'https://rss.app/feeds/v1.1/_GaWKBBIxuHCE5tH1.json',
     color: '#1976D2',
     icon: 'sports_soccer',
-    priority: 6,
+    priority: 7,
   },
   {
     id: 'economia',
@@ -63,7 +72,7 @@ const NEWS_SECTIONS = [
     rssUrl: 'https://rss.app/feeds/v1.1/_ifKDQanGJM3BOKGC.json',
     color: '#FFC107',
     icon: 'attach_money',
-    priority: 7,
+    priority: 8,
   },
   {
     id: 'lifestyle',
@@ -72,7 +81,7 @@ const NEWS_SECTIONS = [
     rssUrl: 'https://rss.app/feeds/v1.1/_cnOfvOavDTApWv9j.json',
     color: '#9C27B0',
     icon: 'public',
-    priority: 8,
+    priority: 9,
   },
   {
     id: 'politica',
@@ -81,7 +90,7 @@ const NEWS_SECTIONS = [
     rssUrl: 'https://rss.app/feeds/v1.1/_mGLr9iAOQjf9o3S6.json',
     color: '#9C27B0',
     icon: 'public',
-    priority: 9,
+    priority: 10,
   },
   {
     id: 'turismo',
@@ -90,7 +99,7 @@ const NEWS_SECTIONS = [
     rssUrl: 'https://rss.app/feeds/v1.1/_Fl3IYhnnTrOHPafk.json',
     color: '#9C27B0',
     icon: 'public',
-    priority: 10,
+    priority: 11,
   },
 ]
 
