@@ -1174,7 +1174,7 @@ async function processSection(section) {
   console.log(`\n=== Processing section: ${section.name} ===\n`)
 
   // Special handling for Instituciones social media content
-  if (section.id === 'instituciones') {
+  if (section.id === 'instituciones' || 'local-facebook') {
     console.log(`Processing ${section.name} as social media content...`)
 
     try {

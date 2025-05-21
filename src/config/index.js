@@ -24,7 +24,7 @@ const NEWS_SECTIONS = [
     id: 'local-facebook',
     name: 'Local Facebook',
     tableName: 'local-facebook',
-    rssUrl: 'https://rss.app/feeds/v1.1/_rTmgX8PFY2BtleFb.json',
+    rssUrl: 'https://rss.app/feeds/v1.1/_6fHq8HF2HUpG1MFI.json',
     color: '#D32F2F',
     icon: 'gavel',
     priority: 3,
