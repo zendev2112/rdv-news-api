@@ -8,6 +8,8 @@ import { promisify } from 'util';
 import fetch from 'node-fetch';
 import logger from '../utils/logger.js';
 import sharp from 'sharp';
+import cloudinaryService from '../services/cloudinary.js';
+import { v2 as cloudinary } from 'cloudinary';
 
 const router = express.Router();
 const execAsync = promisify(exec);
@@ -19,7 +21,7 @@ if (!fs.existsSync(TEMP_DIR)) {
 }
 
 /**
- * Generate image using pure Sharp without SVG for text
+ * Generate image using Cloudinary to solve text rendering issues
  */
 async function generateFromTemplate(options) {
   const { 
@@ -48,210 +50,132 @@ async function generateFromTemplate(options) {
         height = 628;
     }
     
-    // Create output path
+    // Create output path for final image
     const outputPath = path.join(TEMP_DIR, `${platform}-${Date.now()}.png`);
     
-    // Create the background image
-    let baseImage;
+    // Step 1: Upload or use background image in Cloudinary
+    let backgroundPublicId;
+    
     if (backgroundUrl) {
       try {
-        // Download background
-        const response = await fetch(backgroundUrl);
-        if (response.ok) {
-          baseImage = sharp(await response.buffer());
-        } else {
-          throw new Error('Failed to download background');
-        }
-      } catch (err) {
-        // Create solid color background on error
-        baseImage = sharp({
-          create: {
-            width,
-            height,
-            channels: 4,
-            background: { r: 23, g: 42, b: 136, alpha: 1 } // Blue
-          }
+        // Upload external image URL to Cloudinary
+        const uploadResult = await cloudinary.uploader.upload(backgroundUrl, {
+          folder: 'rdv-news/backgrounds',
+          public_id: `bg-${Date.now()}`,
+          resource_type: 'auto'
         });
+        backgroundPublicId = uploadResult.public_id;
+      } catch (err) {
+        logger.warn(`Failed to upload background image: ${err.message}`);
+        // Use a solid blue color instead
+        backgroundPublicId = 'rdv-news/defaults/blue-background';
+        // If this is the first time, create the default background
+        try {
+          await cloudinary.uploader.upload('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFdgI2RLQzngAAAABJRU5ErkJggg==', {
+            folder: 'rdv-news/defaults',
+            public_id: 'blue-background',
+            colors: true,
+            background: '#172a88'
+          });
+        } catch (uploadErr) {
+          // Ignore if already exists
+        }
       }
     } else {
-      // Create solid color if no URL
-      baseImage = sharp({
-        create: {
-          width,
-          height,
-          channels: 4,
-          background: { r: 23, g: 42, b: 136, alpha: 1 } // Blue
-        }
-      });
+      // Use default blue background
+      backgroundPublicId = 'rdv-news/defaults/blue-background';
+      // If this is the first time, create the default background
+      try {
+        await cloudinary.uploader.upload('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFdgI2RLQzngAAAABJRU5ErkJggg==', {
+          folder: 'rdv-news/defaults',
+          public_id: 'blue-background',
+          colors: true,
+          background: '#172a88'
+        });
+      } catch (uploadErr) {
+        // Ignore if already exists
+      }
     }
     
-    // Resize and format the base image
-    baseImage = baseImage.resize({
-      width,
-      height,
-      fit: 'cover',
-      position: 'center'
-    });
-    
-    // Add dark gradient overlay for text readability
-    const overlay = await sharp({
-      create: {
-        width,
-        height: Math.round(height * 0.5), // 50% of height for text area
-        channels: 4,
-        background: { r: 0, g: 0, b: 0, alpha: 0.7 } // Semi-transparent black
-      }
-    }).png().toBuffer();
-    
-    baseImage = baseImage.composite([{
-      input: overlay,
-      gravity: 'south'
-    }]);
-    
-    // Generate base image first
-    const baseBuffer = await baseImage.toBuffer();
-    
-    // Create a new image with text elements manually placed
-    const finalImage = sharp(baseBuffer);
-    const compositeElements = [];
-    
-    // Add logo if exists
-    const logoPath = path.join(process.cwd(), 'src', 'assets', 'logo.png');
-    if (fs.existsSync(logoPath)) {
-      const logoBuffer = await sharp(logoPath)
-        .resize({ width: Math.floor(width * 0.15) }) // 15% of width
-        .toBuffer();
+    // Step 2: Build transformation array for Cloudinary
+    const transformations = [
+      // Resize to platform dimensions
+      { width, height, crop: 'fill' },
       
-      compositeElements.push({
-        input: logoBuffer,
-        top: 20,
-        left: 20
-      });
-    }
-    
-    // Create basic text overlays
-    
-    // For the title, create a colored rectangle with text cutout
-    const titleHeight = 100;
-    const titleWidth = Math.floor(width * 0.9); // 90% of width
-    
-    // Create a title text image - white text on transparent background
-    const titleTextImage = sharp({
-      create: {
-        width: titleWidth,
-        height: titleHeight,
-        channels: 4,
-        background: { r: 255, g: 255, b: 255, alpha: 1 }
-      }
-    });
-    
-    // Add title to the center
-    titleTextImage.composite([
-      {
-        input: {
-          text: {
-            text: title,
-            width: titleWidth,
-            height: titleHeight,
-            rgba: true,
-            font: "sans",
-            fontfile: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", // Should be available on most systems
-            align: "center"
-          }
+      // Add dark overlay at bottom for text readability
+      { 
+        overlay: { 
+          url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADzQHhVzq8GAAAAABJRU5ErkJggg==' 
         },
-        gravity: "center"
-      }
-    ]);
-    
-    const titleTextBuffer = await titleTextImage.png().toBuffer();
-    
-    // Position the title
-    compositeElements.push({
-      input: titleTextBuffer,
-      top: Math.floor(height * 0.6), // 60% from top
-      left: Math.floor(width * 0.05) // 5% from left
-    });
-    
-    // Add date in similar fashion
-    const dateImage = sharp({
-      create: {
-        width: Math.floor(width * 0.6),
-        height: 50,
-        channels: 4,
-        background: { r: 200, g: 200, b: 200, alpha: 1 } // Light gray for date
-      }
-    });
-    
-    dateImage.composite([
+        width,
+        height: Math.round(height * 0.5),
+        opacity: 70,
+        gravity: 'south',
+        flags: 'layer_apply'
+      },
+      
+      // Add title text
       {
-        input: {
-          text: {
-            text: date,
-            width: Math.floor(width * 0.6),
-            height: 50,
-            rgba: true,
-            font: "sans",
-            align: "center"
-          }
+        overlay: {
+          font_family: 'Arial',
+          font_size: Math.round(width * 0.045),
+          font_weight: 'bold',
+          text: encodeURIComponent(title)
         },
-        gravity: "center"
+        color: 'white',
+        gravity: 'south',
+        y: 120,
+        flags: 'layer_apply'
+      },
+      
+      // Add date text
+      {
+        overlay: {
+          font_family: 'Arial',
+          font_size: Math.round(width * 0.03),
+          text: encodeURIComponent(date)
+        },
+        color: '#cccccc',
+        gravity: 'south',
+        y: 50,
+        flags: 'layer_apply'
       }
-    ]);
-    
-    const dateBuffer = await dateImage.png().toBuffer();
-    
-    // Position the date
-    compositeElements.push({
-      input: dateBuffer,
-      top: Math.floor(height * 0.85), // 85% from top
-      left: Math.floor(width * 0.2) // 20% from left
-    });
+    ];
     
     // Add overline if provided
     if (overline) {
-      const overlineImage = sharp({
-        create: {
-          width: Math.floor(width * 0.7),
-          height: 40,
-          channels: 4,
-          background: { r: 255, g: 255, b: 255, alpha: 1 }
-        }
-      });
-      
-      overlineImage.composite([
-        {
-          input: {
-            text: {
-              text: overline,
-              width: Math.floor(width * 0.7),
-              height: 40,
-              rgba: true,
-              font: "sans",
-              align: "center"
-            }
-          },
-          gravity: "center"
-        }
-      ]);
-      
-      const overlineBuffer = await overlineImage.png().toBuffer();
-      
-      // Position the overline
-      compositeElements.push({
-        input: overlineBuffer,
-        top: Math.floor(height * 0.5), // 50% from top
-        left: Math.floor(width * 0.15) // 15% from left
+      transformations.push({
+        overlay: {
+          font_family: 'Arial',
+          font_size: Math.round(width * 0.035),
+          text: encodeURIComponent(overline)
+        },
+        color: 'white',
+        gravity: 'south',
+        y: 180,
+        flags: 'layer_apply'
       });
     }
     
-    // Composite all elements onto base image
-    await finalImage
-      .composite(compositeElements)
-      .toFile(outputPath);
+    // Step 3: Generate the image URL with transformations
+    const imageUrl = cloudinary.url(backgroundPublicId, {
+      transformation: transformations,
+      secure: true,
+      sign_url: true
+    });
+    
+    // Step 4: Download the generated image
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download image: ${response.status}`);
+    }
+    
+    const imageBuffer = await response.buffer();
+    fs.writeFileSync(outputPath, imageBuffer);
     
     return outputPath;
   } catch (error) {
-    logger.error('Error generating image:', error);
+    logger.error('Error generating image with Cloudinary:', error);
     throw error;
   }
 }
