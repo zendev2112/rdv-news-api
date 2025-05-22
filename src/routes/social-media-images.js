@@ -371,8 +371,8 @@ router.get('/airtable-generate', async (req, res) => {
     const imageBuffer = fs.readFileSync(imagePath);
     const base64Image = imageBuffer.toString('base64');
     
-    // Send HTML preview
-    res.send(`
+    // Prepare the HTML template
+    const htmlContent = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -602,6 +602,14 @@ router.get('/airtable-generate', async (req, res) => {
           </div>
           
           <script>
+            // Replace template variables with actual JavaScript values
+            const RECORD_ID = "${recordId}";
+            const TITLE = "${title.replace(/"/g, '\\"')}";
+            const OVERLINE = "${overline.replace(/"/g, '\\"')}";
+            const IMG_URL = "${imgUrl ? imgUrl.replace(/"/g, '\\"') : ''}";
+            const PLATFORM = "${platform}";
+            const IMAGE_PATH = "${imagePath}";
+            
             // Toggle edit controls
             document.getElementById('toggle-edit').addEventListener('click', function() {
               const controls = document.getElementById('edit-controls');
@@ -648,11 +656,11 @@ router.get('/airtable-generate', async (req, res) => {
                     'Content-Type': 'application/json'
                   },
                   body: JSON.stringify({
-                    recordId: '${recordId}',
-                    title: '${title}',
-                    overline: '${overline}',
-                    imgUrl: '${imgUrl || ""}',
-                    platform: '${platform}',
+                    recordId: RECORD_ID,
+                    title: TITLE,
+                    overline: OVERLINE,
+                    imgUrl: IMG_URL,
+                    platform: PLATFORM,
                     styling: {
                       fontFamily,
                       fontWeight,
@@ -723,9 +731,9 @@ router.get('/airtable-generate', async (req, res) => {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    recordId: '${recordId}',
-                    imagePath: '${imagePath}',
-                    platform: '${platform}',
+                    recordId: RECORD_ID,
+                    imagePath: IMAGE_PATH,
+                    platform: PLATFORM,
                     styling: Object.keys(styling).length > 0 ? styling : undefined
                   })
                 });
@@ -757,7 +765,10 @@ router.get('/airtable-generate', async (req, res) => {
           </script>
         </body>
       </html>
-    `);
+    `;
+
+    // Send the processed HTML
+    res.send(htmlContent);
   } catch (error) {
     logger.error('Error in airtable-generate endpoint:', error);
     res.status(500).send(`
