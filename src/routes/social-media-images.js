@@ -935,14 +935,26 @@ async function generateSocialMediaImageFile(imageUrl, title, dateStr, options = 
     // Direct rendering approach - create text images on the fly and composite them
     // This avoids the separate node process issue
     
-    // Create title text image
+    // Create title text image using SVG with foreignObject
     const titleFontSize = Math.floor(width * 0.045);
-    const titleTextBuffer = await createTextAsImage(title, width, titleFontSize, '#FFFFFF');
+    const titleTextBuffer = await renderTextAsSvg(title, {
+      width,
+      fontSize: titleFontSize,
+      color: '#FFFFFF',
+      fontWeight: 'bold',
+      textShadow: '2px 2px 4px rgba(0,0,0,0.9)'
+    });
     const titleTextImage = await loadImage(titleTextBuffer);
     
-    // Create date text image  
+    // Create date text image using SVG with foreignObject
     const dateFontSize = Math.floor(width * 0.03);
-    const dateTextBuffer = await createTextAsImage(dateStr, width, dateFontSize, '#CCCCCC');
+    const dateTextBuffer = await renderTextAsSvg(dateStr, {
+      width,
+      fontSize: dateFontSize,
+      color: '#CCCCCC',
+      fontWeight: 'normal',
+      textShadow: '1px 1px 3px rgba(0,0,0,0.7)'
+    });
     const dateTextImage = await loadImage(dateTextBuffer);
     
     // Composite title onto main image
@@ -1744,14 +1756,26 @@ async function generateImageWithGm(imageUrl, text, dateStr, options = {}) {
       ctx.fillStyle = gradient;
       ctx.fillRect(0, height - 130, width, 130);
       
-      // Create title text image
+      // Create title text image using SVG with foreignObject
       const titleFontSize = Math.floor(width * 0.045);
-      const titleTextBuffer = await createTextAsImage(text, width, titleFontSize, '#FFFFFF');
+      const titleTextBuffer = await renderTextAsSvg(text, {
+        width,
+        fontSize: titleFontSize,
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+        textShadow: '2px 2px 4px rgba(0,0,0,0.9)'
+      });
       const titleTextImage = await loadImage(titleTextBuffer);
       
-      // Create date text image  
+      // Create date text image using SVG with foreignObject
       const dateFontSize = Math.floor(width * 0.03);
-      const dateTextBuffer = await createTextAsImage(dateStr, width, dateFontSize, '#CCCCCC');
+      const dateTextBuffer = await renderTextAsSvg(dateStr, {
+        width,
+        fontSize: dateFontSize,
+        color: '#CCCCCC',
+        fontWeight: 'normal',
+        textShadow: '1px 1px 3px rgba(0,0,0,0.7)'
+      });
       const dateTextImage = await loadImage(dateTextBuffer);
       
       // Composite title onto main image
@@ -1784,5 +1808,60 @@ async function generateImageWithGm(imageUrl, text, dateStr, options = {}) {
   } catch (error) {
     logger.error(`Error generating image: ${error.message}`);
     throw new Error(`Failed to generate image: ${error.message}`);
+  }
+}
+
+// Add after your imports
+
+/**
+ * Renders text reliably using SVG with foreignObject
+ * @param {string} text - Text to render
+ * @param {object} options - Rendering options
+ * @returns {Promise<Buffer>} - PNG image buffer
+ */
+async function renderTextAsSvg(text, options = {}) {
+  const {
+    width = 1000,
+    fontSize = 32,
+    color = '#FFFFFF',
+    fontWeight = 'bold',
+    fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+    textShadow = '2px 2px 4px rgba(0,0,0,0.7)'
+  } = options;
+  
+  try {
+    // Calculate height based on font size
+    const height = fontSize * 2;
+    
+    // Escape text for SVG
+    const escapedText = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+    
+    // Create an SVG string with the text
+    // The key is to use foreignObject to leverage HTML/CSS text rendering
+    const svg = `
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <foreignObject width="${width}" height="${height}">
+          <div xmlns="http://www.w3.org/1999/xhtml" 
+               style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-family: ${fontFamily}; font-weight: ${fontWeight}; font-size: ${fontSize}px; color: ${color}; text-shadow: ${textShadow}; text-align: center;">
+            ${escapedText}
+          </div>
+        </foreignObject>
+      </svg>
+    `;
+    
+    // Convert SVG to PNG using Sharp
+    const buffer = await sharp(Buffer.from(svg))
+      .png()
+      .toBuffer();
+    
+    return buffer;
+  } catch (error) {
+    logger.error('Error rendering text as SVG:', error);
+    throw new Error(`Failed to render text: ${error.message}`);
   }
 }

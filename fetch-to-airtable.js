@@ -1079,7 +1079,7 @@ async function processArticle(item, sectionId) {
 
     // Replace the hardcoded section mapping with this more dynamic lookup
     // Default to empty string as requested
-    const sectionValue = sectionIdToAirtableValue[sectionId] || ''
+    let sectionValue = sectionIdToAirtableValue[sectionId] || ''
 
     // Look up the section in our mapping
     if (sectionIdToAirtableValue[sectionId]) {
@@ -1174,7 +1174,7 @@ async function processSection(section) {
   console.log(`\n=== Processing section: ${section.name} ===\n`)
 
   // Special handling for Instituciones social media content
-  if (section.id === 'instituciones' || 'local-facebook') {
+  if (section.id === 'instituciones' || section.id === 'local-facebook') {
     console.log(`Processing ${section.name} as social media content...`)
 
     try {
@@ -1318,20 +1318,23 @@ async function processSection(section) {
           }
 
           // Before creating record fields, generate metadata as you do for regular articles
-          let metadata = null;
+          let metadata = null
           try {
             // Use the same metadata generation function used for regular articles
-            metadata = await generateMetadata(postText);
-            console.log(`Generated metadata for social media content`);
+            metadata = await generateMetadata(postText)
+            console.log(`Generated metadata for social media content`)
           } catch (metaError) {
-            console.error(`Error generating metadata for social media: ${metaError.message}`);
+            console.error(
+              `Error generating metadata for social media: ${metaError.message}`
+            )
             // Use fallback metadata
-            metadata = generateFallbackMetadata(postText);
+            metadata = generateFallbackMetadata(postText)
           }
 
           // Create record fields using the generated metadata
           const recordFields = {
-            title: metadata.title || item.title || `Publicación de ${sourceName}`,
+            title:
+              metadata.title || item.title || `Publicación de ${sourceName}`,
             url: itemUrl,
             excerpt: metadata.bajada || postText.substring(0, 200), // Use generated bajada
             source: sourceName,
