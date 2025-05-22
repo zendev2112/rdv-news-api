@@ -2,7 +2,7 @@ import express from 'express';
 import { startJobs } from './scheduler/jobs.js';
 import logger from './utils/logger.js';
 import webhookRoutes from './routes/webhook.js';
-import socialMediaImagesRouter from './routes/social-media-images.js';
+import routes from './routes/social-media-images.js';
 import testImageEndpoint from './routes/test-image-endpoint.js';
 import { close as closeBrowser } from './services/browser-renderer.js';
 
@@ -19,7 +19,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Set up routes
 app.use('/webhooks', webhookRoutes);
-app.use('/api/social-media-images', socialMediaImagesRouter);
+app.use('/api/social-media-images', routes);
 app.use('/api/test-image', testImageEndpoint);
 
 // Start the job scheduler

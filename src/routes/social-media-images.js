@@ -1,476 +1,434 @@
-import express from 'express'
-import Airtable from 'airtable'
-import logger from '../utils/logger.js'
-import config from '../config/index.js'
-import { uploadImage } from '../services/cloudinary.js'
-import fs from 'fs'
-import {
-  initialize,
-  renderSocialImage,
-  close,
-} from '../services/browser-renderer.js'
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import Airtable from 'airtable';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import fetch from 'node-fetch';
+import logger from '../utils/logger.js';
 
-// Initialize Puppeteer on startup
-initialize().catch((err) => {
-  logger.error('Failed to initialize browser renderer:', err)
-})
+const router = express.Router();
+const execAsync = promisify(exec);
 
-// Handle cleanup on process exit
-process.on('SIGINT', async () => {
-  await close()
-  process.exit(0)
-})
-
-process.on('SIGTERM', async () => {
-  await close()
-  process.exit(0)
-})
-
-/**
- * Generate social media image using Puppeteer
- * @param {string} imageUrl - URL to source image
- * @param {string} text - Title text
- * @param {string} dateStr - Date text
- * @param {Object} options - Options including dimensions
- * @returns {Promise<string>} - Path to generated image
- */
-async function generateImageWithPuppeteer(
-  imageUrl,
-  text,
-  dateStr,
-  options = {}
-) {
-  try {
-    const { width = 1200, height = 628, platform = 'facebook' } = options
-
-    // Generate the image with Puppeteer
-    const outputPath = await renderSocialImage({
-      imageUrl,
-      title: text,
-      date: dateStr,
-      width,
-      height,
-      platform,
-    })
-
-    logger.info(`Generated image with Puppeteer at: ${outputPath}`)
-    return outputPath
-  } catch (error) {
-    logger.error(`Error generating image with Puppeteer: ${error.message}`)
-    throw new Error(`Image generation failed: ${error.message}`)
-  }
+// Ensure temp directory exists
+const TEMP_DIR = path.join(os.tmpdir(), 'rdv-images');
+if (!fs.existsSync(TEMP_DIR)) {
+  fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
 /**
- * Create an image with text using Puppeteer for perfect text rendering
- * @param {string} imageUrl - URL to base image
- * @param {string} title - Title text
- * @param {string} dateStr - Date text
- * @param {Object} options - Image options
- * @returns {Promise<string>} - Path to the generated image file
+ * Generate image using template and ImageMagick
+ * This approach uses pre-designed templates and just adds text
  */
-async function generateSocialMediaImageFile(
-  imageUrl,
-  title,
-  dateStr,
-  options = {}
-) {
+async function generateFromTemplate(options) {
+  const { 
+    title, 
+    overline = '', 
+    backgroundUrl = null,
+    date, 
+    platform = 'facebook' 
+  } = options;
+  
   try {
-    const { platform = 'facebook' } = options
-
-    // Set dimensions based on platform
-    let width, height
-    switch (platform.toLowerCase()) {
-      case 'instagram':
-        width = 800
-        height = 800 // Square format
-        break
-      case 'twitter':
-        width = 1200
-        height = 675 // 16:9 ratio
-        break
-      case 'facebook':
-      default:
-        width = 1200
-        height = 628 // Recommended for sharing
-    }
-
-    // Use Puppeteer-based renderer for perfect text rendering
-    const imagePath = await generateImageWithPuppeteer(
-      imageUrl,
-      title,
-      dateStr,
-      { width, height, platform }
-    )
-
-    return imagePath
-  } catch (error) {
-    logger.error('Error generating social media image file:', error)
-    throw error
-  }
-}
-
-const router = express.Router()
-
-// Root endpoint
-router.get('/', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Social media images API is working',
-    endpoints: {
-      generate: '/api/social-media-images/generate',
-      generateAll: '/api/social-media-images/generate-all',
-    },
-  })
-})
-
-/**
- * Generate social media image for a specific record
- * POST /api/social-media-images/generate
- */
-router.post('/generate', async (req, res) => {
-  try {
-    const { recordId, platform = 'facebook', imageUrl, title } = req.body
-
-    logger.info(
-      `Received request to generate ${platform} image for record ${recordId}`
-    )
-
-    if (!recordId || !imageUrl || !title) {
-      return res.status(400).json({
-        success: false,
-        error: 'Record ID, image URL, and title are required',
-      })
-    }
-
-    // Test the image URL by trying to fetch headers
-    try {
-      const imageResponse = await fetch(imageUrl, { method: 'HEAD' })
-      if (!imageResponse.ok) {
-        return res.status(400).json({
-          success: false,
-          error: `Image URL returned status ${imageResponse.status}`,
-        })
+    // Create output path
+    const outputPath = path.join(TEMP_DIR, `${platform}-${Date.now()}.png`);
+    
+    // Select template based on platform
+    const templateDir = path.join(process.cwd(), 'src', 'templates');
+    const templatePath = path.join(templateDir, `${platform}-template.png`);
+    
+    // Check if template exists, if not use default
+    const finalTemplatePath = fs.existsSync(templatePath) 
+      ? templatePath 
+      : path.join(templateDir, 'default-template.png');
+    
+    // If background URL provided, download and use it instead of template
+    if (backgroundUrl) {
+      try {
+        const response = await fetch(backgroundUrl);
+        if (response.ok) {
+          const bgBuffer = await response.buffer();
+          fs.writeFileSync(outputPath, bgBuffer);
+          
+          // Apply overlay to make text more readable
+          await execAsync(`convert "${outputPath}" \\( +clone -fill black -colorize 50% \\) -gravity south -compose over -composite -quality 100 "${outputPath}"`);
+        } else {
+          // Use template if background fetch fails
+          fs.copyFileSync(finalTemplatePath, outputPath);
+        }
+      } catch (err) {
+        logger.warn(`Failed to use background image: ${err.message}`);
+        fs.copyFileSync(finalTemplatePath, outputPath);
       }
-    } catch (imageError) {
-      return res.status(400).json({
-        success: false,
-        error: `Could not access image URL: ${imageError.message}`,
-      })
+    } else {
+      // Use template if no background URL
+      fs.copyFileSync(finalTemplatePath, outputPath);
     }
+    
+    // Sanitize text for shell command
+    const safeTitle = title.replace(/"/g, '\\"').replace(/`/g, "'");
+    const safeOverline = overline ? overline.replace(/"/g, '\\"').replace(/`/g, "'") : '';
+    const safeDate = date.replace(/"/g, '\\"').replace(/`/g, "'");
+    
+    // Add title text
+    await execAsync(`convert "${outputPath}" -gravity south -pointsize 44 -fill white -stroke black -strokewidth 1 -annotate +0+120 "${safeTitle}" "${outputPath}"`);
+    
+    // Add overline text if provided
+    if (safeOverline) {
+      await execAsync(`convert "${outputPath}" -gravity south -pointsize 28 -fill white -stroke black -strokewidth 1 -annotate +0+200 "${safeOverline}" "${outputPath}"`);
+    }
+    
+    // Add date text
+    await execAsync(`convert "${outputPath}" -gravity south -pointsize 28 -fill white -stroke black -strokewidth 0.5 -annotate +0+60 "${safeDate}" "${outputPath}"`);
+    
+    // Add logo
+    const logoPath = path.join(process.cwd(), 'src', 'assets', 'logo.png');
+    if (fs.existsSync(logoPath)) {
+      await execAsync(`convert "${outputPath}" "${logoPath}" -gravity northwest -geometry 150x -composite "${outputPath}"`);
+    }
+    
+    return outputPath;
+  } catch (error) {
+    logger.error('Error generating image from template:', error);
+    throw error;
+  }
+}
 
+/**
+ * Upload image to Airtable as attachment
+ */
+async function uploadToAirtable(imagePath, recordId, platform) {
+  try {
     // Get Airtable credentials
-    const apiToken =
-      config.airtable?.personalAccessToken || process.env.AIRTABLE_TOKEN
-    const baseId = config.airtable?.baseId || process.env.AIRTABLE_BASE_ID
-
-    if (!apiToken || !baseId) {
-      logger.error('Missing Airtable credentials')
-      return res.status(500).json({
-        success: false,
-        error: 'Server configuration error: Missing Airtable credentials',
-      })
+    const apiKey = process.env.AIRTABLE_TOKEN;
+    const baseId = process.env.AIRTABLE_BASE_ID;
+    
+    if (!apiKey || !baseId) {
+      throw new Error('Missing Airtable credentials');
     }
+    
+    // Create filename
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const filename = `${platform}-${timestamp}.png`;
+    
+    // Read image file
+    const imageBuffer = fs.readFileSync(imagePath);
+    const base64Content = imageBuffer.toString('base64');
+    
+    // Initialize Airtable
+    const airtable = new Airtable({ apiKey });
+    const base = airtable.base(baseId);
+    
+    // Create field name based on platform
+    const fieldName = `social_image_${platform.toLowerCase()}`;
+    
+    // Create update object
+    const updateFields = {};
+    updateFields[fieldName] = [{
+      filename,
+      type: 'image/png',
+      _base64Content: base64Content
+    }];
+    
+    // Update Airtable record
+    const record = await base('Redes Sociales').update(recordId, updateFields);
+    
+    return record.fields[fieldName] && record.fields[fieldName][0] ? 
+      record.fields[fieldName][0].url : null;
+  } catch (error) {
+    logger.error('Error uploading to Airtable:', error);
+    throw error;
+  }
+}
 
-    // Format the date string
+// Update the airtable-generate endpoint
+
+/**
+ * API endpoint for Airtable button
+ * GET /api/social-media-images/airtable-generate
+ */
+router.get('/airtable-generate', async (req, res) => {
+  try {
+    // Get parameters
+    const { 
+      recordId, 
+      title, 
+      overline = '', 
+      imgUrl = null,
+      platform = 'facebook' 
+    } = req.query;
+    
+    if (!recordId || !title) {
+      return res.status(400).send(`
+        <html>
+          <head><title>Error</title></head>
+          <body>
+            <h1 style="color: red;">Missing Required Parameters</h1>
+            <p>Record ID and title are required.</p>
+          </body>
+        </html>
+      `);
+    }
+    
+    // Format date
     const dateStr = new Date().toLocaleDateString('es-ES', {
       month: 'long',
       day: 'numeric',
-      year: 'numeric',
-    })
-
-    // Generate the image file
-    const imagePath = await generateSocialMediaImageFile(
-      imageUrl,
+      year: 'numeric'
+    });
+    
+    // Generate image from template
+    const imagePath = await generateFromTemplate({
       title,
-      dateStr,
-      { platform: platform.toLowerCase() }
-    )
-
-    // Create timestamp for filename
-    const timestamp = new Date().toISOString().substring(0, 10)
-    const fileName = `${platform.toLowerCase()}-${recordId}-${timestamp}.png`
-
-    // Upload the file to Cloudinary
-    const publicUrl = await uploadImage(imagePath, fileName, {
-      format: 'png',
-      quality: 100,
-      useFilePath: true,
-    })
-
-    // Clean up temporary file
-    try {
-      fs.unlinkSync(imagePath)
-    } catch (cleanupError) {
-      logger.warn(`Could not delete temporary image: ${cleanupError.message}`)
-    }
-
-    // Initialize Airtable
-    const airtable = new Airtable({ apiKey: apiToken })
-    const base = airtable.base(baseId)
-
-    // Create update object with the Cloudinary URL
-    const updateFields = {}
-    if (platform.toLowerCase() === 'instagram') {
-      updateFields.social_image_instagram = [
-        {
-          filename: fileName,
-          url: publicUrl,
-        },
-      ]
-    } else if (platform.toLowerCase() === 'twitter') {
-      updateFields.social_image_twitter = [
-        {
-          filename: fileName,
-          url: publicUrl,
-        },
-      ]
-    } else {
-      updateFields.social_image_facebook = [
-        {
-          filename: fileName,
-          url: publicUrl,
-        },
-      ]
-    }
-
-    // Update Airtable record
-    await base('Redes Sociales').update(recordId, updateFields)
-
-    // Generate a small preview image for response
-    const previewPath = await renderSocialImage({
-      imageUrl,
-      title: title,
+      overline,
+      backgroundUrl: imgUrl,
       date: dateStr,
-      width: 600,
-      height: platform.toLowerCase() === 'instagram' ? 600 : 315,
-      platform: `preview-${platform}`,
-    })
+      platform
+    });
+    
+    // Convert to base64 for preview
+    const imageBuffer = fs.readFileSync(imagePath);
+    const base64Image = imageBuffer.toString('base64');
+    
+    // Send HTML preview
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Social Media Image</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 0; 
+              padding: 20px; 
+              background: #f5f5f5; 
+              text-align: center;
+            }
+            .container {
+              max-width: 800px;
+              margin: 0 auto;
+              background: white;
+              border-radius: 10px;
+              padding: 20px;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            h1 { color: #333; }
+            .image { 
+              max-width: 100%; 
+              height: auto; 
+              margin: 20px 0; 
+              border: 1px solid #ddd;
+            }
+            .button {
+              display: inline-block;
+              padding: 10px 20px;
+              border: none;
+              border-radius: 5px;
+              font-weight: bold;
+              font-size: 16px;
+              cursor: pointer;
+              margin: 10px;
+            }
+            .save { background: #4CAF50; color: white; }
+            .cancel { background: #f44336; color: white; }
+            #message { 
+              padding: 10px;
+              margin-top: 20px;
+              border-radius: 5px;
+              display: none;
+            }
+            .success { background: #e8f5e9; color: green; }
+            .error { background: #ffebee; color: red; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Social Media Image Preview</h1>
+            <p>Platform: ${platform}</p>
+            
+            <img src="data:image/png;base64,${base64Image}" alt="Preview" class="image">
+            
+            <div>
+              <button class="button save" id="save-button">Save to Airtable</button>
+              <button class="button cancel" onclick="window.close()">Cancel</button>
+            </div>
+            
+            <div id="message"></div>
+          </div>
+          
+          <script>
+            document.getElementById('save-button').addEventListener('click', async function() {
+              try {
+                const button = this;
+                const message = document.getElementById('message');
+                
+                // Disable button
+                button.disabled = true;
+                button.textContent = 'Saving...';
+                
+                // Send request
+                const response = await fetch('/api/social-media-images/save-to-airtable', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    recordId: '${recordId}',
+                    imagePath: '${imagePath}',
+                    platform: '${platform}'
+                  })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                  message.className = 'success';
+                  message.textContent = 'Image saved successfully!';
+                  message.style.display = 'block';
+                  
+                  // Close window after 3 seconds
+                  setTimeout(() => window.close(), 3000);
+                } else {
+                  throw new Error(data.error);
+                }
+              } catch (error) {
+                const message = document.getElementById('message');
+                message.className = 'error';
+                message.textContent = 'Error: ' + (error.message || 'Failed to save');
+                message.style.display = 'block';
+                
+                // Reset button
+                const button = document.getElementById('save-button');
+                button.disabled = false;
+                button.textContent = 'Try Again';
+              }
+            });
+          </script>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    logger.error('Error in airtable-generate endpoint:', error);
+    res.status(500).send(`
+      <html>
+        <head><title>Error</title></head>
+        <body>
+          <h1 style="color: red;">Error</h1>
+          <p>${error.message || 'An unknown error occurred'}</p>
+        </body>
+      </html>
+    `);
+  }
+});
 
-    // Read the preview file and convert to data URL
-    const previewBuffer = fs.readFileSync(previewPath)
-    const previewDataUrl = `data:image/png;base64,${previewBuffer.toString(
-      'base64'
-    )}`
-
-    // Clean up preview file
-    try {
-      fs.unlinkSync(previewPath)
-    } catch (error) {
-      logger.warn(`Could not delete preview image: ${error.message}`)
+/**
+ * API endpoint to save image to Airtable
+ * POST /api/social-media-images/save-to-airtable
+ */
+router.post('/save-to-airtable', async (req, res) => {
+  try {
+    const { recordId, imagePath, platform } = req.body;
+    
+    if (!recordId || !imagePath || !platform) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required parameters'
+      });
     }
-
+    
+    // Upload to Airtable
+    const imageUrl = await uploadToAirtable(imagePath, recordId, platform);
+    
+    // Delete temp file
+    try {
+      fs.unlinkSync(imagePath);
+    } catch (e) {
+      logger.warn('Failed to delete temp file:', e);
+    }
+    
     return res.json({
       success: true,
-      message: `Generated and uploaded image for ${platform}`,
-      data: {
-        recordId,
-        platform,
-        title: title,
-        previewWithTitle: previewDataUrl,
-        imageUrl: publicUrl,
-      },
-    })
+      data: { imageUrl }
+    });
   } catch (error) {
-    logger.error('Error generating social media image:', error)
+    logger.error('Error in save-to-airtable endpoint:', error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'Failed to generate social media image',
-    })
+      error: error.message || 'Failed to save to Airtable'
+    });
   }
-})
+});
+
+// Add a new endpoint to generate images for all platforms
 
 /**
- * Generate social media images for multiple platforms
- * POST /api/social-media-images/generate-all
+ * Generate images for all platforms and save directly to Airtable
+ * POST /api/social-media-images/generate-all-platforms
  */
-router.post('/generate-all', async (req, res) => {
+router.post('/generate-all-platforms', async (req, res) => {
   try {
-    const { recordId, imageUrl, title } = req.body
-    const platforms = ['facebook', 'twitter', 'instagram']
-
-    if (!recordId || !imageUrl || !title) {
+    const { recordId, title, overline = '', imgUrl = null } = req.body;
+    
+    if (!recordId || !title) {
       return res.status(400).json({
         success: false,
-        error: 'Record ID, image URL, and title are required',
-      })
+        error: 'Missing required parameters: recordId and title are required'
+      });
     }
-
-    // Test the image URL by trying to fetch headers
-    try {
-      const imageResponse = await fetch(imageUrl, { method: 'HEAD' })
-      if (!imageResponse.ok) {
-        return res.status(400).json({
-          success: false,
-          error: `Image URL returned status ${imageResponse.status}`,
-        })
-      }
-    } catch (imageError) {
-      return res.status(400).json({
-        success: false,
-        error: `Could not access image URL: ${imageError.message}`,
-      })
-    }
-
-    // Get Airtable credentials
-    const apiToken =
-      config.airtable?.personalAccessToken || process.env.AIRTABLE_TOKEN
-    const baseId = config.airtable?.baseId || process.env.AIRTABLE_BASE_ID
-
-    if (!apiToken || !baseId) {
-      logger.error('Missing Airtable credentials')
-      return res.status(500).json({
-        success: false,
-        error: 'Server configuration error: Missing Airtable credentials',
-      })
-    }
-
-    // Format the date string
+    
+    // Format date
     const dateStr = new Date().toLocaleDateString('es-ES', {
       month: 'long',
       day: 'numeric',
-      year: 'numeric',
-    })
-
-    // Initialize Airtable
-    const airtable = new Airtable({ apiKey: apiToken })
-    const base = airtable.base(baseId)
-
-    // Create timestamp for filenames
-    const timestamp = new Date().toISOString().substring(0, 10)
-
-    // Generate images for all platforms and upload to Cloudinary
-    const results = []
-    const updateFields = {}
-
-    // Generate a preview for the response
-    const previewPath = await renderSocialImage({
-      imageUrl,
-      title: title,
-      date: dateStr,
-      width: 600,
-      height: 315,
-      platform: 'preview',
-    })
-
-    // Read the preview file and convert to data URL
-    const previewBuffer = fs.readFileSync(previewPath)
-    const previewDataUrl = `data:image/png;base64,${previewBuffer.toString(
-      'base64'
-    )}`
-
-    // Clean up preview file
-    try {
-      fs.unlinkSync(previewPath)
-    } catch (error) {
-      logger.warn(`Could not delete preview image: ${error.message}`)
-    }
-
-    // Process each platform
+      year: 'numeric'
+    });
+    
+    // Platforms to generate
+    const platforms = ['facebook', 'twitter', 'instagram'];
+    const results = {};
+    
+    // Generate and upload images for each platform
     for (const platform of platforms) {
       try {
-        // Set dimensions based on platform
-        let width, height
-        if (platform === 'instagram') {
-          width = 800
-          height = 800
-        } else if (platform === 'twitter') {
-          width = 1200
-          height = 675
-        } else {
-          width = 1200
-          height = 628
-        }
-
-        // Generate the image
-        const imagePath = await generateSocialMediaImageFile(
-          imageUrl,
+        // Generate image
+        const imagePath = await generateFromTemplate({
           title,
-          dateStr,
-          { platform, width, height }
-        )
-
-        // Create filename and upload to Cloudinary
-        const fileName = `${platform}-${recordId}-${timestamp}.png`
-        const publicUrl = await uploadImage(imagePath, fileName, {
-          format: 'png',
-          quality: 100,
-          useFilePath: true,
-        })
-
-        // Clean up temporary file
+          overline,
+          backgroundUrl: imgUrl,
+          date: dateStr,
+          platform
+        });
+        
+        // Upload to Airtable
+        const imageUrl = await uploadToAirtable(imagePath, recordId, platform);
+        results[platform] = { success: true, url: imageUrl };
+        
+        // Clean up temp file
         try {
-          fs.unlinkSync(imagePath)
-        } catch (cleanupError) {
-          logger.warn(
-            `Could not delete temporary image for ${platform}: ${cleanupError.message}`
-          )
-        }
-
-        // Add to results and update fields
-        results.push({
-          platform,
-          success: true,
-          title: title,
-          imageUrl: publicUrl,
-        })
-
-        // Set update field based on platform
-        if (platform === 'instagram') {
-          updateFields.social_image_instagram = [
-            {
-              filename: fileName,
-              url: publicUrl,
-            },
-          ]
-        } else if (platform === 'twitter') {
-          updateFields.social_image_twitter = [
-            {
-              filename: fileName,
-              url: publicUrl,
-            },
-          ]
-        } else {
-          updateFields.social_image_facebook = [
-            {
-              filename: fileName,
-              url: publicUrl,
-            },
-          ]
+          fs.unlinkSync(imagePath);
+        } catch (e) {
+          logger.warn(`Failed to delete temp file for ${platform}:`, e);
         }
       } catch (platformError) {
-        logger.error(`Error generating image for ${platform}:`, platformError)
-        results.push({
-          platform,
-          success: false,
-          error: platformError.message,
-          title: title,
-        })
+        logger.error(`Error generating ${platform} image:`, platformError);
+        results[platform] = { success: false, error: platformError.message };
       }
     }
-
-    // Update Airtable record with all images
-    if (Object.keys(updateFields).length > 0) {
-      await base('Redes Sociales').update(recordId, updateFields)
-    }
-
+    
     // Return results
     return res.json({
       success: true,
-      message: 'Generated and uploaded social media images',
-      data: {
-        recordId,
-        results,
-        previewWithTitle: previewDataUrl,
-      },
-    })
+      message: 'Image generation complete',
+      results
+    });
   } catch (error) {
-    logger.error('Error in generate-all endpoint:', error)
+    logger.error('Error in generate-all-platforms endpoint:', error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'Failed to process request',
-    })
+      error: error.message || 'Failed to generate images'
+    });
   }
-})
+});
 
-export default router
+export default router;
