@@ -4,6 +4,9 @@ import logger from './utils/logger.js';
 import webhookRoutes from './routes/webhook.js';
 import socialMediaImagesRouter from './routes/social-media-images.js';
 import testImageEndpoint from './routes/test-image-endpoint.js';
+import { close as closeBrowser } from './services/browser-renderer.js';
+
+
 
 // Create Express application
 const app = express();
@@ -29,6 +32,29 @@ process.on('uncaughtException', (error) => {
 
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Add this to your existing shutdown/cleanup handlers
+process.on('SIGINT', async () => {
+  try {
+    await closeBrowser();
+    // ... your other cleanup code
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+  } finally {
+    process.exit(0);
+  }
+});
+
+process.on('SIGTERM', async () => {
+  try {
+    await closeBrowser();
+    // ... your other cleanup code
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+  } finally {
+    process.exit(0);
+  }
 });
 
 logger.info('RDV-NEWS-API is running');
