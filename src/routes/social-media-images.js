@@ -98,50 +98,49 @@ async function generateFromTemplate(options) {
     }
     
     // Step 2: Build transformation array for Cloudinary
-    const transformations = [
-      // Resize to platform dimensions
-      { width, height, crop: 'fill' },
-      
-      // Add dark overlay at bottom for text readability
-      { 
-        overlay: { 
-          url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADzQHhVzq8GAAAAABJRU5ErkJggg==' 
-        },
-        width,
-        height: Math.round(height * 0.5),
-        opacity: 70,
-        gravity: 'south',
-        flags: 'layer_apply'
+    const transformations = [];
+
+    // First resize the image
+    transformations.push({
+      width,
+      height,
+      crop: 'fill'
+    });
+
+    // Add dark overlay as a colored layer without using an uploaded asset
+    transformations.push({
+      effect: 'colorize',
+      color: 'black',
+      gravity: 'south',
+      height: Math.round(height * 0.5),
+      opacity: 70
+    });
+
+    // Add title with proper text parameters
+    transformations.push({
+      overlay: {
+        font_family: 'Arial',
+        font_size: Math.round(width * 0.045),
+        font_weight: 'bold',
+        text: encodeURIComponent(title)
       },
-      
-      // Add title text
-      {
-        overlay: {
-          font_family: 'Arial',
-          font_size: Math.round(width * 0.045),
-          font_weight: 'bold',
-          text: encodeURIComponent(title)
-        },
-        color: 'white',
-        gravity: 'south',
-        y: 120,
-        flags: 'layer_apply'
+      color: 'white',
+      gravity: 'south',
+      y: 120
+    });
+
+    // Add date text
+    transformations.push({
+      overlay: {
+        font_family: 'Arial',
+        font_size: Math.round(width * 0.03),
+        text: encodeURIComponent(date)
       },
-      
-      // Add date text
-      {
-        overlay: {
-          font_family: 'Arial',
-          font_size: Math.round(width * 0.03),
-          text: encodeURIComponent(date)
-        },
-        color: '#cccccc',
-        gravity: 'south',
-        y: 50,
-        flags: 'layer_apply'
-      }
-    ];
-    
+      color: '#cccccc',
+      gravity: 'south',
+      y: 50
+    });
+
     // Add overline if provided
     if (overline) {
       transformations.push({
@@ -152,17 +151,17 @@ async function generateFromTemplate(options) {
         },
         color: 'white',
         gravity: 'south',
-        y: 180,
-        flags: 'layer_apply'
+        y: 180
       });
     }
-    
-    // Step 3: Generate the image URL with transformations
+
+    // Use a single, simpler URL generation call
     const imageUrl = cloudinary.url(backgroundPublicId, {
-      transformation: transformations,
-      secure: true,
-      sign_url: true
+      transformation: transformations
     });
+
+    // Add debug logging
+    logger.debug(`Generated Cloudinary URL: ${imageUrl}`);
     
     // Step 4: Download the generated image
     const response = await fetch(imageUrl);
