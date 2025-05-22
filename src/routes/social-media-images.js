@@ -1,5 +1,5 @@
 import express from 'express';
-import fs from '.fs';
+import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import Airtable from 'airtable';
