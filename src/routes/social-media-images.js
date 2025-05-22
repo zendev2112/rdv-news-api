@@ -98,61 +98,70 @@ async function generateFromTemplate(options) {
     }
     
     // Step 2: Build transformation array for Cloudinary
-    // Start with a clean array for transformations
     const transformations = [];
 
-    // First resize the image to the right dimensions
+    // First resize the image
     transformations.push({
       width,
       height,
       crop: 'fill'
     });
 
-    // Add a dark semi-transparent overlay at the bottom
-    // Using specific coordinates instead of relative positioning
+    // Add dark overlay as a colored layer without using an uploaded asset
     transformations.push({
-      overlay: "color:000000",  // Black color
-      width: width,
-      height: Math.round(height * 0.4), // 40% of height
-      opacity: 60,
-      gravity: "south",
-      y: 0
+      effect: 'colorize',
+      color: 'black',
+      gravity: 'south',
+      height: Math.round(height * 0.5),
+      opacity: 70
     });
 
-    // Add title text
+    // Add title with proper text parameters
     transformations.push({
       overlay: {
-        font_family: "Arial",
+        font_family: 'Arial',
         font_size: Math.round(width * 0.045),
-        font_weight: "bold",
+        font_weight: 'bold',
         text: encodeURIComponent(title)
       },
-      color: "white",
-      gravity: "south", 
-      y: 80
+      color: 'white',
+      gravity: 'south',
+      y: 120
+    });
+
+    // Add date text
+    transformations.push({
+      overlay: {
+        font_family: 'Arial',
+        font_size: Math.round(width * 0.03),
+        text: encodeURIComponent(date)
+      },
+      color: '#cccccc',
+      gravity: 'south',
+      y: 50
     });
 
     // Add overline if provided
     if (overline) {
       transformations.push({
         overlay: {
-          font_family: "Arial",
+          font_family: 'Arial',
           font_size: Math.round(width * 0.035),
           text: encodeURIComponent(overline)
         },
-        color: "white",
-        gravity: "south",
-        y: 140
+        color: 'white',
+        gravity: 'south',
+        y: 180
       });
     }
 
-    // Generate the URL with minimal options
+    // Use a single, simpler URL generation call
     const imageUrl = cloudinary.url(backgroundPublicId, {
       transformation: transformations
     });
 
-    // Add debug logging to see the URL
-    logger.info(`Generated Cloudinary URL: ${imageUrl}`);
+    // Add debug logging
+    logger.debug(`Generated Cloudinary URL: ${imageUrl}`);
     
     // Step 4: Download the generated image
     const response = await fetch(imageUrl);
