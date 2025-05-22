@@ -98,35 +98,37 @@ async function generateFromTemplate(options) {
     }
     
     // Step 2: Build transformation array for Cloudinary
+    // Start with a clean array for transformations
     const transformations = [];
 
-    // First resize the image
+    // First resize the image to the right dimensions
     transformations.push({
       width,
       height,
       crop: 'fill'
     });
 
-    // Add dark semi-transparent overlay on the BOTTOM half only
+    // Add a dark semi-transparent overlay at the bottom
+    // Using specific coordinates instead of relative positioning
     transformations.push({
-      overlay: "color:black",
-      flags: "relative",
-      width: 1.0, // 100% of parent width
-      height: 0.4, // 40% of parent height
+      overlay: "color:000000",  // Black color
+      width: width,
+      height: Math.round(height * 0.4), // 40% of height
       opacity: 60,
-      gravity: "south"
+      gravity: "south",
+      y: 0
     });
 
-    // Add title with proper text parameters
+    // Add title text
     transformations.push({
       overlay: {
-        font_family: 'Arial',
+        font_family: "Arial",
         font_size: Math.round(width * 0.045),
-        font_weight: 'bold',
+        font_weight: "bold",
         text: encodeURIComponent(title)
       },
-      color: 'white',
-      gravity: 'south',
+      color: "white",
+      gravity: "south", 
       y: 80
     });
 
@@ -134,25 +136,23 @@ async function generateFromTemplate(options) {
     if (overline) {
       transformations.push({
         overlay: {
-          font_family: 'Arial',
+          font_family: "Arial",
           font_size: Math.round(width * 0.035),
           text: encodeURIComponent(overline)
         },
-        color: 'white',
-        gravity: 'south',
+        color: "white",
+        gravity: "south",
         y: 140
       });
     }
 
-    // Use secure URL with better formatting
+    // Generate the URL with minimal options
     const imageUrl = cloudinary.url(backgroundPublicId, {
-      transformation: transformations,
-      secure: true,
-      sign_url: true
+      transformation: transformations
     });
 
-    // Add debug logging
-    logger.debug(`Generated Cloudinary URL: ${imageUrl}`);
+    // Add debug logging to see the URL
+    logger.info(`Generated Cloudinary URL: ${imageUrl}`);
     
     // Step 4: Download the generated image
     const response = await fetch(imageUrl);
