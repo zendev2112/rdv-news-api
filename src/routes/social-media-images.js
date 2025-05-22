@@ -107,13 +107,14 @@ async function generateFromTemplate(options) {
       crop: 'fill'
     });
 
-    // Add dark overlay as a colored layer without using an uploaded asset
+    // Add dark semi-transparent overlay on the BOTTOM half only
     transformations.push({
-      effect: 'colorize',
-      color: 'black',
-      gravity: 'south',
-      height: Math.round(height * 0.5),
-      opacity: 70
+      overlay: "color:black",
+      flags: "relative",
+      width: 1.0, // 100% of parent width
+      height: 0.4, // 40% of parent height
+      opacity: 60,
+      gravity: "south"
     });
 
     // Add title with proper text parameters
@@ -126,19 +127,7 @@ async function generateFromTemplate(options) {
       },
       color: 'white',
       gravity: 'south',
-      y: 120
-    });
-
-    // Add date text
-    transformations.push({
-      overlay: {
-        font_family: 'Arial',
-        font_size: Math.round(width * 0.03),
-        text: encodeURIComponent(date)
-      },
-      color: '#cccccc',
-      gravity: 'south',
-      y: 50
+      y: 80
     });
 
     // Add overline if provided
@@ -151,13 +140,15 @@ async function generateFromTemplate(options) {
         },
         color: 'white',
         gravity: 'south',
-        y: 180
+        y: 140
       });
     }
 
-    // Use a single, simpler URL generation call
+    // Use secure URL with better formatting
     const imageUrl = cloudinary.url(backgroundPublicId, {
-      transformation: transformations
+      transformation: transformations,
+      secure: true,
+      sign_url: true
     });
 
     // Add debug logging
