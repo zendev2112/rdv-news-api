@@ -98,72 +98,117 @@ async function generateFromTemplate(options) {
     }
     
     // Step 2: Build transformation array for Cloudinary
-    const transformations = [];
+    let transformations = [];
 
-    // First resize the image to fit our dimensions
+    // First resize the image
     transformations.push({
       width,
       height,
       crop: 'fill'
     });
 
-    // Instead of colorize effect, use an underlay for the dark area
-    // Add a semi-transparent black overlay just at the bottom part of the image
+    // We need to split up the transformations into a chain that Cloudinary can process
+    // Instead of using effect:colorize which affects the whole image,
+    // we'll use an underlay with a semi-transparent black rectangle
     transformations.push({
-      overlay: "color:black",
+      overlay: "black_rectangle",  // We'll create this asset
       width: width,
       height: Math.round(height * 0.5),
       gravity: "south",
-      opacity: 70,
-      flags: "layer_apply"
+      opacity: 70
     });
 
-    // Add title text on top of everything
+    // Add title text
     transformations.push({
       overlay: {
-        font_family: 'Arial',
-        font_size: Math.round(width * 0.045),
-        font_weight: 'bold',
+        font_family: "Arial",
+        font_size: 60,  // Fixed size instead of calculated
         text: encodeURIComponent(title)
       },
-      color: 'white',
-      gravity: 'south',
-      y: 100,
-      flags: "layer_apply"
+      color: "white",
+      gravity: "south", 
+      y: 120
     });
-
-    // Remove the date text entirely since you mentioned you don't need it
 
     // Add overline if provided
     if (overline) {
       transformations.push({
         overlay: {
-          font_family: 'Arial',
-          font_size: Math.round(width * 0.035),
+          font_family: "Arial",
+          font_size: 40,  // Fixed size instead of calculated
           text: encodeURIComponent(overline)
         },
-        color: 'white',
-        gravity: 'south',
-        y: 170,
-        flags: "layer_apply"
+        color: "white",
+        gravity: "south",
+        y: 180
       });
     }
 
-    // Use a properly formatted URL call with secure option
+    // First, make sure we have a black rectangle asset
+    try {
+      await cloudinary.api.resource('rdv-news/defaults/black_rectangle');
+      logger.debug('Black rectangle asset exists');
+    } catch (err) {
+      try {
+        // Create black rectangle if it doesn't exist
+        await cloudinary.uploader.upload(
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==',
+          {
+            folder: 'rdv-news/defaults',
+            public_id: 'black_rectangle',
+            colors: true,
+            background: '#000000'
+          }
+        );
+        logger.debug('Created black rectangle asset');
+      } catch (uploadErr) {
+        logger.error('Failed to create black rectangle:', uploadErr);
+      }
+    }
+
+    // Generate simplified Cloudinary URL that should work
     const imageUrl = cloudinary.url(backgroundPublicId, {
       transformation: transformations,
+      sign_url: true,
       secure: true
     });
 
-    // Add debug logging in info level to see in production logs
     logger.info(`Generated Cloudinary URL: ${imageUrl}`);
-    
-    // Step 4: Download the generated image
-    const response = await fetch(imageUrl);
+
+    // If we still have issues, fallback to a very basic transformation
+    let response = await fetch(imageUrl);
+
+    // If the complex URL fails, fall back to a simpler one
     if (!response.ok) {
-      throw new Error(`Failed to download image: ${response.status}`);
+      logger.warn(`Complex URL failed with status ${response.status}, trying fallback`);
+      
+      // Just resize the image with minimal transformations
+      const fallbackUrl = cloudinary.url(backgroundPublicId, {
+        transformation: [
+          { width, height, crop: 'fill' },
+          {
+            overlay: {
+              font_family: "Arial",
+              font_size: 60,
+              text: encodeURIComponent(title)
+            },
+            color: "white",
+            gravity: "center"
+          }
+        ],
+        sign_url: true, 
+        secure: true
+      });
+      
+      logger.info(`Fallback Cloudinary URL: ${fallbackUrl}`);
+      response = await fetch(fallbackUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to download image: ${response.status}`);
+      }
     }
-    
+
+    // Continue with your existing code to process the response
     const imageBuffer = await response.buffer();
     fs.writeFileSync(outputPath, imageBuffer);
     
