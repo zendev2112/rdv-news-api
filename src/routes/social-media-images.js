@@ -358,6 +358,11 @@ router.get('/airtable-generate', async (req, res) => {
       year: 'numeric'
     });
     
+    // Escape values before creating the template
+    const escapedTitle = title ? title.replace(/"/g, '\\"') : '';
+    const escapedOverline = overline ? overline.replace(/"/g, '\\"') : '';
+    const escapedImgUrl = imgUrl ? imgUrl.replace(/"/g, '\\"') : '';
+
     // Generate image from template
     const imagePath = await generateFromTemplate({
       title,
@@ -604,9 +609,9 @@ router.get('/airtable-generate', async (req, res) => {
           <script>
             // Replace template variables with actual JavaScript values
             const RECORD_ID = "${recordId}";
-            const TITLE = "${title.replace(/"/g, '\\"')}";
-            const OVERLINE = "${overline.replace(/"/g, '\\"')}";
-            const IMG_URL = "${imgUrl ? imgUrl.replace(/"/g, '\\"') : ''}";
+            const TITLE = "${escapedTitle}";
+            const OVERLINE = "${escapedOverline}";
+            const IMG_URL = "${escapedImgUrl}";
             const PLATFORM = "${platform}";
             const IMAGE_PATH = "${imagePath}";
             
