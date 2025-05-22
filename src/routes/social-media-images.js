@@ -19,7 +19,7 @@ if (!fs.existsSync(TEMP_DIR)) {
 }
 
 /**
- * Generate image using Sharp instead of ImageMagick
+ * Generate image using pure Sharp without SVG for text
  */
 async function generateFromTemplate(options) {
   const { 
@@ -51,44 +51,41 @@ async function generateFromTemplate(options) {
     // Create output path
     const outputPath = path.join(TEMP_DIR, `${platform}-${Date.now()}.png`);
     
-    // Start with either background image or solid color
+    // Create the background image
     let baseImage;
-    
     if (backgroundUrl) {
       try {
-        // Try to download and use background image
+        // Download background
         const response = await fetch(backgroundUrl);
         if (response.ok) {
-          const buffer = await response.buffer();
-          baseImage = sharp(buffer);
+          baseImage = sharp(await response.buffer());
         } else {
-          throw new Error('Failed to download background image');
+          throw new Error('Failed to download background');
         }
       } catch (err) {
-        logger.warn(`Using default background: ${err.message}`);
-        // Fall back to solid color if background download fails
+        // Create solid color background on error
         baseImage = sharp({
           create: {
             width,
             height,
             channels: 4,
-            background: { r: 23, g: 42, b: 136, alpha: 1 } // Dark blue
+            background: { r: 23, g: 42, b: 136, alpha: 1 } // Blue
           }
         });
       }
     } else {
-      // Create a solid color background if no URL provided
+      // Create solid color if no URL
       baseImage = sharp({
         create: {
           width,
           height,
           channels: 4,
-          background: { r: 23, g: 42, b: 136, alpha: 1 } // Dark blue
+          background: { r: 23, g: 42, b: 136, alpha: 1 } // Blue
         }
       });
     }
     
-    // Resize to cover the dimensions
+    // Resize and format the base image
     baseImage = baseImage.resize({
       width,
       height,
@@ -96,77 +93,165 @@ async function generateFromTemplate(options) {
       position: 'center'
     });
     
-    // Create dark overlay for bottom portion
-    const overlayHeight = Math.round(height * 0.4); // 40% of image height
+    // Add dark gradient overlay for text readability
     const overlay = await sharp({
       create: {
         width,
-        height: overlayHeight,
+        height: Math.round(height * 0.5), // 50% of height for text area
         channels: 4,
         background: { r: 0, g: 0, b: 0, alpha: 0.7 } // Semi-transparent black
       }
     }).png().toBuffer();
     
-    // Add the overlay to the bottom of the image
     baseImage = baseImage.composite([{
       input: overlay,
       gravity: 'south'
     }]);
     
-    // Try to load logo if available
-    const logoPath = path.join(process.cwd(), 'src', 'assets', 'logo.png');
+    // Generate base image first
+    const baseBuffer = await baseImage.toBuffer();
+    
+    // Create a new image with text elements manually placed
+    const finalImage = sharp(baseBuffer);
     const compositeElements = [];
     
+    // Add logo if exists
+    const logoPath = path.join(process.cwd(), 'src', 'assets', 'logo.png');
     if (fs.existsSync(logoPath)) {
-      // Resize logo to appropriate size (15% of width)
-      const logoWidth = Math.round(width * 0.15);
       const logoBuffer = await sharp(logoPath)
-        .resize({ width: logoWidth })
+        .resize({ width: Math.floor(width * 0.15) }) // 15% of width
         .toBuffer();
       
       compositeElements.push({
         input: logoBuffer,
-        gravity: 'northwest',
         top: 20,
         left: 20
       });
     }
     
-    // Create SVG for text overlays
-    const titleFontSize = Math.round(width * 0.045);
-    const dateFontSize = Math.round(width * 0.03);
-    const overlineFontSize = Math.round(width * 0.035);
+    // Create basic text overlays
     
-    const svgText = `
-      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-        <style>
-          .title { fill: white; font-family: Arial, sans-serif; font-weight: bold; font-size: ${titleFontSize}px; text-anchor: middle; }
-          .date { fill: #cccccc; font-family: Arial, sans-serif; font-size: ${dateFontSize}px; text-anchor: middle; }
-          .overline { fill: white; font-family: Arial, sans-serif; font-size: ${overlineFontSize}px; text-anchor: middle; }
-        </style>
-        <text x="${width/2}" y="${height - 80}" class="title">${title}</text>
-        <text x="${width/2}" y="${height - 30}" class="date">${date}</text>
-        ${overline ? `<text x="${width/2}" y="${height - 130}" class="overline">${overline}</text>` : ''}
-      </svg>
-    `;
+    // For the title, create a colored rectangle with text cutout
+    const titleHeight = 100;
+    const titleWidth = Math.floor(width * 0.9); // 90% of width
     
-    // Add text SVG to composite elements
-    compositeElements.push({
-      input: Buffer.from(svgText),
-      gravity: 'center'
+    // Create a title text image - white text on transparent background
+    const titleTextImage = sharp({
+      create: {
+        width: titleWidth,
+        height: titleHeight,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 1 }
+      }
     });
     
-    // Apply all composite elements
-    if (compositeElements.length > 0) {
-      baseImage = baseImage.composite(compositeElements);
+    // Add title to the center
+    titleTextImage.composite([
+      {
+        input: {
+          text: {
+            text: title,
+            width: titleWidth,
+            height: titleHeight,
+            rgba: true,
+            font: "sans",
+            fontfile: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", // Should be available on most systems
+            align: "center"
+          }
+        },
+        gravity: "center"
+      }
+    ]);
+    
+    const titleTextBuffer = await titleTextImage.png().toBuffer();
+    
+    // Position the title
+    compositeElements.push({
+      input: titleTextBuffer,
+      top: Math.floor(height * 0.6), // 60% from top
+      left: Math.floor(width * 0.05) // 5% from left
+    });
+    
+    // Add date in similar fashion
+    const dateImage = sharp({
+      create: {
+        width: Math.floor(width * 0.6),
+        height: 50,
+        channels: 4,
+        background: { r: 200, g: 200, b: 200, alpha: 1 } // Light gray for date
+      }
+    });
+    
+    dateImage.composite([
+      {
+        input: {
+          text: {
+            text: date,
+            width: Math.floor(width * 0.6),
+            height: 50,
+            rgba: true,
+            font: "sans",
+            align: "center"
+          }
+        },
+        gravity: "center"
+      }
+    ]);
+    
+    const dateBuffer = await dateImage.png().toBuffer();
+    
+    // Position the date
+    compositeElements.push({
+      input: dateBuffer,
+      top: Math.floor(height * 0.85), // 85% from top
+      left: Math.floor(width * 0.2) // 20% from left
+    });
+    
+    // Add overline if provided
+    if (overline) {
+      const overlineImage = sharp({
+        create: {
+          width: Math.floor(width * 0.7),
+          height: 40,
+          channels: 4,
+          background: { r: 255, g: 255, b: 255, alpha: 1 }
+        }
+      });
+      
+      overlineImage.composite([
+        {
+          input: {
+            text: {
+              text: overline,
+              width: Math.floor(width * 0.7),
+              height: 40,
+              rgba: true,
+              font: "sans",
+              align: "center"
+            }
+          },
+          gravity: "center"
+        }
+      ]);
+      
+      const overlineBuffer = await overlineImage.png().toBuffer();
+      
+      // Position the overline
+      compositeElements.push({
+        input: overlineBuffer,
+        top: Math.floor(height * 0.5), // 50% from top
+        left: Math.floor(width * 0.15) // 15% from left
+      });
     }
     
-    // Write output file
-    await baseImage.toFile(outputPath);
+    // Composite all elements onto base image
+    await finalImage
+      .composite(compositeElements)
+      .toFile(outputPath);
     
     return outputPath;
   } catch (error) {
-    logger.error('Error generating image with Sharp:', error);
+    logger.error('Error generating image:', error);
     throw error;
   }
 }
