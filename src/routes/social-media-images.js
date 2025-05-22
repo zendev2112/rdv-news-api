@@ -7,6 +7,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import fetch from 'node-fetch';
 import logger from '../utils/logger.js';
+import sharp from 'sharp';
 
 const router = express.Router();
 const execAsync = promisify(exec);
@@ -18,8 +19,7 @@ if (!fs.existsSync(TEMP_DIR)) {
 }
 
 /**
- * Generate image using template and ImageMagick
- * This approach uses pre-designed templates and just adds text
+ * Generate image using Sharp instead of ImageMagick
  */
 async function generateFromTemplate(options) {
   const { 
@@ -31,66 +31,142 @@ async function generateFromTemplate(options) {
   } = options;
   
   try {
+    // Set dimensions based on platform
+    let width, height;
+    switch (platform.toLowerCase()) {
+      case 'instagram':
+        width = 1080;
+        height = 1080;
+        break;
+      case 'twitter':
+        width = 1200;
+        height = 675;
+        break;
+      case 'facebook':
+      default:
+        width = 1200;
+        height = 628;
+    }
+    
     // Create output path
     const outputPath = path.join(TEMP_DIR, `${platform}-${Date.now()}.png`);
     
-    // Select template based on platform
-    const templateDir = path.join(process.cwd(), 'src', 'templates');
-    const templatePath = path.join(templateDir, `${platform}-template.png`);
+    // Start with either background image or solid color
+    let baseImage;
     
-    // Check if template exists, if not use default
-    const finalTemplatePath = fs.existsSync(templatePath) 
-      ? templatePath 
-      : path.join(templateDir, 'default-template.png');
-    
-    // If background URL provided, download and use it instead of template
     if (backgroundUrl) {
       try {
+        // Try to download and use background image
         const response = await fetch(backgroundUrl);
         if (response.ok) {
-          const bgBuffer = await response.buffer();
-          fs.writeFileSync(outputPath, bgBuffer);
-          
-          // Apply overlay to make text more readable
-          await execAsync(`convert "${outputPath}" \\( +clone -fill black -colorize 50% \\) -gravity south -compose over -composite -quality 100 "${outputPath}"`);
+          const buffer = await response.buffer();
+          baseImage = sharp(buffer);
         } else {
-          // Use template if background fetch fails
-          fs.copyFileSync(finalTemplatePath, outputPath);
+          throw new Error('Failed to download background image');
         }
       } catch (err) {
-        logger.warn(`Failed to use background image: ${err.message}`);
-        fs.copyFileSync(finalTemplatePath, outputPath);
+        logger.warn(`Using default background: ${err.message}`);
+        // Fall back to solid color if background download fails
+        baseImage = sharp({
+          create: {
+            width,
+            height,
+            channels: 4,
+            background: { r: 23, g: 42, b: 136, alpha: 1 } // Dark blue
+          }
+        });
       }
     } else {
-      // Use template if no background URL
-      fs.copyFileSync(finalTemplatePath, outputPath);
+      // Create a solid color background if no URL provided
+      baseImage = sharp({
+        create: {
+          width,
+          height,
+          channels: 4,
+          background: { r: 23, g: 42, b: 136, alpha: 1 } // Dark blue
+        }
+      });
     }
     
-    // Sanitize text for shell command
-    const safeTitle = title.replace(/"/g, '\\"').replace(/`/g, "'");
-    const safeOverline = overline ? overline.replace(/"/g, '\\"').replace(/`/g, "'") : '';
-    const safeDate = date.replace(/"/g, '\\"').replace(/`/g, "'");
+    // Resize to cover the dimensions
+    baseImage = baseImage.resize({
+      width,
+      height,
+      fit: 'cover',
+      position: 'center'
+    });
     
-    // Add title text
-    await execAsync(`convert "${outputPath}" -gravity south -pointsize 44 -fill white -stroke black -strokewidth 1 -annotate +0+120 "${safeTitle}" "${outputPath}"`);
+    // Create dark overlay for bottom portion
+    const overlayHeight = Math.round(height * 0.4); // 40% of image height
+    const overlay = await sharp({
+      create: {
+        width,
+        height: overlayHeight,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0.7 } // Semi-transparent black
+      }
+    }).png().toBuffer();
     
-    // Add overline text if provided
-    if (safeOverline) {
-      await execAsync(`convert "${outputPath}" -gravity south -pointsize 28 -fill white -stroke black -strokewidth 1 -annotate +0+200 "${safeOverline}" "${outputPath}"`);
-    }
+    // Add the overlay to the bottom of the image
+    baseImage = baseImage.composite([{
+      input: overlay,
+      gravity: 'south'
+    }]);
     
-    // Add date text
-    await execAsync(`convert "${outputPath}" -gravity south -pointsize 28 -fill white -stroke black -strokewidth 0.5 -annotate +0+60 "${safeDate}" "${outputPath}"`);
-    
-    // Add logo
+    // Try to load logo if available
     const logoPath = path.join(process.cwd(), 'src', 'assets', 'logo.png');
+    const compositeElements = [];
+    
     if (fs.existsSync(logoPath)) {
-      await execAsync(`convert "${outputPath}" "${logoPath}" -gravity northwest -geometry 150x -composite "${outputPath}"`);
+      // Resize logo to appropriate size (15% of width)
+      const logoWidth = Math.round(width * 0.15);
+      const logoBuffer = await sharp(logoPath)
+        .resize({ width: logoWidth })
+        .toBuffer();
+      
+      compositeElements.push({
+        input: logoBuffer,
+        gravity: 'northwest',
+        top: 20,
+        left: 20
+      });
     }
+    
+    // Create SVG for text overlays
+    const titleFontSize = Math.round(width * 0.045);
+    const dateFontSize = Math.round(width * 0.03);
+    const overlineFontSize = Math.round(width * 0.035);
+    
+    const svgText = `
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .title { fill: white; font-family: Arial, sans-serif; font-weight: bold; font-size: ${titleFontSize}px; text-anchor: middle; }
+          .date { fill: #cccccc; font-family: Arial, sans-serif; font-size: ${dateFontSize}px; text-anchor: middle; }
+          .overline { fill: white; font-family: Arial, sans-serif; font-size: ${overlineFontSize}px; text-anchor: middle; }
+        </style>
+        <text x="${width/2}" y="${height - 80}" class="title">${title}</text>
+        <text x="${width/2}" y="${height - 30}" class="date">${date}</text>
+        ${overline ? `<text x="${width/2}" y="${height - 130}" class="overline">${overline}</text>` : ''}
+      </svg>
+    `;
+    
+    // Add text SVG to composite elements
+    compositeElements.push({
+      input: Buffer.from(svgText),
+      gravity: 'center'
+    });
+    
+    // Apply all composite elements
+    if (compositeElements.length > 0) {
+      baseImage = baseImage.composite(compositeElements);
+    }
+    
+    // Write output file
+    await baseImage.toFile(outputPath);
     
     return outputPath;
   } catch (error) {
-    logger.error('Error generating image from template:', error);
+    logger.error('Error generating image with Sharp:', error);
     throw error;
   }
 }
