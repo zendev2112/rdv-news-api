@@ -20,12 +20,51 @@ let initialized = false;
 async function initialize() {
   if (!initialized) {
     try {
-      browser = await puppeteer.launch({
+      // Use installed browser or executable path as fallback
+      const options = {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-      });
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage'
+        ]
+      };
+      
+      try {
+        // First try using Puppeteer's browser discovery mechanism
+        browser = await puppeteer.launch(options);
+      } catch (err) {
+        logger.warn('Could not launch browser with default options, trying with alternative approaches', err);
+        
+        // Try with explicit executable path for Chrome
+        const possiblePaths = [
+          '/usr/bin/google-chrome',
+          '/usr/bin/chromium-browser',
+          '/usr/bin/chromium',
+          '/snap/bin/chromium',
+          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
+        ];
+        
+        // Find the first working Chrome path
+        for (const executablePath of possiblePaths) {
+          if (fs.existsSync(executablePath)) {
+            logger.info(`Found Chrome at ${executablePath}`);
+            browser = await puppeteer.launch({
+              ...options,
+              executablePath
+            });
+            break;
+          }
+        }
+        
+        // If still no browser, throw error
+        if (!browser) {
+          throw new Error('Could not find any installed Chrome or Chromium browser');
+        }
+      }
+      
       initialized = true;
-      logger.info('Browser renderer initialized');
+      logger.info('Browser renderer initialized successfully');
     } catch (error) {
       logger.error('Failed to initialize browser renderer:', error);
       throw error;
