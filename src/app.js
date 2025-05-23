@@ -5,6 +5,8 @@ import webhookRoutes from './routes/webhook.js';
 import routes from './routes/social-media-images.js';
 import testImageEndpoint from './routes/test-image-endpoint.js';
 import { close as closeBrowser } from './services/browser-renderer.js';
+import slackRoutes from './src/routes/slack-integration.js'
+
 
 
 
@@ -21,6 +23,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/webhooks', webhookRoutes);
 app.use('/api/social-media-images', routes);
 app.use('/api/test-image', testImageEndpoint);
+// Add this middleware (after your existing middleware)
+app.use('/api/slack', express.urlencoded({ extended: true }))
+app.use('/api/slack', slackRoutes)
 
 // Start the job scheduler
 startJobs();
