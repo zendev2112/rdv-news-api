@@ -5,6 +5,7 @@ import dotenv from 'dotenv'
 import publishRoutes from './routes/publish.js'
 import webhookRoutes from './routes/webhook.js'
 import socialMediaImagesRouter from './routes/social-media-images.js'
+import slackRoutes from './routes/slack-integration.js' 
 
 // Remove or conditionally import background scripts
 // import './scripts/poll-sync-requests.js';
@@ -34,6 +35,7 @@ app.get('/', (req, res) => {
       api: '/api',
       webhooks: '/webhooks',
       socialMediaImages: '/api/social-media-images',
+      slack: '/api/slack',
       health: '/health',
     },
     timestamp: new Date().toISOString(),
@@ -41,7 +43,8 @@ app.get('/', (req, res) => {
 })
 
 // Routes
-app.use('/api/social-media-images', socialMediaImagesRouter) // Add this line
+app.use('/api/social-media-images', socialMediaImagesRouter)
+app.use('/api/slack', slackRoutes)  // Add this line
 app.use('/api', publishRoutes)
 app.use('/webhooks', webhookRoutes)
 
