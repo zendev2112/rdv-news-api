@@ -124,18 +124,21 @@ async function generateFromTemplate(options) {
     // Instead of using effect:colorize which affects the whole image,
     // we'll use an underlay with a semi-transparent black rectangle
     if (gradientFade) {
-      // Create gradient overlay - this gives a smooth fade effect
+      // Create gradient overlay with improved visibility
+      const gradientBase64 = await createGradientBase64(
+        overlayColor,
+        width,
+        Math.round(height * 0.7) // Make it taller (70% of image height)
+      )
+
       transformations.push({
         overlay: {
-          url: `data:image/png;base64,${await createGradientBase64(
-            overlayColor,
-            width,
-            Math.round(height * 0.6)
-          )}`,
+          url: `data:image/png;base64,${gradientBase64}`,
         },
         gravity: 'south',
         width: width,
-        height: Math.round(height * 0.6), // Make it slightly taller for fade
+        height: Math.round(height * 0.7), // Match the height from above
+        flags: 'layer_apply', // Ensure proper layer application
       })
     } else {
       // Use existing solid color overlay if gradient not enabled
@@ -253,17 +256,19 @@ async function generateFromTemplate(options) {
   }
 }
 
-// First, update the gradient creation function to make it more visible:
+// Update the createGradientBase64 function for a more dramatic gradient effect
 async function createGradientBase64(color, width, height) {
-  // Create a more pronounced transparent-to-color gradient
+  // Create a much more dramatic gradient with higher contrast
   const svg = `
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stop-color="#${color}00" />
-          <stop offset="30%" stop-color="#${color}88" />
-          <stop offset="70%" stop-color="#${color}BB" />
-          <stop offset="100%" stop-color="#${color}DD" />
+          <stop offset="20%" stop-color="#${color}44" />
+          <stop offset="40%" stop-color="#${color}88" />
+          <stop offset="60%" stop-color="#${color}BB" />
+          <stop offset="80%" stop-color="#${color}DD" />
+          <stop offset="100%" stop-color="#${color}FF" />
         </linearGradient>
       </defs>
       <rect width="100%" height="100%" fill="url(#gradient)" />
@@ -271,8 +276,9 @@ async function createGradientBase64(color, width, height) {
   `
 
   try {
+    // Increase quality settings for the PNG output
     const buffer = await sharp(Buffer.from(svg))
-      .png()
+      .png({ quality: 100 })
       .toBuffer()
     return buffer.toString('base64')
   } catch (error) {
@@ -511,11 +517,11 @@ router.get('/airtable-generate', async (req, res) => {
               recordId: RECORD_ID,
               imagePath: IMAGE_PATH,
               platform: PLATFORM,
-              // Explicitly enable gradient with stronger opacity
+              // Enhanced gradient settings
               styling: {
                 gradientFade: true,
-                overlayOpacity: 80, // Increase opacity for visibility
-                overlayColor: "000000" // Ensure black color for contrast
+                overlayOpacity: 90, // Higher opacity for visibility
+                overlayColor: "000000" // Black color for contrast
               }
             })
           });
