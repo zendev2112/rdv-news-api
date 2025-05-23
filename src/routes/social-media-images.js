@@ -124,23 +124,20 @@ async function generateFromTemplate(options) {
     // Instead of using effect:colorize which affects the whole image,
     // we'll use an underlay with a semi-transparent black rectangle
     if (gradientFade) {
-      // Clear existing transformations and recreate with chained approach
+      // Create the actual gradient using the function you already have
+      const gradientBase64 = await createGradientBase64(
+        overlayColor,
+        width,
+        Math.round(height * 0.6)
+      )
+
       transformations = [
         { width, height, crop: 'fill' },
         {
-          overlay: 'color:black',
-          width: width,
-          height: Math.round(height * 0.5),
+          overlay: `data:image/png;base64,${gradientBase64}`,
           gravity: 'south',
-          opacity: 70,
-        },
-        {
-          overlay: 'color:black',
           width: width,
-          height: Math.round(height * 0.25),
-          gravity: 'south',
-          y: Math.round(height * 0.5),
-          opacity: 35,
+          height: Math.round(height * 0.6),
         },
         {
           overlay: {
