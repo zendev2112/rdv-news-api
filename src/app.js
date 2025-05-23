@@ -24,7 +24,6 @@ app.use('/webhooks', webhookRoutes);
 app.use('/api/social-media-images', routes);
 app.use('/api/test-image', testImageEndpoint);
 // Add this middleware (after your existing middleware)
-
 app.use('/api/slack', slackRoutes)
 
 // Start the job scheduler
