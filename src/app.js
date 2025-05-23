@@ -3,7 +3,6 @@ import { startJobs } from './scheduler/jobs.js';
 import logger from './utils/logger.js';
 import webhookRoutes from './routes/webhook.js';
 import routes from './routes/social-media-images.js';
-import testImageEndpoint from './routes/test-image-endpoint.js';
 import { close as closeBrowser } from './services/browser-renderer.js';
 import slackRoutes from './routes/slack-integration.js'
 
