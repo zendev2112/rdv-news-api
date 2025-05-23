@@ -89,18 +89,18 @@
 
 import express from 'express'
 
-const router = express.Router()
+const slackRoutes = express.Router()
 
 // Test route
-router.get('/test', (req, res) => {
+slackRoutes.get('/test', (req, res) => {
   res.json({ message: 'Slack integration working!' })
 })
 
-router.post('/social-task', (req, res) => {
+slackRoutes.post('/social-task', (req, res) => {
   res.json({
     message: 'Social task endpoint working!',
     received: req.body,
   })
 })
 
-export default router
+export default slackRoutes
