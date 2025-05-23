@@ -1,34 +1,34 @@
-import express from 'express';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import Airtable from 'airtable';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import fetch from 'node-fetch';
-import logger from '../utils/logger.js';
-import sharp from 'sharp';
-import cloudinaryService from '../services/cloudinary.js';
-import { v2 as cloudinary } from 'cloudinary';
+import express from 'express'
+import fs from 'fs'
+import path from 'path'
+import os from 'os'
+import Airtable from 'airtable'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+import fetch from 'node-fetch'
+import logger from '../utils/logger.js'
+import sharp from 'sharp'
+import cloudinaryService from '../services/cloudinary.js'
+import { v2 as cloudinary } from 'cloudinary'
 
-const router = express.Router();
-const execAsync = promisify(exec);
+const router = express.Router()
+const execAsync = promisify(exec)
 
 // Ensure temp directory exists
-const TEMP_DIR = path.join(os.tmpdir(), 'rdv-images');
+const TEMP_DIR = path.join(os.tmpdir(), 'rdv-images')
 if (!fs.existsSync(TEMP_DIR)) {
-  fs.mkdirSync(TEMP_DIR, { recursive: true });
+  fs.mkdirSync(TEMP_DIR, { recursive: true })
 }
 
 /**
  * Generate image using Cloudinary to solve text rendering issues
  */
 async function generateFromTemplate(options) {
-  const { 
-    title, 
-    overline = '', 
+  const {
+    title,
+    overline = '',
     backgroundUrl = null,
-    date, 
+    date,
     platform = 'facebook',
     // New styling options with defaults
     fontFamily = 'Arial',
@@ -36,83 +36,89 @@ async function generateFromTemplate(options) {
     textColor = 'white',
     overlayOpacity = 70,
     overlayColor = '000000',
-    gradientFade = false // Enable gradient fade effect
-  } = options;
-  
+    gradientFade = false, // Enable gradient fade effect
+  } = options
+
   try {
     // Set dimensions based on platform
-    let width, height;
+    let width, height
     switch (platform.toLowerCase()) {
       case 'instagram':
-        width = 1080;
-        height = 1080;
-        break;
+        width = 1080
+        height = 1080
+        break
       case 'twitter':
-        width = 1200;
-        height = 675;
-        break;
+        width = 1200
+        height = 675
+        break
       case 'facebook':
       default:
-        width = 1200;
-        height = 628;
+        width = 1200
+        height = 628
     }
-    
+
     // Create output path for final image
-    const outputPath = path.join(TEMP_DIR, `${platform}-${Date.now()}.png`);
-    
+    const outputPath = path.join(TEMP_DIR, `${platform}-${Date.now()}.png`)
+
     // Step 1: Upload or use background image in Cloudinary
-    let backgroundPublicId;
-    
+    let backgroundPublicId
+
     if (backgroundUrl) {
       try {
         // Upload external image URL to Cloudinary
         const uploadResult = await cloudinary.uploader.upload(backgroundUrl, {
           folder: 'rdv-news/backgrounds',
           public_id: `bg-${Date.now()}`,
-          resource_type: 'auto'
-        });
-        backgroundPublicId = uploadResult.public_id;
+          resource_type: 'auto',
+        })
+        backgroundPublicId = uploadResult.public_id
       } catch (err) {
-        logger.warn(`Failed to upload background image: ${err.message}`);
+        logger.warn(`Failed to upload background image: ${err.message}`)
         // Use a solid blue color instead
-        backgroundPublicId = 'rdv-news/defaults/blue-background';
+        backgroundPublicId = 'rdv-news/defaults/blue-background'
         // If this is the first time, create the default background
         try {
-          await cloudinary.uploader.upload('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFdgI2RLQzngAAAABJRU5ErkJggg==', {
-            folder: 'rdv-news/defaults',
-            public_id: 'blue-background',
-            colors: true,
-            background: '#172a88'
-          });
+          await cloudinary.uploader.upload(
+            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFdgI2RLQzngAAAABJRU5ErkJggg==',
+            {
+              folder: 'rdv-news/defaults',
+              public_id: 'blue-background',
+              colors: true,
+              background: '#172a88',
+            }
+          )
         } catch (uploadErr) {
           // Ignore if already exists
         }
       }
     } else {
       // Use default blue background
-      backgroundPublicId = 'rdv-news/defaults/blue-background';
+      backgroundPublicId = 'rdv-news/defaults/blue-background'
       // If this is the first time, create the default background
       try {
-        await cloudinary.uploader.upload('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFdgI2RLQzngAAAABJRU5ErkJggg==', {
-          folder: 'rdv-news/defaults',
-          public_id: 'blue-background',
-          colors: true,
-          background: '#172a88'
-        });
+        await cloudinary.uploader.upload(
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFdgI2RLQzngAAAABJRU5ErkJggg==',
+          {
+            folder: 'rdv-news/defaults',
+            public_id: 'blue-background',
+            colors: true,
+            background: '#172a88',
+          }
+        )
       } catch (uploadErr) {
         // Ignore if already exists
       }
     }
-    
+
     // Step 2: Build transformation array for Cloudinary
-    let transformations = [];
+    let transformations = []
 
     // First resize the image
     transformations.push({
       width,
       height,
-      crop: 'fill'
-    });
+      crop: 'fill',
+    })
 
     // We need to split up the transformations into a chain that Cloudinary can process
     // Instead of using effect:colorize which affects the whole image,
@@ -121,21 +127,25 @@ async function generateFromTemplate(options) {
       // Create gradient overlay - this gives a smooth fade effect
       transformations.push({
         overlay: {
-          url: `data:image/png;base64,${await createGradientBase64(overlayColor, width, Math.round(height * 0.6))}` 
+          url: `data:image/png;base64,${await createGradientBase64(
+            overlayColor,
+            width,
+            Math.round(height * 0.6)
+          )}`,
         },
-        gravity: "south",
+        gravity: 'south',
         width: width,
-        height: Math.round(height * 0.6) // Make it slightly taller for fade
-      });
+        height: Math.round(height * 0.6), // Make it slightly taller for fade
+      })
     } else {
       // Use existing solid color overlay if gradient not enabled
       transformations.push({
-        overlay: "black_rectangle",  
+        overlay: 'black_rectangle',
         width: width,
         height: Math.round(height * 0.5),
-        gravity: "south",
-        opacity: overlayOpacity
-      });
+        gravity: 'south',
+        opacity: overlayOpacity,
+      })
     }
 
     // Add title text
@@ -144,12 +154,12 @@ async function generateFromTemplate(options) {
         font_family: fontFamily,
         font_size: 60,
         font_weight: fontWeight,
-        text: encodeURIComponent(title)
+        text: encodeURIComponent(title),
       },
       color: textColor,
-      gravity: "south", 
-      y: 120
-    });
+      gravity: 'south',
+      y: 120,
+    })
 
     // Add overline if provided
     if (overline) {
@@ -158,18 +168,18 @@ async function generateFromTemplate(options) {
           font_family: fontFamily,
           font_size: 40,
           font_weight: fontWeight,
-          text: encodeURIComponent(overline)
+          text: encodeURIComponent(overline),
         },
         color: textColor,
-        gravity: "south",
-        y: 180
-      });
+        gravity: 'south',
+        y: 180,
+      })
     }
 
     // First, make sure we have a black rectangle asset
     try {
-      await cloudinary.api.resource('rdv-news/defaults/black_rectangle');
-      logger.debug('Black rectangle asset exists');
+      await cloudinary.api.resource('rdv-news/defaults/black_rectangle')
+      logger.debug('Black rectangle asset exists')
     } catch (err) {
       try {
         // Create black rectangle if it doesn't exist
@@ -179,12 +189,12 @@ async function generateFromTemplate(options) {
             folder: 'rdv-news/defaults',
             public_id: 'black_rectangle',
             colors: true,
-            background: '#000000'
+            background: '#000000',
           }
-        );
-        logger.debug('Created black rectangle asset');
+        )
+        logger.debug('Created black rectangle asset')
       } catch (uploadErr) {
-        logger.error('Failed to create black rectangle:', uploadErr);
+        logger.error('Failed to create black rectangle:', uploadErr)
       }
     }
 
@@ -192,52 +202,54 @@ async function generateFromTemplate(options) {
     const imageUrl = cloudinary.url(backgroundPublicId, {
       transformation: transformations,
       sign_url: true,
-      secure: true
-    });
+      secure: true,
+    })
 
-    logger.info(`Generated Cloudinary URL: ${imageUrl}`);
+    logger.info(`Generated Cloudinary URL: ${imageUrl}`)
 
     // If we still have issues, fallback to a very basic transformation
-    let response = await fetch(imageUrl);
+    let response = await fetch(imageUrl)
 
     // If the complex URL fails, fall back to a simpler one
     if (!response.ok) {
-      logger.warn(`Complex URL failed with status ${response.status}, trying fallback`);
-      
+      logger.warn(
+        `Complex URL failed with status ${response.status}, trying fallback`
+      )
+
       // Just resize the image with minimal transformations
       const fallbackUrl = cloudinary.url(backgroundPublicId, {
         transformation: [
           { width, height, crop: 'fill' },
           {
             overlay: {
-              font_family: "Arial",
+              font_family: 'Arial',
               font_size: 60,
-              text: encodeURIComponent(title)
+              text: encodeURIComponent(title),
             },
-            color: "white",
-            gravity: "center"
-          }
+            color: 'white',
+            gravity: 'center',
+          },
         ],
-        sign_url: true, 
-        secure: true
-      });
-      
-      logger.info(`Fallback Cloudinary URL: ${fallbackUrl}`);
-      response = await fetch(fallbackUrl);
-      
+        sign_url: true,
+        secure: true,
+      })
+
+      logger.info(`Fallback Cloudinary URL: ${fallbackUrl}`)
+      response = await fetch(fallbackUrl)
+
       if (!response.ok) {
-        throw new Error(`Failed to download image: ${response.status}`);
+        throw new Error(`Failed to download image: ${response.status}`)
       }
     }
 
     // Continue with your existing code to process the response
-    const imageBuffer = await response.buffer();
-    fs.writeFileSync(outputPath, imageBuffer);
-    
-    return outputPath;
+    const imageBuffer = await response.buffer()
+    fs.writeFileSync(outputPath, imageBuffer)
+
+    return outputPath
   } catch (error) {
-    logger.error('Error generating image with Cloudinary:', error);
-    throw error;
+    logger.error('Error generating image with Cloudinary:', error)
+    throw error
   }
 }
 
@@ -261,17 +273,15 @@ async function createGradientBase64(color, width, height) {
       </defs>
       <rect width="100%" height="100%" fill="url(#gradient)" />
     </svg>
-  `;
-  
+  `
+
   try {
-    const buffer = await sharp(Buffer.from(svg))
-      .png()
-      .toBuffer();
-    return buffer.toString('base64');
+    const buffer = await sharp(Buffer.from(svg)).png().toBuffer()
+    return buffer.toString('base64')
   } catch (error) {
-    logger.error('Error creating gradient:', error);
+    logger.error('Error creating gradient:', error)
     // Fallback to solid color
-    return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==';
+    return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg=='
   }
 }
 
@@ -281,44 +291,47 @@ async function createGradientBase64(color, width, height) {
 async function uploadToAirtable(imagePath, recordId, platform) {
   try {
     // Get Airtable credentials
-    const apiKey = process.env.AIRTABLE_TOKEN;
-    const baseId = process.env.AIRTABLE_BASE_ID;
-    
+    const apiKey = process.env.AIRTABLE_TOKEN
+    const baseId = process.env.AIRTABLE_BASE_ID
+
     if (!apiKey || !baseId) {
-      throw new Error('Missing Airtable credentials');
+      throw new Error('Missing Airtable credentials')
     }
-    
+
     // Create filename
-    const timestamp = new Date().toISOString().slice(0, 10);
-    const filename = `${platform}-${timestamp}.png`;
-    
+    const timestamp = new Date().toISOString().slice(0, 10)
+    const filename = `${platform}-${timestamp}.png`
+
     // Read image file
-    const imageBuffer = fs.readFileSync(imagePath);
-    const base64Content = imageBuffer.toString('base64');
-    
+    const imageBuffer = fs.readFileSync(imagePath)
+    const base64Content = imageBuffer.toString('base64')
+
     // Initialize Airtable
-    const airtable = new Airtable({ apiKey });
-    const base = airtable.base(baseId);
-    
+    const airtable = new Airtable({ apiKey })
+    const base = airtable.base(baseId)
+
     // Create field name based on platform
-    const fieldName = `social_image_${platform.toLowerCase()}`;
-    
+    const fieldName = `social_image_${platform.toLowerCase()}`
+
     // Create update object
-    const updateFields = {};
-    updateFields[fieldName] = [{
-      filename,
-      type: 'image/png',
-      _base64Content: base64Content
-    }];
-    
+    const updateFields = {}
+    updateFields[fieldName] = [
+      {
+        filename,
+        type: 'image/png',
+        _base64Content: base64Content,
+      },
+    ]
+
     // Update Airtable record
-    const record = await base('Redes Sociales').update(recordId, updateFields);
-    
-    return record.fields[fieldName] && record.fields[fieldName][0] ? 
-      record.fields[fieldName][0].url : null;
+    const record = await base('Redes Sociales').update(recordId, updateFields)
+
+    return record.fields[fieldName] && record.fields[fieldName][0]
+      ? record.fields[fieldName][0].url
+      : null
   } catch (error) {
-    logger.error('Error uploading to Airtable:', error);
-    throw error;
+    logger.error('Error uploading to Airtable:', error)
+    throw error
   }
 }
 
@@ -331,14 +344,14 @@ async function uploadToAirtable(imagePath, recordId, platform) {
 router.get('/airtable-generate', async (req, res) => {
   try {
     // Get parameters
-    const { 
-      recordId, 
-      title, 
-      overline = '', 
+    const {
+      recordId,
+      title,
+      overline = '',
       imgUrl = null,
-      platform = 'facebook' 
-    } = req.query;
-    
+      platform = 'facebook',
+    } = req.query
+
     if (!recordId || !title) {
       return res.status(400).send(`
         <html>
@@ -348,20 +361,24 @@ router.get('/airtable-generate', async (req, res) => {
             <p>Record ID and title are required.</p>
           </body>
         </html>
-      `);
+      `)
     }
-    
+
     // Format date - unchanged
     const dateStr = new Date().toLocaleDateString('es-ES', {
       month: 'long',
       day: 'numeric',
-      year: 'numeric'
-    });
-    
+      year: 'numeric',
+    })
+
     // Escape values before creating the template
-    const escapedTitle = title ? title.replace(/"/g, '\\"').replace(/\n/g, '\\n') : '';
-    const escapedOverline = overline ? overline.replace(/"/g, '\\"').replace(/\n/g, '\\n') : '';
-    const escapedImgUrl = imgUrl ? imgUrl.replace(/"/g, '\\"') : '';
+    const escapedTitle = title
+      ? title.replace(/"/g, '\\"').replace(/\n/g, '\\n')
+      : ''
+    const escapedOverline = overline
+      ? overline.replace(/"/g, '\\"').replace(/\n/g, '\\n')
+      : ''
+    const escapedImgUrl = imgUrl ? imgUrl.replace(/"/g, '\\"') : ''
 
     // Generate image from template
     const imagePath = await generateFromTemplate({
@@ -369,14 +386,16 @@ router.get('/airtable-generate', async (req, res) => {
       overline,
       backgroundUrl: imgUrl,
       date: dateStr,
-      platform
-    });
-    
+      platform,
+    })
+
     // Convert to base64 for preview
-    const imageBuffer = fs.readFileSync(imagePath);
-    const base64Image = imageBuffer.toString('base64');
-    
+    const imageBuffer = fs.readFileSync(imagePath)
+    const base64Image = imageBuffer.toString('base64')
+
     // Create a separate HTML file
+    // Update the HTML content in the airtable-generate endpoint:
+
     const htmlContent = `<!DOCTYPE html>
 <html>
   <head>
@@ -384,13 +403,89 @@ router.get('/airtable-generate', async (req, res) => {
     <title>Social Media Image</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-      /* Your existing CSS styles */
+      body { 
+        font-family: Arial, sans-serif; 
+        margin: 0; 
+        padding: 20px; 
+        background: #f5f5f5; 
+        text-align: center;
+      }
+      .container {
+        max-width: 850px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      }
+      h1 { 
+        color: #333; 
+        margin-bottom: 5px;
+        font-size: 24px;
+      }
+      .subtitle { 
+        color: #666; 
+        margin-top: 0; 
+        font-size: 16px;
+      }
+      .image-wrapper {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        margin: 20px 0;
+      }
+      .image { 
+        max-width: ${platform === 'instagram' ? '500px' : '600px'};
+        width: 100%;
+        height: auto; 
+        border: 1px solid #ddd;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      }
+      .button {
+        display: inline-block;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        font-weight: bold;
+        font-size: 16px;
+        cursor: pointer;
+        margin: 10px 5px;
+        transition: all 0.2s;
+      }
+      .button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 3px 5px rgba(0,0,0,0.2);
+      }
+      .save { background: #4CAF50; color: white; }
+      .edit { background: #2196F3; color: white; }
+      .cancel { background: #f44336; color: white; }
+      #message { 
+        padding: 10px;
+        margin-top: 20px;
+        border-radius: 5px;
+        display: none;
+      }
+      .success { background: #e8f5e9; color: green; }
+      .error { background: #ffebee; color: red; }
+      
+      /* Controls for editing - collapsed by default */
+      .edit-controls {
+        display: none;
+        margin: 20px auto;
+        padding: 15px;
+        background: #f1f1f1;
+        border-radius: 8px;
+        max-width: 600px;
+      }
+      .edit-controls.active {
+        display: block;
+      }
     </style>
   </head>
   <body>
     <div class="container">
       <h1>Social Media Image Preview</h1>
-      <p>Platform: ${platform}</p>
+      <p class="subtitle">Platform: ${platform}</p>
       
       <button class="button edit" id="toggle-edit">Edit Styling</button>
       
@@ -398,7 +493,9 @@ router.get('/airtable-generate', async (req, res) => {
         <!-- Your existing HTML controls -->
       </div>
       
-      <img src="data:image/png;base64,${base64Image}" alt="Preview" class="image" id="preview-image">
+      <div class="image-wrapper">
+        <img src="data:image/png;base64,${base64Image}" alt="Preview" class="image" id="preview-image">
+      </div>
       
       <div>
         <button class="button save" id="save-button">Save to Airtable</button>
@@ -417,20 +514,22 @@ router.get('/airtable-generate', async (req, res) => {
       let PLATFORM = "${platform}";
       let IMAGE_PATH = "${imagePath.replace(/\\/g, '\\\\')}";
       
-      // Rest of your JavaScript code
+      // Toggle edit controls
       document.getElementById('toggle-edit').addEventListener('click', function() {
-        // Your existing code
+        const controls = document.getElementById('edit-controls');
+        controls.classList.toggle('active');
+        this.textContent = controls.classList.contains('active') ? 'Hide Styling' : 'Edit Styling';
       });
       
       // Rest of your event handlers
     </script>
   </body>
-</html>`;
+</html>`
 
     // Send the simplified HTML response
-    res.send(htmlContent);
+    res.send(htmlContent)
   } catch (error) {
-    logger.error('Error in airtable-generate endpoint:', error);
+    logger.error('Error in airtable-generate endpoint:', error)
     res.status(500).send(`
       <html>
         <head><title>Error</title></head>
@@ -439,9 +538,9 @@ router.get('/airtable-generate', async (req, res) => {
           <p>${error.message || 'An unknown error occurred'}</p>
         </body>
       </html>
-    `);
+    `)
   }
-});
+})
 
 /**
  * API endpoint to save image to Airtable
@@ -449,38 +548,38 @@ router.get('/airtable-generate', async (req, res) => {
  */
 router.post('/save-to-airtable', async (req, res) => {
   try {
-    const { recordId, imagePath, platform, styling } = req.body;
-    
+    const { recordId, imagePath, platform, styling } = req.body
+
     if (!recordId || !imagePath || !platform) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required parameters'
-      });
+        error: 'Missing required parameters',
+      })
     }
-    
-    let imagePathToUpload = imagePath;
-    
+
+    let imagePathToUpload = imagePath
+
     // If styling options provided, regenerate the image before saving
     if (styling) {
       // Format date
       const dateStr = new Date().toLocaleDateString('es-ES', {
         month: 'long',
         day: 'numeric',
-        year: 'numeric'
-      });
-      
+        year: 'numeric',
+      })
+
       // Get record details from Airtable
-      const apiKey = process.env.AIRTABLE_TOKEN;
-      const baseId = process.env.AIRTABLE_BASE_ID;
-      const airtable = new Airtable({ apiKey });
-      const base = airtable.base(baseId);
-      
+      const apiKey = process.env.AIRTABLE_TOKEN
+      const baseId = process.env.AIRTABLE_BASE_ID
+      const airtable = new Airtable({ apiKey })
+      const base = airtable.base(baseId)
+
       // Fetch the record to get title and image URL
-      const record = await base('Redes Sociales').find(recordId);
-      const title = record.fields.titulo || '';
-      const imgUrl = record.fields.imagen_url || null;
-      const overline = record.fields.copete || '';
-      
+      const record = await base('Redes Sociales').find(recordId)
+      const title = record.fields.titulo || ''
+      const imgUrl = record.fields.imagen_url || null
+      const overline = record.fields.copete || ''
+
       // Generate a new image with styling
       imagePathToUpload = await generateFromTemplate({
         title,
@@ -488,39 +587,43 @@ router.post('/save-to-airtable', async (req, res) => {
         backgroundUrl: imgUrl,
         date: dateStr,
         platform,
-        ...styling
-      });
-      
+        ...styling,
+      })
+
       // Delete the original temp file
       try {
-        fs.unlinkSync(imagePath);
+        fs.unlinkSync(imagePath)
       } catch (e) {
-        logger.warn('Failed to delete original temp file:', e);
+        logger.warn('Failed to delete original temp file:', e)
       }
     }
-    
+
     // Upload to Airtable
-    const imageUrl = await uploadToAirtable(imagePathToUpload, recordId, platform);
-    
+    const imageUrl = await uploadToAirtable(
+      imagePathToUpload,
+      recordId,
+      platform
+    )
+
     // Delete temp file
     try {
-      fs.unlinkSync(imagePathToUpload);
+      fs.unlinkSync(imagePathToUpload)
     } catch (e) {
-      logger.warn('Failed to delete temp file:', e);
+      logger.warn('Failed to delete temp file:', e)
     }
-    
+
     return res.json({
       success: true,
-      data: { imageUrl }
-    });
+      data: { imageUrl },
+    })
   } catch (error) {
-    logger.error('Error in save-to-airtable endpoint:', error);
+    logger.error('Error in save-to-airtable endpoint:', error)
     return res.status(500).json({
       success: false,
-      error: error.message || 'Failed to save to Airtable'
-    });
+      error: error.message || 'Failed to save to Airtable',
+    })
   }
-});
+})
 
 // Add a new endpoint to generate images for all platforms
 
@@ -530,26 +633,26 @@ router.post('/save-to-airtable', async (req, res) => {
  */
 router.post('/generate-all-platforms', async (req, res) => {
   try {
-    const { recordId, title, overline = '', imgUrl = null } = req.body;
-    
+    const { recordId, title, overline = '', imgUrl = null } = req.body
+
     if (!recordId || !title) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required parameters: recordId and title are required'
-      });
+        error: 'Missing required parameters: recordId and title are required',
+      })
     }
-    
+
     // Format date
     const dateStr = new Date().toLocaleDateString('es-ES', {
       month: 'long',
       day: 'numeric',
-      year: 'numeric'
-    });
-    
+      year: 'numeric',
+    })
+
     // Platforms to generate
-    const platforms = ['facebook', 'twitter', 'instagram'];
-    const results = {};
-    
+    const platforms = ['facebook', 'twitter', 'instagram']
+    const results = {}
+
     // Generate and upload images for each platform
     for (const platform of platforms) {
       try {
@@ -559,39 +662,39 @@ router.post('/generate-all-platforms', async (req, res) => {
           overline,
           backgroundUrl: imgUrl,
           date: dateStr,
-          platform
-        });
-        
+          platform,
+        })
+
         // Upload to Airtable
-        const imageUrl = await uploadToAirtable(imagePath, recordId, platform);
-        results[platform] = { success: true, url: imageUrl };
-        
+        const imageUrl = await uploadToAirtable(imagePath, recordId, platform)
+        results[platform] = { success: true, url: imageUrl }
+
         // Clean up temp file
         try {
-          fs.unlinkSync(imagePath);
+          fs.unlinkSync(imagePath)
         } catch (e) {
-          logger.warn(`Failed to delete temp file for ${platform}:`, e);
+          logger.warn(`Failed to delete temp file for ${platform}:`, e)
         }
       } catch (platformError) {
-        logger.error(`Error generating ${platform} image:`, platformError);
-        results[platform] = { success: false, error: platformError.message };
+        logger.error(`Error generating ${platform} image:`, platformError)
+        results[platform] = { success: false, error: platformError.message }
       }
     }
-    
+
     // Return results
     return res.json({
       success: true,
       message: 'Image generation complete',
-      results
-    });
+      results,
+    })
   } catch (error) {
-    logger.error('Error in generate-all-platforms endpoint:', error);
+    logger.error('Error in generate-all-platforms endpoint:', error)
     return res.status(500).json({
       success: false,
-      error: error.message || 'Failed to generate images'
-    });
+      error: error.message || 'Failed to generate images',
+    })
   }
-});
+})
 
 // Add this new endpoint
 
@@ -601,29 +704,29 @@ router.post('/generate-all-platforms', async (req, res) => {
  */
 router.post('/regenerate-styled', async (req, res) => {
   try {
-    const { 
-      recordId, 
-      title, 
-      overline = '', 
+    const {
+      recordId,
+      title,
+      overline = '',
       imgUrl = null,
       platform = 'facebook',
-      styling = {}
-    } = req.body;
-    
+      styling = {},
+    } = req.body
+
     if (!recordId || !title) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required parameters: recordId and title'
-      });
+        error: 'Missing required parameters: recordId and title',
+      })
     }
-    
+
     // Format date
     const dateStr = new Date().toLocaleDateString('es-ES', {
       month: 'long',
       day: 'numeric',
-      year: 'numeric'
-    });
-    
+      year: 'numeric',
+    })
+
     // Extract styling options
     const {
       fontFamily = 'Arial',
@@ -631,9 +734,9 @@ router.post('/regenerate-styled', async (req, res) => {
       textColor = 'white',
       overlayColor = '000000',
       overlayOpacity = 70,
-      gradientFade = false
-    } = styling;
-    
+      gradientFade = false,
+    } = styling
+
     // Generate image with styling options
     const imagePath = await generateFromTemplate({
       title,
@@ -642,41 +745,41 @@ router.post('/regenerate-styled', async (req, res) => {
       date: dateStr,
       platform,
       fontFamily,
-      fontWeight, 
+      fontWeight,
       textColor,
       overlayColor,
       overlayOpacity,
-      gradientFade
-    });
-    
+      gradientFade,
+    })
+
     // Return the generated image
     res.sendFile(imagePath, {}, (err) => {
       if (err) {
-        logger.error('Error sending file:', err);
+        logger.error('Error sending file:', err)
         if (!res.headersSent) {
-          return res.status(500).json({ 
-            success: false, 
-            error: 'Failed to send image' 
-          });
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to send image',
+          })
         }
       }
-      
+
       // Clean up temp file
       try {
-        fs.unlinkSync(imagePath);
+        fs.unlinkSync(imagePath)
       } catch (e) {
-        logger.warn('Failed to delete temp file:', e);
+        logger.warn('Failed to delete temp file:', e)
       }
-    });
+    })
   } catch (error) {
-    logger.error('Error regenerating styled image:', error);
+    logger.error('Error regenerating styled image:', error)
     if (!res.headersSent) {
       return res.status(500).json({
         success: false,
-        error: error.message || 'Failed to regenerate image'
-      });
+        error: error.message || 'Failed to regenerate image',
+      })
     }
   }
-});
+})
 
-export default router;
+export default router
