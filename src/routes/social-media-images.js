@@ -124,22 +124,50 @@ async function generateFromTemplate(options) {
     // Instead of using effect:colorize which affects the whole image,
     // we'll use an underlay with a semi-transparent black rectangle
     if (gradientFade) {
-      // Create gradient overlay with improved visibility
-      const gradientBase64 = await createGradientBase64(
-        overlayColor,
-        width,
-        Math.round(height * 0.7) // Make it taller (70% of image height)
-      )
-
-      transformations.push({
-        overlay: {
-          url: `data:image/png;base64,${gradientBase64}`,
+      // Clear existing transformations and recreate with chained approach
+      transformations = [
+        { width, height, crop: 'fill' },
+        {
+          overlay: 'color:black',
+          width: width,
+          height: Math.round(height * 0.5),
+          gravity: 'south',
+          opacity: 70,
         },
-        gravity: 'south',
-        width: width,
-        height: Math.round(height * 0.7), // Match the height from above
-        flags: 'layer_apply', // Ensure proper layer application
-      })
+        {
+          overlay: 'color:black',
+          width: width,
+          height: Math.round(height * 0.25),
+          gravity: 'south',
+          y: Math.round(height * 0.5),
+          opacity: 35,
+        },
+        {
+          overlay: {
+            font_family: fontFamily,
+            font_size: 60,
+            font_weight: fontWeight,
+            text: encodeURIComponent(title),
+          },
+          color: textColor,
+          gravity: 'south',
+          y: 120,
+        },
+      ]
+
+      if (overline) {
+        transformations.push({
+          overlay: {
+            font_family: fontFamily,
+            font_size: 40,
+            font_weight: fontWeight,
+            text: encodeURIComponent(overline),
+          },
+          color: textColor,
+          gravity: 'south',
+          y: 180,
+        })
+      }
     } else {
       // Use existing solid color overlay if gradient not enabled
       transformations.push({
@@ -148,34 +176,6 @@ async function generateFromTemplate(options) {
         height: Math.round(height * 0.5),
         gravity: 'south',
         opacity: overlayOpacity,
-      })
-    }
-
-    // Add title text
-    transformations.push({
-      overlay: {
-        font_family: fontFamily,
-        font_size: 60,
-        font_weight: fontWeight,
-        text: encodeURIComponent(title),
-      },
-      color: textColor,
-      gravity: 'south',
-      y: 120,
-    })
-
-    // Add overline if provided
-    if (overline) {
-      transformations.push({
-        overlay: {
-          font_family: fontFamily,
-          font_size: 40,
-          font_weight: fontWeight,
-          text: encodeURIComponent(overline),
-        },
-        color: textColor,
-        gravity: 'south',
-        y: 180,
       })
     }
 
