@@ -124,17 +124,27 @@ async function generateFromTemplate(options) {
     // Instead of using effect:colorize which affects the whole image,
     // we'll use an underlay with a semi-transparent black rectangle
     if (gradientFade) {
-      // Create the actual gradient using the function you already have
+      // First, upload the gradient as an asset to Cloudinary
       const gradientBase64 = await createGradientBase64(
         overlayColor,
         width,
         Math.round(height * 0.6)
       )
 
+      // Upload gradient to Cloudinary to get a public_id
+      const gradientUpload = await cloudinary.uploader.upload(
+        `data:image/png;base64,${gradientBase64}`,
+        {
+          folder: 'rdv-news/gradients',
+          public_id: `gradient-${Date.now()}`,
+          resource_type: 'image',
+        }
+      )
+
       transformations = [
         { width, height, crop: 'fill' },
         {
-          overlay: `data:image/png;base64,${gradientBase64}`,
+          overlay: gradientUpload.public_id,
           gravity: 'south',
           width: width,
           height: Math.round(height * 0.6),
@@ -165,8 +175,17 @@ async function generateFromTemplate(options) {
           y: 180,
         })
       }
+
+      // Clean up the gradient asset after use
+      setTimeout(async () => {
+        try {
+          await cloudinary.uploader.destroy(gradientUpload.public_id)
+        } catch (e) {
+          logger.warn('Failed to cleanup gradient asset:', e)
+        }
+      }, 10000) // Delete after 10 seconds
     } else {
-      // Use existing solid color overlay if gradient not enabled
+      // Keep your existing solid overlay code
       transformations.push({
         overlay: 'black_rectangle',
         width: width,
@@ -174,6 +193,33 @@ async function generateFromTemplate(options) {
         gravity: 'south',
         opacity: overlayOpacity,
       })
+
+      // Add text overlays for non-gradient version
+      transformations.push({
+        overlay: {
+          font_family: fontFamily,
+          font_size: 60,
+          font_weight: fontWeight,
+          text: encodeURIComponent(title),
+        },
+        color: textColor,
+        gravity: 'south',
+        y: 120,
+      })
+
+      if (overline) {
+        transformations.push({
+          overlay: {
+            font_family: fontFamily,
+            font_size: 40,
+            font_weight: fontWeight,
+            text: encodeURIComponent(overline),
+          },
+          color: textColor,
+          gravity: 'south',
+          y: 180,
+        })
+      }
     }
 
     // First, make sure we have a black rectangle asset
