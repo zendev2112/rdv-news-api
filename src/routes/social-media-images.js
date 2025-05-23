@@ -36,7 +36,7 @@ async function generateFromTemplate(options) {
     textColor = 'white',
     overlayOpacity = 70,
     overlayColor = '000000',
-    gradientFade = false, // Enable gradient fade effect
+    gradientFade = true, // Change default to true for better appearance
   } = options
 
   try {
@@ -396,6 +396,8 @@ router.get('/airtable-generate', async (req, res) => {
     // Create a separate HTML file
     // Update the HTML content in the airtable-generate endpoint:
 
+    // Update the htmlContent template in the airtable-generate endpoint:
+
     const htmlContent = `<!DOCTYPE html>
 <html>
   <head>
@@ -457,7 +459,6 @@ router.get('/airtable-generate', async (req, res) => {
         box-shadow: 0 3px 5px rgba(0,0,0,0.2);
       }
       .save { background: #4CAF50; color: white; }
-      .edit { background: #2196F3; color: white; }
       .cancel { background: #f44336; color: white; }
       #message { 
         padding: 10px;
@@ -467,31 +468,12 @@ router.get('/airtable-generate', async (req, res) => {
       }
       .success { background: #e8f5e9; color: green; }
       .error { background: #ffebee; color: red; }
-      
-      /* Controls for editing - collapsed by default */
-      .edit-controls {
-        display: none;
-        margin: 20px auto;
-        padding: 15px;
-        background: #f1f1f1;
-        border-radius: 8px;
-        max-width: 600px;
-      }
-      .edit-controls.active {
-        display: block;
-      }
     </style>
   </head>
   <body>
     <div class="container">
       <h1>Social Media Image Preview</h1>
       <p class="subtitle">Platform: ${platform}</p>
-      
-      <button class="button edit" id="toggle-edit">Edit Styling</button>
-      
-      <div class="edit-controls" id="edit-controls">
-        <!-- Your existing HTML controls -->
-      </div>
       
       <div class="image-wrapper">
         <img src="data:image/png;base64,${base64Image}" alt="Preview" class="image" id="preview-image">
@@ -506,7 +488,7 @@ router.get('/airtable-generate', async (req, res) => {
     </div>
     
     <script>
-      // Fix: Define variables directly without interpolation
+      // Define variables directly without interpolation
       let RECORD_ID = "${recordId}";
       let TITLE = "${escapedTitle}";
       let OVERLINE = "${escapedOverline}";
@@ -514,14 +496,55 @@ router.get('/airtable-generate', async (req, res) => {
       let PLATFORM = "${platform}";
       let IMAGE_PATH = "${imagePath.replace(/\\/g, '\\\\')}";
       
-      // Toggle edit controls
-      document.getElementById('toggle-edit').addEventListener('click', function() {
-        const controls = document.getElementById('edit-controls');
-        controls.classList.toggle('active');
-        this.textContent = controls.classList.contains('active') ? 'Hide Styling' : 'Edit Styling';
+      // Save button handler
+      document.getElementById('save-button').addEventListener('click', async function() {
+        try {
+          const button = this;
+          const message = document.getElementById('message');
+          
+          // Disable button
+          button.disabled = true;
+          button.textContent = 'Saving...';
+          
+          // Send request
+          const response = await fetch('/api/social-media-images/save-to-airtable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recordId: RECORD_ID,
+              imagePath: IMAGE_PATH,
+              platform: PLATFORM,
+              // Always use gradient fade for better appearance
+              styling: {
+                gradientFade: true
+              }
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            message.className = 'success';
+            message.textContent = 'Image saved successfully!';
+            message.style.display = 'block';
+            
+            // Close window after 3 seconds
+            setTimeout(() => window.close(), 3000);
+          } else {
+            throw new Error(data.error);
+          }
+        } catch (error) {
+          const message = document.getElementById('message');
+          message.className = 'error';
+          message.textContent = 'Error: ' + (error.message || 'Failed to save');
+          message.style.display = 'block';
+          
+          // Reset button
+          const button = document.getElementById('save-button');
+          button.disabled = false;
+          button.textContent = 'Try Again';
+        }
       });
-      
-      // Rest of your event handlers
     </script>
   </body>
 </html>`
