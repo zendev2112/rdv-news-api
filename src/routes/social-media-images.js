@@ -253,22 +253,17 @@ async function generateFromTemplate(options) {
   }
 }
 
-/**
- * Create a gradient overlay as base64
- * @param {string} color - Hex color code without #
- * @param {number} width - Width in pixels
- * @param {number} height - Height in pixels
- * @returns {Promise<string>} - Base64 encoded PNG with gradient
- */
+// First, update the gradient creation function to make it more visible:
 async function createGradientBase64(color, width, height) {
-  // Create a transparent-to-color gradient
+  // Create a more pronounced transparent-to-color gradient
   const svg = `
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stop-color="#${color}00" />
-          <stop offset="40%" stop-color="#${color}99" />
-          <stop offset="100%" stop-color="#${color}CC" />
+          <stop offset="30%" stop-color="#${color}88" />
+          <stop offset="70%" stop-color="#${color}BB" />
+          <stop offset="100%" stop-color="#${color}DD" />
         </linearGradient>
       </defs>
       <rect width="100%" height="100%" fill="url(#gradient)" />
@@ -276,7 +271,9 @@ async function createGradientBase64(color, width, height) {
   `
 
   try {
-    const buffer = await sharp(Buffer.from(svg)).png().toBuffer()
+    const buffer = await sharp(Buffer.from(svg))
+      .png()
+      .toBuffer()
     return buffer.toString('base64')
   } catch (error) {
     logger.error('Error creating gradient:', error)
@@ -514,9 +511,11 @@ router.get('/airtable-generate', async (req, res) => {
               recordId: RECORD_ID,
               imagePath: IMAGE_PATH,
               platform: PLATFORM,
-              // Always use gradient fade for better appearance
+              // Explicitly enable gradient with stronger opacity
               styling: {
-                gradientFade: true
+                gradientFade: true,
+                overlayOpacity: 80, // Increase opacity for visibility
+                overlayColor: "000000" // Ensure black color for contrast
               }
             })
           });
