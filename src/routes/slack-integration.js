@@ -518,13 +518,18 @@ async function generateSocialMediaText(
  */
 async function sendSlackUpdate(channel, message, color = 'good', attachment = null) {
   try {
+    // Ensure channel doesn't have duplicate # prefix
+    const formattedChannel = channel.startsWith('#') ? channel : `#${channel}`
+    
     const slackMessage = {
-      channel: `#${channel}`,
+      channel: formattedChannel,
       text: message || 'Article processing update',
       attachments: attachment ? [{ color, ...attachment }] : [{ color, text: message }]
     }
     
-    await fetch('https://slack.com/api/chat.postMessage', {
+    console.log(`Sending Slack update to ${formattedChannel}`)
+    
+    const response = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -532,6 +537,14 @@ async function sendSlackUpdate(channel, message, color = 'good', attachment = nu
       },
       body: JSON.stringify(slackMessage)
     })
+    
+    const result = await response.json()
+    
+    if (!result.ok) {
+      console.error('Slack API error:', result.error)
+    } else {
+      console.log('Slack update sent successfully')
+    }
     
   } catch (error) {
     console.error('Error sending Slack update:', error)
@@ -645,7 +658,7 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
     })
     
     // CRITICAL FIX: Process in a separate invocation to avoid timeouts
-    fetch(`${process.env.VERCEL_URL || 'https://rdv-news-api.vercel.app'}/api/slack/process-article`, {
+    fetch('https://rdv-news-api.vercel.app/api/slack/process-article', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -848,6 +861,60 @@ slackRoutes.get('/debug-env', (req, res) => {
     geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
     nodeEnv: process.env.NODE_ENV
   })
+})
+
+// Add this test route:
+
+slackRoutes.get('/test-flow', async (req, res) => {
+  const testUrl = req.query.url || 'https://www.clarin.com/politica/alberto-fernandez-cristina-kirchner-separaron-oficina-fuerte-interna_0_MkJZUElBmX.html'
+  
+  try {
+    // Test the entire flow sequentially
+    
+    // 1. Fetch content
+    const htmlContent = await fetchContent(testUrl)
+    
+    if (!htmlContent) {
+      return res.json({
+        success: false,
+        error: 'Failed to fetch HTML content',
+        step: 'fetchContent'
+      })
+    }
+    
+    // 2. Extract text
+    const extractedText = extractText(htmlContent)
+    
+    // 3. Generate metadata (simple test)
+    const metadata = {
+      title: 'Test Article',
+      volanta: 'Test Overline',
+      bajada: 'Test excerpt for the article to verify functionality.'
+    }
+    
+    // 4. Test Airtable connection
+    const existingRecords = await base('Slack Noticias')
+      .select({
+        maxRecords: 1
+      })
+      .firstPage()
+    
+    // Success
+    return res.json({
+      success: true,
+      htmlLength: htmlContent.length,
+      textLength: extractedText.length,
+      airtableConnected: existingRecords.length > 0,
+      metadata
+    })
+    
+  } catch (error) {
+    return res.json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    })
+  }
 })
 
 export default slackRoutes
