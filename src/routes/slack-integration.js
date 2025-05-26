@@ -630,7 +630,7 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
       })
     }
     
-    const url = text.trim().split(' ')[0]  // Define url BEFORE using it
+    const url = text.trim().split(' ')[0]
     
     try {
       new URL(url)
@@ -641,7 +641,7 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
       })
     }
     
-    // Now url is properly defined before using it here
+    // Respond immediately to Slack to avoid timeout
     res.json({
       response_type: 'in_channel',
       text: `🔄 Starting to process article from ${extractSourceName(url)}...`,
@@ -657,11 +657,14 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
       ],
     })
     
-    // CRITICAL FIX: Process directly instead of using internal API call
-    
-      processNewsArticle(url, user_name, channel_name).catch(err => 
-        console.error('Failed to process article:', err))
-    
+    // Process the article in the background after responding to Slack
+    // Use setTimeout to ensure this runs outside the request-response cycle
+    setTimeout(() => {
+      console.log(`Starting background processing for ${url} requested by ${user_name}`)
+      processNewsArticle(url, user_name, channel_name)
+        .then(() => console.log(`Successfully processed article: ${url}`))
+        .catch(err => console.error(`Failed to process article ${url}:`, err))
+    }, 100)
     
   } catch (error) {
     console.error('Error in enviar-noticia command:', error)
@@ -700,6 +703,20 @@ async function processNewsArticle(url, user_name, channel_name) {
     console.log(`URL: ${url}`)
     console.log(`User: ${user_name}`)
     console.log(`Channel: ${channel_name}`)
+    
+    // Send initial confirmation to the channel
+    await sendSlackUpdate(
+      channel_name,
+      `🔄 Processing started for article: ${url}`,
+      'good',
+      {
+        fields: [
+          { title: 'URL', value: url, short: false },
+          { title: 'Requested by', value: user_name, short: true },
+          { title: 'Status', value: 'Processing started', short: true },
+        ],
+      }
+    )
 
     // Step 1: Fetch HTML content
     console.log('Step 1: Fetching HTML content...')
@@ -835,11 +852,34 @@ async function processNewsArticle(url, user_name, channel_name) {
   } catch (error) {
     console.error('❌ Critical Error in processNewsArticle:', error)
     console.error('Error stack:', error.stack)
-    await sendSlackUpdate(
+    
+    // Log more details for troubleshooting
+    console.error('Error details:', {
+      url,
+      user_name,
       channel_name,
-      `❌ Critical error processing article: ${error.message}`,
-      'danger'
-    )
+      errorName: error.name,
+      errorMessage: error.message,
+    })
+    
+    // Add logging for Slack notification attempt
+    try {
+      await sendSlackUpdate(
+        channel_name,
+        `❌ Critical error processing article: ${error.message}`,
+        'danger',
+        {
+          fields: [
+            { title: 'URL', value: url, short: false },
+            { title: 'Error', value: error.message, short: false },
+            { title: 'Type', value: error.name, short: true },
+          ],
+        }
+      )
+      console.log('Error notification sent to Slack')
+    } catch (slackError) {
+      console.error('Failed to send error notification to Slack:', slackError)
+    }
   }
 }
 
@@ -853,6 +893,62 @@ slackRoutes.get('/debug-env', (req, res) => {
     geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
     nodeEnv: process.env.NODE_ENV
   })
+})
+
+// Add debug route for the enviar-noticia endpoint
+slackRoutes.get('/debug-enviar-noticia', async (req, res) => {
+  const testUrl = req.query.url || 'https://www.pagina12.com.ar/828737-cristina-kirchner-advirtio-la-inminencia-de-un-default-y-lla'
+  
+  try {
+    // Test the initial fetch and parse steps
+    console.log('Debugging enviar-noticia with URL:', testUrl)
+    
+    // Fetch HTML
+    const htmlContent = await fetchContent(testUrl)
+    
+    if (!htmlContent) {
+      return res.json({
+        success: false,
+        error: 'Failed to fetch HTML content',
+        step: 'fetchContent'
+      })
+    }
+    
+    // Extract images and text
+    const { images, markdown: imageMarkdown } = extractImagesAsMarkdown(htmlContent)
+    const extractedText = extractText(htmlContent)
+    
+    // Send successful diagnostics
+    return res.json({
+      success: true,
+      url: testUrl,
+      htmlContent: {
+        size: htmlContent.length,
+        preview: htmlContent.substring(0, 100) + '...'
+      },
+      extractedText: {
+        size: extractedText.length,
+        preview: extractedText.substring(0, 100) + '...'
+      },
+      images: {
+        count: images.length,
+        urls: images.slice(0, 3)
+      },
+      routes: {
+        postUrl: '/api/slack/enviar-noticia',
+        testFlowUrl: '/api/slack/test-flow'
+      },
+      slackIntegration: 'enabled'
+    })
+  } catch (error) {
+    console.error('Error in debug-enviar-noticia:', error)
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack,
+      url: testUrl
+    })
+  }
 })
 
 // Fix the test-flow route with proper error handling:
