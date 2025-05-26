@@ -630,7 +630,7 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
       })
     }
     
-    const url = text.trim().split(' ')[0]
+    const url = text.trim().split(' ')[0]  // Define url BEFORE using it
     
     try {
       new URL(url)
@@ -641,7 +641,7 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
       })
     }
     
-    // IMPORTANT CHANGE: Return the response immediately
+    // Now url is properly defined before using it here
     res.json({
       response_type: 'in_channel',
       text: `🔄 Starting to process article from ${extractSourceName(url)}...`,
@@ -855,7 +855,7 @@ slackRoutes.get('/debug-env', (req, res) => {
   })
 })
 
-// Add this test route:
+// Fix the test-flow route with proper error handling:
 
 slackRoutes.get('/test-flow', async (req, res) => {
   const testUrl = req.query.url || 'https://www.pagina12.com.ar/828737-cristina-kirchner-advirtio-la-inminencia-de-un-default-y-lla'
@@ -884,30 +884,45 @@ slackRoutes.get('/test-flow', async (req, res) => {
       bajada: 'Test excerpt for the article to verify functionality.'
     }
     
-  const existingRecords = await base('Slack Noticias')
-    .select({
-      maxRecords: 1
-    })
-    .firstPage()
+    // 4. Test Airtable connection
+    const existingRecords = await base('Slack Noticias')
+      .select({
+        maxRecords: 1
+      })
+      .firstPage()
     
-  return res.json({
-    success: true,
-    htmlLength: htmlContent.length,
-    textLength: extractedText.length,
-    airtableConnected: true,
-    recordsFound: existingRecords.length,
-    metadata
-  })
-} catch (airtableError) {
-  return res.json({
-    success: false,
-    htmlLength: htmlContent.length, 
-    textLength: extractedText.length,
-    airtableConnected: false,
-    airtableError: airtableError.message,
-    metadata
-  })
-
+    return res.json({
+      success: true,
+      htmlLength: htmlContent.length,
+      textLength: extractedText.length,
+      airtableConnected: true,
+      recordsFound: existingRecords.length,
+      metadata
+    })
+  } catch (error) {
+    let htmlContent, extractedText;
+    
+    // Still provide partial results if we have them
+    try {
+      htmlContent = await fetchContent(testUrl);
+      extractedText = htmlContent ? extractText(htmlContent) : '';
+    } catch (e) {
+      htmlContent = '';
+      extractedText = '';
+    }
+    
+    return res.json({
+      success: false,
+      htmlLength: htmlContent ? htmlContent.length : 0, 
+      textLength: extractedText ? extractedText.length : 0,
+      airtableConnected: false,
+      airtableError: error.message,
+      metadata: {
+        title: 'Test Article',
+        volanta: 'Test Overline',
+        bajada: 'Test excerpt for the article to verify functionality.'
+      }
+    });
   }
 })
 
