@@ -11,7 +11,7 @@ import fetch from 'node-fetch'
 import logger from '../utils/logger.js'
 
 // Track processing URLs to prevent infinite loops
-const processingUrls = new Set();
+const processingUrls = new Set()
 
 const slackRoutes = express.Router()
 
@@ -304,11 +304,14 @@ async function generateMetadata(extractedText, maxRetries = 3) {
       // Use Promise.race to apply a timeout
       const result = await Promise.race([
         model.generateContent(prompt),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Metadata generation timed out')), 30000)
-        )
-      ]);
-      
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Metadata generation timed out')),
+            30000
+          )
+        ),
+      ])
+
       const response = await result.response
       const text = response.text()
 
@@ -379,11 +382,14 @@ async function reelaborateText(
       // Use Promise.race to apply a timeout
       const result = await Promise.race([
         model.generateContent(prompt),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Text reelaboration timed out')), 45000)
-        )
-      ]);
-      
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Text reelaboration timed out')),
+            45000
+          )
+        ),
+      ])
+
       const response = await result.response
       let text = response.text()
 
@@ -535,42 +541,48 @@ async function generateSocialMediaText(
 /**
  * Send update to Slack channel
  */
-async function sendSlackUpdate(channel, message, color = 'good', attachment = null) {
+async function sendSlackUpdate(
+  channel,
+  message,
+  color = 'good',
+  attachment = null
+) {
   try {
     // Add validation for missing or invalid channels
     if (!channel) {
-      console.error('Missing channel in sendSlackUpdate call');
-      channel = 'general'; // Use a default channel
+      console.error('Missing channel in sendSlackUpdate call')
+      channel = 'general' // Use a default channel
     }
-    
+
     // Ensure channel doesn't have duplicate # prefix
     const formattedChannel = channel.startsWith('#') ? channel : `#${channel}`
-    
+
     const slackMessage = {
       channel: formattedChannel,
       text: message || 'Article processing update',
-      attachments: attachment ? [{ color, ...attachment }] : [{ color, text: message }]
+      attachments: attachment
+        ? [{ color, ...attachment }]
+        : [{ color, text: message }],
     }
-    
+
     console.log(`Sending Slack update to ${formattedChannel}`)
-    
+
     const response = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`
+        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
       },
-      body: JSON.stringify(slackMessage)
+      body: JSON.stringify(slackMessage),
     })
-    
+
     const result = await response.json()
-    
+
     if (!result.ok) {
       console.error('Slack API error:', result.error)
     } else {
       console.log('Slack update sent successfully')
     }
-    
   } catch (error) {
     console.error('Error sending Slack update:', error)
   }
@@ -639,7 +651,6 @@ slackRoutes.post('/social-task', async (req, res) => {
   }
 })
 
-
 /**
  * NEW COMMAND: Process and send news article
  * Usage: /enviar-noticia https://example.com/article
@@ -647,17 +658,17 @@ slackRoutes.post('/social-task', async (req, res) => {
 slackRoutes.post('/enviar-noticia', async (req, res) => {
   try {
     const { channel_name, user_name, text } = req.body
-    
+
     if (!text || text.trim() === '') {
       return res.json({
         response_type: 'ephemeral',
         text: '❌ Usage: /enviar-noticia <URL>\nExample: /enviar-noticia https://lanacion.com.ar/politica/nueva-ley-aprobada',
       })
     }
-    
+
     const url = text.trim().split(' ')[0]
     const requestId = Date.now() // Add unique ID to distinguish between concurrent requests
-    
+
     try {
       new URL(url)
     } catch (urlError) {
@@ -666,7 +677,7 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
         text: '❌ Please provide a valid URL\nExample: /enviar-noticia https://lanacion.com.ar/article',
       })
     }
-    
+
     // Respond immediately to Slack to avoid timeout
     res.json({
       response_type: 'in_channel',
@@ -682,16 +693,21 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
         },
       ],
     })
-    
+
     // Process the article in the background after responding to Slack
     // Use setTimeout to ensure this runs outside the request-response cycle
     setTimeout(() => {
-      console.log(`[${requestId}] Starting background processing for ${url} requested by ${user_name}`)
+      console.log(
+        `[${requestId}] Starting background processing for ${url} requested by ${user_name}`
+      )
       processNewsArticle(url, user_name, channel_name)
-        .then(() => console.log(`[${requestId}] Successfully processed article: ${url}`))
-        .catch(err => console.error(`[${requestId}] Failed to process article ${url}:`, err))
+        .then(() =>
+          console.log(`[${requestId}] Successfully processed article: ${url}`)
+        )
+        .catch((err) =>
+          console.error(`[${requestId}] Failed to process article ${url}:`, err)
+        )
     }, 100)
-    
   } catch (error) {
     console.error('Error in enviar-noticia command:', error)
     return res.json({
@@ -705,9 +721,9 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
 slackRoutes.get('/enviar-noticia', (req, res) => {
   res.json({
     message: 'This endpoint requires a POST request from Slack',
-    info: 'POST /api/slack/enviar-noticia'
-  });
-});
+    info: 'POST /api/slack/enviar-noticia',
+  })
+})
 
 /**
  * Process news article asynchronously
@@ -715,27 +731,31 @@ slackRoutes.get('/enviar-noticia', (req, res) => {
 async function processNewsArticle(url, user_name, channel_name) {
   // Add unique processing ID for each request
   const processId = Date.now()
-  
+
   // Prevent duplicate processing
   if (processingUrls.has(url)) {
-    console.log(`[${processId}] Already processing ${url}, skipping duplicate request`);
-    return;
+    console.log(
+      `[${processId}] Already processing ${url}, skipping duplicate request`
+    )
+    return
   }
-  
-  processingUrls.add(url);
-  
+
+  processingUrls.add(url)
+
   try {
     console.log(`[${processId}] === STARTING ARTICLE PROCESSING ===`)
     console.log(`[${processId}] URL: ${url}`)
     console.log(`[${processId}] User: ${user_name}`)
     console.log(`[${processId}] Channel: ${channel_name}`)
-    
+
     // If channel_name is 'debug' (nonexistent channel), use 'general' instead
-    const notificationChannel = (!channel_name || channel_name === 'debug') ? 
-      'general' : channel_name;
-    
-    console.log(`[${processId}] Using notification channel: ${notificationChannel}`)
-    
+    const notificationChannel =
+      !channel_name || channel_name === 'debug' ? 'general' : channel_name
+
+    console.log(
+      `[${processId}] Using notification channel: ${notificationChannel}`
+    )
+
     // Send initial confirmation to the channel
     await sendSlackUpdate(
       notificationChannel,
@@ -762,15 +782,20 @@ async function processNewsArticle(url, user_name, channel_name) {
       )
       return
     }
-    console.log(`[${processId}] ✅ HTML content fetched: ${htmlContent.length} characters`)
+    console.log(
+      `[${processId}] ✅ HTML content fetched: ${htmlContent.length} characters`
+    )
 
     // Step 2: Extract images and text
     console.log(`[${processId}] Step 2: Extracting images and text...`)
-    const { images, markdown: imageMarkdown } = extractImagesAsMarkdown(htmlContent)
+    const { images, markdown: imageMarkdown } =
+      extractImagesAsMarkdown(htmlContent)
     console.log(`[${processId}] ✅ Images extracted: ${images.length} images`)
-    
+
     const extractedText = extractText(htmlContent)
-    console.log(`[${processId}] ✅ Text extracted: ${extractedText.length} characters`)
+    console.log(
+      `[${processId}] ✅ Text extracted: ${extractedText.length} characters`
+    )
 
     if (!extractedText || extractedText.length < 50) {
       console.error(`[${processId}] ❌ Insufficient content extracted`)
@@ -785,7 +810,10 @@ async function processNewsArticle(url, user_name, channel_name) {
     // Step 3: Extract embeds
     console.log(`[${processId}] Step 3: Extracting embeds...`)
     const embeds = extractEmbeds(htmlContent)
-    console.log(`[${processId}] ✅ Embeds extracted:`, Object.keys(embeds).filter(key => embeds[key]))
+    console.log(
+      `[${processId}] ✅ Embeds extracted:`,
+      Object.keys(embeds).filter((key) => embeds[key])
+    )
 
     // Step 4: Generate metadata
     console.log(`[${processId}] Step 4: Generating metadata with AI...`)
@@ -795,7 +823,9 @@ async function processNewsArticle(url, user_name, channel_name) {
     // Step 5: Reelaborate text
     console.log(`[${processId}] Step 5: Reelaborating text with AI...`)
     const reelaboratedText = await reelaborateText(extractedText, imageMarkdown)
-    console.log(`[${processId}] ✅ Text reelaborated: ${reelaboratedText.length} characters`)
+    console.log(
+      `[${processId}] ✅ Text reelaborated: ${reelaboratedText.length} characters`
+    )
 
     // Step 6: Generate tags
     console.log(`[${processId}] Step 6: Generating tags with AI...`)
@@ -803,9 +833,17 @@ async function processNewsArticle(url, user_name, channel_name) {
     console.log(`[${processId}] ✅ Tags generated: ${tags}`)
 
     // Step 7: Generate social media text
-    console.log(`[${processId}] Step 7: Generating social media text with AI...`)
-    const socialMediaText = await generateSocialMediaText(extractedText, metadata, tags)
-    console.log(`[${processId}] ✅ Social media text generated: ${socialMediaText.length} characters`)
+    console.log(
+      `[${processId}] Step 7: Generating social media text with AI...`
+    )
+    const socialMediaText = await generateSocialMediaText(
+      extractedText,
+      metadata,
+      tags
+    )
+    console.log(
+      `[${processId}] ✅ Social media text generated: ${socialMediaText.length} characters`
+    )
 
     // Step 8: Prepare Airtable record
     console.log(`[${processId}] Step 8: Preparing Airtable record...`)
@@ -813,8 +851,11 @@ async function processNewsArticle(url, user_name, channel_name) {
     console.log(`[${processId}] ✅ Source name: ${sourceName}`)
 
     // Format image attachments for Airtable
-    const imageAttachments = images.length > 0 ? images.map((imageUrl) => ({ url: imageUrl })) : []
-    console.log(`[${processId}] ✅ Image attachments prepared: ${imageAttachments.length}`)
+    const imageAttachments =
+      images.length > 0 ? images.map((imageUrl) => ({ url: imageUrl })) : []
+    console.log(
+      `[${processId}] ✅ Image attachments prepared: ${imageAttachments.length}`
+    )
 
     // Generate next ID for the record
     console.log(`[${processId}] Step 8a: Getting next ID...`)
@@ -826,7 +867,8 @@ async function processNewsArticle(url, user_name, channel_name) {
       })
       .firstPage()
 
-    const nextId = existingRecords.length > 0 ? (existingRecords[0].fields.id || 0) + 1 : 1
+    const nextId =
+      existingRecords.length > 0 ? (existingRecords[0].fields.id || 0) + 1 : 1
     console.log(`[${processId}] ✅ Next ID: ${nextId}`)
 
     const recordFields = {
@@ -853,11 +895,16 @@ async function processNewsArticle(url, user_name, channel_name) {
     }
 
     console.log(`[${processId}] Step 9: Creating Airtable record...`)
-    console.log(`[${processId}] Record fields:`, JSON.stringify(recordFields, null, 2))
+    console.log(
+      `[${processId}] Record fields:`,
+      JSON.stringify(recordFields, null, 2)
+    )
 
     // Step 9: Insert into Airtable
     const record = await base('Slack Noticias').create(recordFields)
-    console.log(`[${processId}] ✅ Successfully created record ${record.id} in Slack Noticias table`)
+    console.log(
+      `[${processId}] ✅ Successfully created record ${record.id} in Slack Noticias table`
+    )
 
     // Step 10: Send success notification to Slack
     console.log(`[${processId}] Step 10: Sending success notification...`)
@@ -880,11 +927,13 @@ async function processNewsArticle(url, user_name, channel_name) {
     })
 
     console.log(`[${processId}] === PROCESSING COMPLETE ===`)
-
   } catch (error) {
-    console.error(`[${processId}] ❌ Critical Error in processNewsArticle:`, error)
+    console.error(
+      `[${processId}] ❌ Critical Error in processNewsArticle:`,
+      error
+    )
     console.error(`[${processId}] Error stack:`, error.stack)
-    
+
     // Log more details for troubleshooting
     console.error(`[${processId}] Error details:`, {
       url,
@@ -893,13 +942,13 @@ async function processNewsArticle(url, user_name, channel_name) {
       errorName: error.name,
       errorMessage: error.message,
     })
-    
+
     // Add logging for Slack notification attempt
     try {
       // Get a valid channel for error messages
-      const errorChannel = (!channel_name || channel_name === 'debug') ? 
-        'general' : channel_name;
-        
+      const errorChannel =
+        !channel_name || channel_name === 'debug' ? 'general' : channel_name
+
       await sendSlackUpdate(
         errorChannel,
         `❌ Critical error processing article: ${error.message}`,
@@ -913,11 +962,14 @@ async function processNewsArticle(url, user_name, channel_name) {
         }
       )
     } catch (slackError) {
-      console.error(`[${processId}] Failed to send error notification to Slack:`, slackError)
+      console.error(
+        `[${processId}] Failed to send error notification to Slack:`,
+        slackError
+      )
     }
   } finally {
     // Always remove from processing set when done
-    processingUrls.delete(url);
+    processingUrls.delete(url)
   }
 }
 
@@ -929,108 +981,122 @@ slackRoutes.get('/debug-env', (req, res) => {
     hasGeminiApiKey: !!process.env.GEMINI_API_KEY,
     hasSlackBotToken: !!process.env.SLACK_BOT_TOKEN,
     geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
-    nodeEnv: process.env.NODE_ENV
+    nodeEnv: process.env.NODE_ENV,
   })
 })
 
 // Add debug route for the enviar-noticia endpoint
 slackRoutes.get('/debug-enviar-noticia', async (req, res) => {
   // Allow testing with a custom URL via query parameter
-  const testUrl = req.query.url 
-  
+  const testUrl = req.query.url
+
   if (!testUrl) {
     return res.json({
       success: false,
       error: 'Please provide a URL to test with the "url" query parameter',
-      example: '/api/slack/debug-enviar-noticia?url=https://example.com/article'
-    });
+      example:
+        '/api/slack/debug-enviar-noticia?url=https://example.com/article',
+    })
   }
-  
+
   // Validate URL format
   try {
-    new URL(testUrl);
+    new URL(testUrl)
   } catch (urlError) {
     return res.json({
       success: false,
       error: 'Invalid URL format',
       providedUrl: testUrl,
-      example: '/api/slack/debug-enviar-noticia?url=https://example.com/article'
-    });
+      example:
+        '/api/slack/debug-enviar-noticia?url=https://example.com/article',
+    })
   }
-  
+
   try {
     // Test the initial fetch and parse steps
     console.log('Debugging enviar-noticia with URL:', testUrl)
-    
+
     // Fetch HTML
     const htmlContent = await fetchContent(testUrl)
-    
+
     if (!htmlContent) {
       return res.json({
         success: false,
         error: 'Failed to fetch HTML content',
-        step: 'fetchContent'
+        step: 'fetchContent',
       })
     }
-    
+
     // Extract images and text
-    const { images, markdown: imageMarkdown } = extractImagesAsMarkdown(htmlContent)
+    const { images, markdown: imageMarkdown } =
+      extractImagesAsMarkdown(htmlContent)
     const extractedText = extractText(htmlContent)
-    
+
     // Optional: Start a test processing run if requested
-    const shouldProcess = req.query.process === 'true';
-    let processingStarted = false;
-    
+    const shouldProcess = req.query.process === 'true'
+    let processingStarted = false
+
     if (shouldProcess) {
       // Start processing in the background
-      processingStarted = true;
-      const testUser = 'debug-test';
-      const testChannel = 'general'; // Changed from 'debug' to 'general'
-      const debugId = Date.now(); // Add unique ID for this test
-      
+      processingStarted = true
+      const testUser = 'debug-test'
+      const testChannel = 'general' // Changed from 'debug' to 'general'
+      const debugId = Date.now() // Add unique ID for this test
+
       setTimeout(() => {
-        console.log(`[${debugId}] Starting background test processing for ${testUrl}`);
+        console.log(
+          `[${debugId}] Starting background test processing for ${testUrl}`
+        )
         processNewsArticle(testUrl, testUser, testChannel)
-          .then(() => console.log(`[${debugId}] Successfully processed test article: ${testUrl}`))
-          .catch(err => console.error(`[${debugId}] Failed to process test article ${testUrl}:`, err));
-      }, 100);
+          .then(() =>
+            console.log(
+              `[${debugId}] Successfully processed test article: ${testUrl}`
+            )
+          )
+          .catch((err) =>
+            console.error(
+              `[${debugId}] Failed to process test article ${testUrl}:`,
+              err
+            )
+          )
+      }, 100)
     }
-    
+
     // Send successful diagnostics
     return res.json({
       success: true,
       url: testUrl,
       htmlContent: {
         size: htmlContent.length,
-        preview: htmlContent.substring(0, 100) + '...'
+        preview: htmlContent.substring(0, 100) + '...',
       },
       extractedText: {
         size: extractedText.length,
-        preview: extractedText.substring(0, 100) + '...'
+        preview: extractedText.substring(0, 100) + '...',
       },
       images: {
         count: images.length,
-        urls: images.slice(0, 3)
+        urls: images.slice(0, 3),
       },
       processing: {
         started: processingStarted,
-        info: processingStarted ? 
-          "Processing started in background. Check server logs for details." : 
-          "Add &process=true to URL to start processing this article"
+        info: processingStarted
+          ? 'Processing started in background. Check server logs for details.'
+          : 'Add &process=true to URL to start processing this article',
       },
       routes: {
         postUrl: '/api/slack/enviar-noticia',
-        testFlowUrl: '/api/slack/test-flow'
-      }
+        testFlowUrl: '/api/slack/test-flow',
+      },
     })
   } catch (error) {
-    console.error('Error in debug-enviar-noticia:', error);
+    console.error('Error in debug-enviar-noticia:', error)
     return res.status(500).json({
       success: false,
       error: error.message,
       stack: error.stack,
-      url: testUrl
-    });
+      url: testUrl,
+    })
   }
 })
 
@@ -1038,70 +1104,70 @@ slackRoutes.get('/debug-enviar-noticia', async (req, res) => {
 slackRoutes.get('/test-flow', async (req, res) => {
   // Use the URL provided in the query or a generic example URL
   const testUrl = req.query.url || 'https://www.example.com/article'
-  
+
   try {
     // Test the entire flow sequentially
-    
+
     // 1. Fetch content
     const htmlContent = await fetchContent(testUrl)
-    
+
     if (!htmlContent) {
       return res.json({
         success: false,
         error: 'Failed to fetch HTML content',
-        step: 'fetchContent'
+        step: 'fetchContent',
       })
     }
-    
+
     // 2. Extract text
     const extractedText = extractText(htmlContent)
-    
+
     // 3. Generate metadata (simple test)
     const metadata = {
       title: 'Test Article',
       volanta: 'Test Overline',
-      bajada: 'Test excerpt for the article to verify functionality.'
+      bajada: 'Test excerpt for the article to verify functionality.',
     }
-    
+
     // 4. Test Airtable connection
     const existingRecords = await base('Slack Noticias')
       .select({
-        maxRecords: 1
+        maxRecords: 1,
       })
       .firstPage()
-    
+
     return res.json({
       success: true,
       htmlLength: htmlContent.length,
       textLength: extractedText.length,
       airtableConnected: true,
       recordsFound: existingRecords.length,
-      metadata
+      metadata,
     })
   } catch (error) {
-    let htmlContent, extractedText;
-    
+    let htmlContent, extractedText
+
     // Still provide partial results if we have them
     try {
-      htmlContent = await fetchContent(testUrl);
-      extractedText = htmlContent ? extractText(htmlContent) : '';
+      htmlContent = await fetchContent(testUrl)
+      extractedText = htmlContent ? extractText(htmlContent) : ''
     } catch (e) {
-      htmlContent = '';
-      extractedText = '';
+      htmlContent = ''
+      extractedText = ''
     }
-    
+
     return res.json({
       success: false,
-      htmlLength: htmlContent ? htmlContent.length : 0, 
+      htmlLength: htmlContent ? htmlContent.length : 0,
       textLength: extractedText ? extractedText.length : 0,
       airtableConnected: false,
       airtableError: error.message,
       metadata: {
         title: 'Test Article',
         volanta: 'Test Overline',
-        bajada: 'Test excerpt for the article to verify functionality.'
-      }
-    });
+        bajada: 'Test excerpt for the article to verify functionality.',
+      },
+    })
   }
 })
 
