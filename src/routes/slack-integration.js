@@ -1,66 +1,540 @@
 import express from 'express'
 import Airtable from 'airtable'
+import axios from 'axios'
+import { JSDOM } from 'jsdom'
+import { Readability } from '@mozilla/readability'
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import * as cheerio from 'cheerio'
 import logger from '../utils/logger.js'
 
 const slackRoutes = express.Router()
 
-// Initialize Airtable using your existing credentials from #.env
+// Initialize Airtable
 const airtable = new Airtable({ apiKey: process.env.AIRTABLE_TOKEN })
 const base = airtable.base(process.env.AIRTABLE_BASE_ID)
 
-// Test route
+// Initialize Gemini AI
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+const model = genAI.getGenerativeModel({
+  model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+})
+
+// Constants for processing
+const API_DELAY = 3000 // 3 seconds delay between AI calls
+
+// Utility functions from fetch-to-airtable.js
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Extracts images from HTML and creates markdown references
+ */
+function extractImagesAsMarkdown(htmlContent) {
+  try {
+    const $ = cheerio.load(htmlContent)
+    const extractedImages = []
+    let imageMarkdown = ''
+
+    // Extract figures with captions
+    $('figure').each((i, figure) => {
+      const $figure = $(figure)
+      const $img = $figure.find('img')
+      const $caption = $figure.find('figcaption')
+
+      if (
+        $img.length &&
+        $img.attr('src') &&
+        $caption.length &&
+        $caption.text().trim()
+      ) {
+        const imageUrl = $img.attr('src')
+
+        // Skip SVG, tiny or data URLs
+        if (imageUrl.includes('.svg') || imageUrl.startsWith('data:')) {
+          return
+        }
+
+        // Skip common ad/tracking/icon domains and paths
+        if (
+          imageUrl.includes('ad.') ||
+          imageUrl.includes('ads.') ||
+          imageUrl.includes('pixel.') ||
+          imageUrl.includes('analytics') ||
+          imageUrl.includes('/icons/') ||
+          imageUrl.includes('/social/')
+        ) {
+          return
+        }
+
+        const altText = $img.attr('alt') || ''
+        const caption = $caption.text().trim()
+
+        // Only include substantial images
+        const width = parseInt($img.attr('width') || '0', 10)
+        const height = parseInt($img.attr('height') || '0', 10)
+
+        // Skip tiny images that are likely icons
+        if ((width > 0 && width < 100) || (height > 0 && height < 100)) {
+          return
+        }
+
+        extractedImages.push({
+          url: imageUrl,
+          altText: altText || 'Image',
+          caption,
+        })
+
+        imageMarkdown += `**Imagen:** ${caption}\n\n`
+      }
+    })
+
+    console.log(
+      `Extracted ${extractedImages.length} captioned images from HTML content`
+    )
+
+    return {
+      images: extractedImages.map((img) => img.url),
+      markdown: imageMarkdown,
+    }
+  } catch (error) {
+    console.error('Error extracting images:', error.message)
+    return { images: [], markdown: '' }
+  }
+}
+
+/**
+ * Fetches HTML content from a URL
+ */
+async function fetchContent(url, timeout = 10000) {
+  try {
+    const response = await axios.get(url, {
+      timeout,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      },
+    })
+    return response.data
+  } catch (error) {
+    console.error(`Error fetching content from ${url}:`, error.message)
+    return null
+  }
+}
+
+/**
+ * Extracts main text content from HTML using Readability
+ */
+function extractText(htmlContent) {
+  try {
+    const dom = new JSDOM(htmlContent)
+    const reader = new Readability(dom.window.document)
+    const article = reader.parse()
+    return article && article.textContent ? article.textContent.trim() : ''
+  } catch (error) {
+    console.error(`Error extracting text:`, error.message)
+    return ''
+  }
+}
+
+/**
+ * Post-process text to fix formatting issues
+ */
+function postProcessText(text) {
+  let fixed = text.replace(/^\s*-\s+/gm, '- ')
+  fixed = fixed.replace(/^\s*(\d+)\.\s+/gm, '$1. ')
+  fixed = fixed.replace(/^#+\s+/gm, '## ')
+  fixed = fixed.replace(/\*\*([^*]+)\*\*/g, '**$1**')
+  fixed = fixed.replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+  fixed = fixed.replace(/\*([^*]+)\*/g, '*$1*')
+  return fixed
+}
+
+/**
+ * Extract embeds from HTML content
+ */
+function extractEmbeds(htmlContent) {
+  const $ = cheerio.load(htmlContent)
+
+  const embeds = {
+    instagram: '',
+    facebook: '',
+    twitter: '',
+    youtube: '',
+  }
+
+  // Instagram embeds
+  $('blockquote[class*="instagram"], iframe[src*="instagram.com"]').each(
+    (i, elem) => {
+      const $elem = $(elem)
+      if ($elem.is('blockquote')) {
+        embeds.instagram = $.html($elem)
+      } else if ($elem.is('iframe')) {
+        embeds.instagram = $elem.attr('src') || ''
+      }
+    }
+  )
+
+  // Facebook embeds
+  $('iframe[src*="facebook.com"], div[class*="fb-post"]').each((i, elem) => {
+    const $elem = $(elem)
+    if ($elem.is('iframe')) {
+      embeds.facebook = $elem.attr('src') || ''
+    } else {
+      embeds.facebook = $.html($elem)
+    }
+  })
+
+  // Twitter embeds
+  $(
+    'blockquote[class*="twitter"], iframe[src*="twitter.com"], iframe[src*="x.com"]'
+  ).each((i, elem) => {
+    const $elem = $(elem)
+    if ($elem.is('blockquote')) {
+      embeds.twitter = $.html($elem)
+    } else if ($elem.is('iframe')) {
+      embeds.twitter = $elem.attr('src') || ''
+    }
+  })
+
+  // YouTube embeds
+  $('iframe[src*="youtube.com"], iframe[src*="youtu.be"]').each((i, elem) => {
+    const $elem = $(elem)
+    embeds.youtube = $elem.attr('src') || ''
+  })
+
+  return embeds
+}
+
+/**
+ * Extract source name from URL
+ */
+function extractSourceName(url) {
+  try {
+    if (!url) return 'Unknown Source'
+
+    const hostname = new URL(url).hostname
+    let domain = hostname
+      .replace(/^www\./, '')
+      .replace(/^m\./, '')
+      .replace(/^mobile\./, '')
+      .replace(/^news\./, '')
+      .replace(/^noticias\./, '')
+
+    // Handle social media
+    if (domain.includes('facebook.com')) return 'Facebook'
+    if (domain.includes('instagram.com')) return 'Instagram'
+    if (domain.includes('twitter.com') || domain.includes('x.com'))
+      return 'Twitter'
+    if (domain.includes('youtube.com') || domain.includes('youtu.be'))
+      return 'YouTube'
+
+    // Strip common TLDs
+    domain = domain.replace(
+      /\.(com|co|net|org|info|ar|mx|es|cl|pe|br|uy|py|bo|ec|ve|us|io|tv|app|web|digital|news|online|press|media|blog|site)(\.[a-z]{2,3})?$/,
+      ''
+    )
+
+    const parts = domain.split('.')
+    let sourceName = parts[0]
+
+    // Domain mapping
+    const domainMapping = {
+      lanacion: 'La Nación',
+      eldiario: 'El Diario',
+      pagina12: 'Página 12',
+      clarin: 'Clarín',
+      infobae: 'Infobae',
+      ambito: 'Ámbito',
+      tn: 'Todo Noticias',
+    }
+
+    if (domainMapping[sourceName]) {
+      return domainMapping[sourceName]
+    }
+
+    return sourceName
+      .split(/[-_]/)
+      .map((word) => {
+        if (word.length === 1) return word.toUpperCase()
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      })
+      .join(' ')
+  } catch (error) {
+    console.error(`Error extracting source name from ${url}:`, error.message)
+    return 'Unknown Source'
+  }
+}
+
+/**
+ * Generate metadata using AI
+ */
+async function generateMetadata(extractedText, maxRetries = 3) {
+  let retries = 0
+  while (retries < maxRetries) {
+    try {
+      const delayTime = API_DELAY * Math.pow(1.5, retries)
+      console.log(
+        `Waiting ${delayTime / 1000} seconds before generating metadata...`
+      )
+      await delay(delayTime)
+
+      const prompt = `
+        Extracted Text: "${extractedText.substring(0, 5000)}"
+        
+        Basado en el texto anterior, genera lo siguiente:
+        1. Un título conciso y atractivo. **No uses mayúsculas en todas las palabras** (evita el title case). Solo usa mayúsculas al principio del título y en nombres propios. ESTO ES MUY IMPORTANTE Y HAY QUE RESPETARLO A RAJATABLA.
+        2. Un resumen (bajada) de 40 a 50 palabras que capture los puntos clave. **No uses mayúsculas en todas las palabras**. Solo usa mayúsculas al principio de cada oración y en nombres propios.
+        3. Una volanta corta que brinde contexto o destaque la importancia del artículo. **No uses mayúsculas en todas las palabras**. Solo usa mayúsculas al principio y en nombres propios.
+        
+        Return the output in JSON format:
+        {
+          "title": "Generated Title",
+          "bajada": "Generated 40-50 word summary",
+          "volanta": "Generated overline"
+        }
+      `
+
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      const text = response.text()
+
+      const cleanedText = text
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim()
+      return JSON.parse(cleanedText)
+    } catch (error) {
+      console.error(`Error generating metadata:`, error.message)
+      retries++
+      if (retries >= maxRetries) {
+        return {
+          title: 'Artículo sin título',
+          bajada: 'Sin descripción disponible',
+          volanta: 'Noticias',
+        }
+      }
+      await delay(3000)
+    }
+  }
+}
+
+/**
+ * Reelaborate text using AI
+ */
+async function reelaborateText(
+  extractedText,
+  imageMarkdown = '',
+  maxRetries = 3
+) {
+  let retries = 0
+  while (retries < maxRetries) {
+    try {
+      const delayTime = API_DELAY * Math.pow(1.5, retries)
+      console.log(
+        `Waiting ${delayTime / 1000} seconds before reelaborating text...`
+      )
+      await delay(delayTime)
+
+      const imagesPrompt = imageMarkdown
+        ? 'Las siguientes descripciones de imágenes fueron extraídas del artículo original. Intégralas en el texto reelaborado en los lugares más apropiados según el contexto:\n\n' +
+          imageMarkdown
+        : ''
+
+      const prompt = `
+        Reelaborar la siguiente noticia siguiendo estas pautas:
+
+        1. **Lenguaje**: Utilizar un **español rioplatense formal**, adecuado para un contexto periodístico.
+        2. **Objetividad**: Mantener un tono neutral y objetivo.
+        3. **Claridad**: Usar un lenguaje sencillo y accesible.
+        4. **Estructura**: OBLIGATORIO: Dividir el texto en secciones con subtítulos claros usando formato markdown (## Subtítulo).
+        5. **Sintaxis**: OBLIGATORIO: Incorporar elementos visuales como:
+           - OBLIGATORIO: INCLUIR AL MENOS UNA LISTA con viñetas:
+             - Primer punto clave
+             - Segundo punto clave 
+             - Tercer punto clave
+           - OBLIGATORIO: Usar **negritas** para resaltar información importante.
+           - OBLIGATORIO: Si hay citas textuales, usar el formato: > Cita textual
+        6. **Formato Markdown**: ABSOLUTAMENTE OBLIGATORIO usar correctamente estos elementos.
+        7. **Títulos**: No incluir un título principal (# Título). Comenzar directamente con el cuerpo del texto.
+        
+        ${imagesPrompt}
+        
+        Texto extraído: "${extractedText.substring(0, 5000)}"
+      `
+
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      let text = response.text()
+
+      // Check if text has proper formatting
+      const hasHeadings = text.includes('## ')
+      const hasList = text.includes('- ')
+
+      if (!hasHeadings || !hasList) {
+        console.warn('Generated text is missing proper formatting, retrying...')
+        retries++
+        continue
+      }
+
+      return postProcessText(text)
+    } catch (error) {
+      console.error(`Error reelaborating text:`, error.message)
+      retries++
+      if (retries >= maxRetries) {
+        return extractedText // Fallback to original text
+      }
+      await delay(3000)
+    }
+  }
+}
+
+/**
+ * Generate tags using AI
+ */
+async function generateTags(extractedText, metadata, maxRetries = 3) {
+  let retries = 0
+  while (retries < maxRetries) {
+    try {
+      const delayTime = API_DELAY * Math.pow(1.5, retries)
+      await delay(delayTime)
+
+      const title = metadata?.title || ''
+      const bajada = metadata?.bajada || ''
+
+      const prompt = `
+        Analiza este artículo y genera entre 5 y 8 etiquetas (tags) relevantes.
+
+        TÍTULO: ${title}
+        BAJADA: ${bajada}
+        CONTENIDO: "${extractedText.substring(0, 4000)}"
+        
+        INSTRUCCIONES:
+        1. Identifica nombres propios importantes (personas, lugares, organizaciones).
+        2. Identifica temas principales y subtemas.
+        3. Cada etiqueta debe tener entre 1 y 3 palabras.
+        4. NO utilices hashtags (#).
+        5. Las etiquetas deben ser específicas pero no muy largas.
+        
+        Devuelve SOLO un array de strings en formato JSON:
+        ["etiqueta1", "etiqueta2", "etiqueta3", ...]
+      `
+
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      const text = response.text()
+
+      const jsonMatch = text.match(/\[.*?\]/s)
+      if (!jsonMatch) {
+        throw new Error('No valid JSON array found in response')
+      }
+
+      const cleanedJson = jsonMatch[0].replace(/```json|```/g, '').trim()
+      const tags = JSON.parse(cleanedJson)
+
+      if (!Array.isArray(tags) || tags.length === 0) {
+        throw new Error('Generated tags are not in expected format')
+      }
+
+      const formattedTags = tags.map((tag) =>
+        tag
+          .split(' ')
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ')
+      )
+
+      return formattedTags.join(', ')
+    } catch (error) {
+      console.error(`Error generating tags:`, error.message)
+      retries++
+      if (retries >= maxRetries) {
+        return 'Noticias' // Fallback
+      }
+      await delay(2000)
+    }
+  }
+}
+
+/**
+ * Generate social media text
+ */
+async function generateSocialMediaText(
+  extractedText,
+  metadata,
+  tags,
+  maxRetries = 3
+) {
+  let retries = 0
+  while (retries < maxRetries) {
+    try {
+      const delayTime = API_DELAY * Math.pow(1.5, retries)
+      await delay(delayTime)
+
+      const title = metadata?.title || ''
+      const bajada = metadata?.bajada || ''
+
+      const prompt = `
+        Crea un texto atractivo para redes sociales de MENOS DE 500 CARACTERES que promocione este artículo.
+
+        TÍTULO: ${title}
+        BAJADA: ${bajada}
+        ETIQUETAS: ${tags}
+        
+        INSTRUCCIONES:
+        1. El texto DEBE tener MENOS DE 500 CARACTERES en total.
+        2. Escribe en español rioplatense con tono conversacional.
+        3. Incluye 2-4 emojis estratégicamente ubicados.
+        4. Termina con 3-5 hashtags relevantes al contenido.
+        5. Usa frases cortas y directas que generen interés.
+        
+        Devuelve SOLO el texto para redes sociales.
+      `
+
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      let socialText = response.text().trim()
+
+      socialText = socialText.replace(/^```[\s\S]*```$/gm, '').trim()
+
+      if (socialText.length > 500) {
+        socialText = socialText.substring(0, 497) + '...'
+      }
+
+      return socialText
+    } catch (error) {
+      console.error(`Error generating social media text:`, error.message)
+      retries++
+      if (retries >= maxRetries) {
+        return `📰 ${metadata?.title || 'Nuevo artículo'} #Noticias`
+      }
+      await delay(2000)
+    }
+  }
+}
+
+// Your existing routes
 slackRoutes.get('/test', (req, res) => {
   res.json({ message: 'Slack integration working!' })
 })
 
-// Debug middleware to see what we're receiving
 slackRoutes.use((req, res, next) => {
   console.log('=== SLACK REQUEST DEBUG ===')
-  console.log('Headers:', req.headers)
   console.log('Body:', req.body)
-  console.log('Raw body type:', typeof req.body)
-  console.log('Content-Type:', req.get('Content-Type'))
   console.log('========================')
   next()
 })
 
 slackRoutes.post('/social-task', async (req, res) => {
   try {
-    console.log('Slack social-task endpoint hit')
-    console.log('Full request body:', JSON.stringify(req.body, null, 2))
-
-    // Slack sends these fields in form data
-    const {
-      token,
-      team_id,
-      team_domain,
-      channel_id,
-      channel_name,
-      user_id,
-      user_name,
-      command,
-      text,
-      response_url,
-      trigger_id,
-    } = req.body
-
-    // Log what we received
-    console.log('Parsed Slack data:', {
-      user_name,
-      channel_name,
-      command,
-      text,
-      team_domain,
-    })
+    const { channel_name, user_name, text } = req.body
 
     if (!text || text.trim() === '') {
       return res.json({
         response_type: 'ephemeral',
-        text: '❌ Usage: /social-task "Your news headline here"\nExample: /social-task "Breaking: New AI breakthrough announced"',
+        text: '❌ Usage: /social-task "Your news headline here"',
       })
     }
 
-    // Clean up the text
     const title = text.replace(/^["']|["']$/g, '').trim()
 
     if (title.length < 5) {
@@ -70,19 +544,13 @@ slackRoutes.post('/social-task', async (req, res) => {
       })
     }
 
-    // Create record in your existing Airtable
     const record = await base('Redes Sociales').create({
       Title: title,
       Status: 'Draft',
       Source: 'Slack',
       'Created By': user_name || 'Unknown',
-      Channel: channel_name || 'Unknown',
-      'Created Date': new Date().toISOString(),
-      Priority: 'Medium',
       Notes: `Created from Slack by ${user_name} in #${channel_name}`,
     })
-
-    console.log(`Created Airtable record ${record.id} from Slack: ${title}`)
 
     return res.json({
       response_type: 'in_channel',
@@ -93,21 +561,7 @@ slackRoutes.post('/social-task', async (req, res) => {
           fields: [
             { title: 'Title', value: title, short: false },
             { title: 'Created by', value: user_name || 'Unknown', short: true },
-            {
-              title: 'Channel',
-              value: `#${channel_name || 'unknown'}`,
-              short: true,
-            },
             { title: 'Record ID', value: record.id, short: true },
-            { title: 'Status', value: 'Draft', short: true },
-          ],
-          actions: [
-            {
-              type: 'button',
-              text: 'View in Airtable',
-              url: `https://airtable.com/${process.env.AIRTABLE_BASE_ID}/${record.id}`,
-              style: 'primary',
-            },
           ],
         },
       ],
@@ -120,5 +574,234 @@ slackRoutes.post('/social-task', async (req, res) => {
     })
   }
 })
+
+
+/**
+ * NEW COMMAND: Process and send news article
+ * Usage: /enviar-noticia https://example.com/article
+ */
+slackRoutes.post('/enviar-noticia', async (req, res) => {
+  try {
+    const { channel_name, user_name, text } = req.body
+
+    console.log('enviar-noticia command received:', {
+      user_name,
+      channel_name,
+      text,
+    })
+
+    if (!text || text.trim() === '') {
+      return res.json({
+        response_type: 'ephemeral',
+        text: '❌ Usage: /enviar-noticia <URL>\nExample: /enviar-noticia https://lanacion.com.ar/politica/nueva-ley-aprobada',
+      })
+    }
+
+    // Get just the URL (remove any extra spaces or text)
+    const url = text.trim().split(' ')[0]
+
+    // Validate URL
+    try {
+      new URL(url)
+    } catch (urlError) {
+      return res.json({
+        response_type: 'ephemeral',
+        text: '❌ Please provide a valid URL\nExample: /enviar-noticia https://lanacion.com.ar/article',
+      })
+    }
+
+    // Quick response to Slack
+    res.json({
+      response_type: 'in_channel',
+      text: `🔄 Processing article from ${extractSourceName(url)}...`,
+      attachments: [
+        {
+          color: 'warning',
+          fields: [
+            { title: 'URL', value: url, short: false },
+            { title: 'Requested by', value: user_name, short: true },
+            { title: 'Status', value: 'Processing...', short: true },
+          ],
+        },
+      ],
+    })
+
+    // Process article asynchronously (no section parameter)
+    processNewsArticle(url, user_name, channel_name)
+  } catch (error) {
+    console.error('Error in enviar-noticia command:', error)
+    return res.json({
+      response_type: 'ephemeral',
+      text: `❌ Error: ${error.message}`,
+    })
+  }
+})
+
+/**
+ * Process news article asynchronously
+ */
+async function processNewsArticle(url, userName, channelName) {
+  try {
+    console.log(`Starting article processing for: ${url}`)
+
+    // Step 1: Fetch HTML content
+    const htmlContent = await fetchContent(url)
+    if (!htmlContent) {
+      await sendSlackUpdate(
+        channelName,
+        `❌ Failed to fetch content from ${url}`,
+        'danger'
+      )
+      return
+    }
+
+    // Step 2: Extract images and text
+    const { images, markdown: imageMarkdown } =
+      extractImagesAsMarkdown(htmlContent)
+    const extractedText = extractText(htmlContent)
+
+    if (!extractedText || extractedText.length < 50) {
+      await sendSlackUpdate(
+        channelName,
+        `❌ Insufficient content extracted from ${url}`,
+        'danger'
+      )
+      return
+    }
+
+    console.log(
+      `Extracted ${extractedText.length} characters of text and ${images.length} images`
+    )
+
+    // Step 3: Extract embeds
+    const embeds = extractEmbeds(htmlContent)
+
+    // Step 4: Generate metadata
+    console.log('Generating metadata...')
+    const metadata = await generateMetadata(extractedText)
+
+    // Step 5: Reelaborate text
+    console.log('Reelaborating text...')
+    const reelaboratedText = await reelaborateText(extractedText, imageMarkdown)
+
+    // Step 6: Generate tags
+    console.log('Generating tags...')
+    const tags = await generateTags(extractedText, metadata)
+
+    // Step 7: Generate social media text
+    console.log('Generating social media text...')
+    const socialMediaText = await generateSocialMediaText(
+      extractedText,
+      metadata,
+      tags
+    )
+
+    // Step 8: Prepare Airtable record
+    const sourceName = extractSourceName(url)
+
+    // Format image attachments for Airtable
+    const imageAttachments =
+      images.length > 0 ? images.map((imageUrl) => ({ url: imageUrl })) : []
+
+    // Generate next ID for the record
+    const existingRecords = await base('Slack Noticias')
+      .select({
+        fields: ['id'],
+        sort: [{ field: 'id', direction: 'desc' }],
+        maxRecords: 1,
+      })
+      .firstPage()
+
+    const nextId =
+      existingRecords.length > 0 ? (existingRecords[0].fields.id || 0) + 1 : 1
+
+    const recordFields = {
+      id: nextId,
+      title: metadata.title,
+      overline: metadata.volanta,
+      excerpt: metadata.bajada,
+      article: reelaboratedText,
+      image: imageAttachments,
+      imgUrl: images.length > 0 ? images[0] : '',
+      'article-images': images.join(', '),
+      url: url,
+      source: sourceName,
+      'ig-post': embeds.instagram || '',
+      'fb-post': embeds.facebook || '',
+      'tw-post': embeds.twitter || '',
+      'yt-video': embeds.youtube || '',
+      status: 'draft',
+      section: 'draft', // Default section
+      tags: tags,
+      socialMediaText: socialMediaText,
+      front: '', // Default empty
+      order: 'normal', // Default order
+    }
+
+    // Step 9: Insert into Airtable
+    const record = await base('Slack Noticias').create(recordFields)
+
+    console.log(
+      `Successfully created record ${record.id} in Slack Noticias table`
+    )
+
+    // Step 10: Send success notification to Slack
+    await sendSlackUpdate(channelName, null, 'good', {
+      text: `✅ Article processed successfully!`,
+      fields: [
+        { title: 'Title', value: metadata.title, short: false },
+        { title: 'Source', value: sourceName, short: true },
+        { title: 'Record ID', value: record.id, short: true },
+        { title: 'Tags', value: tags.substring(0, 100), short: false },
+      ],
+      actions: [
+        {
+          type: 'button',
+          text: 'View in Airtable',
+          url: `https://airtable.com/${process.env.AIRTABLE_BASE_ID}/Slack%20Noticias/${record.id}`,
+          style: 'primary',
+        },
+      ],
+    })
+  } catch (error) {
+    console.error('Error processing news article:', error)
+    await sendSlackUpdate(
+      channelName,
+      `❌ Error processing article: ${error.message}`,
+      'danger'
+    )
+  }
+}
+
+/**
+ * Send update to Slack channel
+ */
+async function sendSlackUpdate(
+  channel,
+  message,
+  color = 'good',
+  attachment = null
+) {
+  try {
+    const slackMessage = {
+      channel: `#${channel}`,
+      text: message || 'Article processing update',
+      attachments: attachment
+        ? [{ color, ...attachment }]
+        : [{ color, text: message }],
+    }
+
+    await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify(slackMessage),
+    })
+  } catch (error) {
+    console.error('Error sending Slack update:', error)
+  }
+}
 
 export default slackRoutes
