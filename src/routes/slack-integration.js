@@ -897,7 +897,28 @@ slackRoutes.get('/debug-env', (req, res) => {
 
 // Add debug route for the enviar-noticia endpoint
 slackRoutes.get('/debug-enviar-noticia', async (req, res) => {
-  const testUrl = req.query.url || 'https://www.pagina12.com.ar/828737-cristina-kirchner-advirtio-la-inminencia-de-un-default-y-lla'
+  // Allow testing with a custom URL via query parameter
+  const testUrl = req.query.url 
+  
+  if (!testUrl) {
+    return res.json({
+      success: false,
+      error: 'Please provide a URL to test with the "url" query parameter',
+      example: '/api/slack/debug-enviar-noticia?url=https://example.com/article'
+    });
+  }
+  
+  // Validate URL format
+  try {
+    new URL(testUrl);
+  } catch (urlError) {
+    return res.json({
+      success: false,
+      error: 'Invalid URL format',
+      providedUrl: testUrl,
+      example: '/api/slack/debug-enviar-noticia?url=https://example.com/article'
+    });
+  }
   
   try {
     // Test the initial fetch and parse steps
@@ -918,6 +939,24 @@ slackRoutes.get('/debug-enviar-noticia', async (req, res) => {
     const { images, markdown: imageMarkdown } = extractImagesAsMarkdown(htmlContent)
     const extractedText = extractText(htmlContent)
     
+    // Optional: Start a test processing run if requested
+    const shouldProcess = req.query.process === 'true';
+    let processingStarted = false;
+    
+    if (shouldProcess) {
+      // Start processing in the background
+      processingStarted = true;
+      const testUser = 'debug-test';
+      const testChannel = 'debug';
+      
+      setTimeout(() => {
+        console.log(`Starting background test processing for ${testUrl}`);
+        processNewsArticle(testUrl, testUser, testChannel)
+          .then(() => console.log(`Successfully processed test article: ${testUrl}`))
+          .catch(err => console.error(`Failed to process test article ${testUrl}:`, err));
+      }, 100);
+    }
+    
     // Send successful diagnostics
     return res.json({
       success: true,
@@ -934,27 +973,32 @@ slackRoutes.get('/debug-enviar-noticia', async (req, res) => {
         count: images.length,
         urls: images.slice(0, 3)
       },
+      processing: {
+        started: processingStarted,
+        info: processingStarted ? 
+          "Processing started in background. Check server logs for details." : 
+          "Add &process=true to URL to start processing this article"
+      },
       routes: {
         postUrl: '/api/slack/enviar-noticia',
         testFlowUrl: '/api/slack/test-flow'
-      },
-      slackIntegration: 'enabled'
+      }
     })
   } catch (error) {
-    console.error('Error in debug-enviar-noticia:', error)
+    console.error('Error in debug-enviar-noticia:', error);
     return res.status(500).json({
       success: false,
       error: error.message,
       stack: error.stack,
       url: testUrl
-    })
+    });
   }
 })
 
-// Fix the test-flow route with proper error handling:
-
+// Test the full article processing flow with error handling
 slackRoutes.get('/test-flow', async (req, res) => {
-  const testUrl = req.query.url || 'https://www.pagina12.com.ar/828737-cristina-kirchner-advirtio-la-inminencia-de-un-default-y-lla'
+  // Use the URL provided in the query or a generic example URL
+  const testUrl = req.query.url || 'https://www.example.com/article'
   
   try {
     // Test the entire flow sequentially
