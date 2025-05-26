@@ -671,7 +671,7 @@ async function processNewsArticle(url, userName, channel_name) {
     console.log(`=== STARTING ARTICLE PROCESSING ===`)
     console.log(`URL: ${url}`)
     console.log(`User: ${userName}`)
-    console.log(`Channel: ${channelName}`)
+    console.log(`Channel: ${channel_name}`)
 
     // Step 1: Fetch HTML content
     console.log('Step 1: Fetching HTML content...')
@@ -679,7 +679,7 @@ async function processNewsArticle(url, userName, channel_name) {
     if (!htmlContent) {
       console.error('❌ Failed to fetch HTML content')
       await sendSlackUpdate(
-        channelName,
+        channel_name,
         `❌ Failed to fetch content from ${url}`,
         'danger'
       )
@@ -698,7 +698,7 @@ async function processNewsArticle(url, userName, channel_name) {
     if (!extractedText || extractedText.length < 50) {
       console.error('❌ Insufficient content extracted')
       await sendSlackUpdate(
-        channelName,
+        channel_name,
         `❌ Insufficient content extracted from ${url}. Only ${extractedText.length} characters found.`,
         'danger'
       )
@@ -784,7 +784,7 @@ async function processNewsArticle(url, userName, channel_name) {
 
     // Step 10: Send success notification to Slack
     console.log('Step 10: Sending success notification...')
-    await sendSlackUpdate(channelName, null, 'good', {
+    await sendSlackUpdate(channel_name, null, 'good', {
       text: `✅ Article processed successfully!`,
       fields: [
         { title: 'Title', value: metadata.title, short: false },
@@ -808,7 +808,7 @@ async function processNewsArticle(url, userName, channel_name) {
     console.error('❌ Critical Error in processNewsArticle:', error)
     console.error('Error stack:', error.stack)
     await sendSlackUpdate(
-      channelName,
+      channel_name,
       `❌ Critical error processing article: ${error.message}`,
       'danger'
     )
