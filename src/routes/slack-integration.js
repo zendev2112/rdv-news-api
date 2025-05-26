@@ -609,24 +609,16 @@ slackRoutes.post('/social-task', async (req, res) => {
 slackRoutes.post('/enviar-noticia', async (req, res) => {
   try {
     const { channel_name, user_name, text } = req.body
-
-    console.log('enviar-noticia command received:', {
-      user_name,
-      channel_name,
-      text,
-    })
-
+    
     if (!text || text.trim() === '') {
       return res.json({
         response_type: 'ephemeral',
         text: '❌ Usage: /enviar-noticia <URL>\nExample: /enviar-noticia https://lanacion.com.ar/politica/nueva-ley-aprobada',
       })
     }
-
-    // Get just the URL (remove any extra spaces or text)
+    
     const url = text.trim().split(' ')[0]
-
-    // Validate URL
+    
     try {
       new URL(url)
     } catch (urlError) {
@@ -635,25 +627,37 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
         text: '❌ Please provide a valid URL\nExample: /enviar-noticia https://lanacion.com.ar/article',
       })
     }
-
-    // Quick response to Slack
+    
+    // IMPORTANT CHANGE: Return the response immediately
     res.json({
       response_type: 'in_channel',
-      text: `🔄 Processing article from ${extractSourceName(url)}...`,
+      text: `🔄 Starting to process article from ${extractSourceName(url)}...`,
       attachments: [
         {
           color: 'warning',
           fields: [
             { title: 'URL', value: url, short: false },
             { title: 'Requested by', value: user_name, short: true },
-            { title: 'Status', value: 'Processing...', short: true },
+            { title: 'Status', value: 'Starting processing...', short: true },
           ],
         },
       ],
     })
-
-    // Process article asynchronously (no section parameter)
-    processNewsArticle(url, user_name, channel_name)
+    
+    // CRITICAL FIX: Process in a separate invocation to avoid timeouts
+    fetch(`${process.env.VERCEL_URL || 'https://rdv-news-api.vercel.app'}/api/slack/process-article`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.INTERNAL_API_KEY || 'secret'}`
+      },
+      body: JSON.stringify({
+        url,
+        user_name,
+        channel_name
+      })
+    }).catch(err => console.error('Failed to start processing job:', err))
+    
   } catch (error) {
     console.error('Error in enviar-noticia command:', error)
     return res.json({
@@ -661,6 +665,25 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
       text: `❌ Error: ${error.message}`,
     })
   }
+})
+
+// NEW ROUTE: Add this separate endpoint to handle the processing
+slackRoutes.post('/process-article', async (req, res) => {
+  // For security
+  const authHeader = req.headers.authorization
+  if (authHeader !== `Bearer ${process.env.INTERNAL_API_KEY || 'secret'}`) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  const { url, user_name, channel_name } = req.body
+  
+  // Respond immediately
+  res.status(200).json({ status: 'Processing started' })
+  
+  // Process in background
+  processNewsArticle(url, user_name, channel_name).catch(error => {
+    console.error('Background processing error:', error)
+  })
 })
 
 /**
