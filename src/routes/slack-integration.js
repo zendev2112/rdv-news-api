@@ -658,10 +658,10 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
     })
     
     // CRITICAL FIX: Process directly instead of using internal API call
-    setTimeout(() => {
+    
       processNewsArticle(url, user_name, channel_name).catch(err => 
         console.error('Failed to process article:', err))
-    }, 100)
+    
     
   } catch (error) {
     console.error('Error in enviar-noticia command:', error)
