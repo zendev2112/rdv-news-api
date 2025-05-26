@@ -769,36 +769,68 @@ async function processNewsArticle(url, user_name, channel_name) {
 
     // Generate next ID for the record
     console.log('Step 8a: Getting next ID...')
-    try{
-      const existingRecords = await base('Slack Noticias')
+    const existingRecords = await base('Slack Noticias')
       .select({
-
+        fields: ['id'],
+        sort: [{ field: 'id', direction: 'desc' }],
         maxRecords: 1,
       })
       .firstPage()
 
-      return res.json({
-        success: true,
-        htmlLength: htmlContent.length,
-        textLength: extractedText.length,
-        airtableConnected: true,
-        recordsFound: existingRecords.length,
-        metadata
-      })
-    } catch (airtableError) {
-      return res.json({
-        success: false,
-        htmlLength: htmlContent.length, 
-        textLength: extractedText.length,
-        airtableConnected: false,
-        airtableError: airtableError.message,
-        metadata
-      })
+    const nextId = existingRecords.length > 0 ? (existingRecords[0].fields.id || 0) + 1 : 1
+    console.log(`✅ Next ID: ${nextId}`)
+
+    const recordFields = {
+      id: nextId,
+      title: metadata.title,
+      overline: metadata.volanta,
+      excerpt: metadata.bajada,
+      article: reelaboratedText,
+      image: imageAttachments,
+      imgUrl: images.length > 0 ? images[0] : '',
+      'article-images': images.join(', '),
+      url: url,
+      source: sourceName,
+      'ig-post': embeds.instagram || '',
+      'fb-post': embeds.facebook || '',
+      'tw-post': embeds.twitter || '',
+      'yt-video': embeds.youtube || '',
+      status: 'draft',
+      section: 'draft',
+      tags: tags,
+      socialMediaText: socialMediaText,
+      front: '',
+      order: 'normal',
     }
 
+    console.log('Step 9: Creating Airtable record...')
+    console.log('Record fields:', JSON.stringify(recordFields, null, 2))
 
-      
+    // Step 9: Insert into Airtable
+    const record = await base('Slack Noticias').create(recordFields)
+    console.log(`✅ Successfully created record ${record.id} in Slack Noticias table`)
 
+    // Step 10: Send success notification to Slack
+    console.log('Step 10: Sending success notification...')
+    await sendSlackUpdate(channel_name, null, 'good', {
+      text: `✅ Article processed successfully!`,
+      fields: [
+        { title: 'Title', value: metadata.title, short: false },
+        { title: 'Source', value: sourceName, short: true },
+        { title: 'Record ID', value: record.id, short: true },
+        { title: 'Tags', value: tags.substring(0, 100), short: false },
+      ],
+      actions: [
+        {
+          type: 'button',
+          text: 'View in Airtable',
+          url: `https://airtable.com/${process.env.AIRTABLE_BASE_ID}/Slack%20Noticias/${record.id}`,
+          style: 'primary',
+        },
+      ],
+    })
+
+    console.log(`=== PROCESSING COMPLETE ===`)
 
   } catch (error) {
     console.error('❌ Critical Error in processNewsArticle:', error)
@@ -852,28 +884,30 @@ slackRoutes.get('/test-flow', async (req, res) => {
       bajada: 'Test excerpt for the article to verify functionality.'
     }
     
-    // 4. Test Airtable connection
-    const existingRecords = await base('Slack Noticias')
-      .select({
-        maxRecords: 1
-      })
-      .firstPage()
-    
-    // Success
-    return res.json({
-      success: true,
-      htmlLength: htmlContent.length,
-      textLength: extractedText.length,
-      airtableConnected: existingRecords.length > 0,
-      metadata
+  const existingRecords = await base('Slack Noticias')
+    .select({
+      maxRecords: 1
     })
+    .firstPage()
     
-  } catch (error) {
-    return res.json({
-      success: false,
-      error: error.message,
-      stack: error.stack
-    })
+  return res.json({
+    success: true,
+    htmlLength: htmlContent.length,
+    textLength: extractedText.length,
+    airtableConnected: true,
+    recordsFound: existingRecords.length,
+    metadata
+  })
+} catch (airtableError) {
+  return res.json({
+    success: false,
+    htmlLength: htmlContent.length, 
+    textLength: extractedText.length,
+    airtableConnected: false,
+    airtableError: airtableError.message,
+    metadata
+  })
+
   }
 })
 
