@@ -666,7 +666,7 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
 /**
  * Process news article asynchronously
  */
-async function processNewsArticle(url, userName, channelName) {
+async function processNewsArticle(url, userName, channel_name) {
   try {
     console.log(`=== STARTING ARTICLE PROCESSING ===`)
     console.log(`URL: ${url}`)
