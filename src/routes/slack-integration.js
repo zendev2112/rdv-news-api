@@ -512,6 +512,31 @@ async function generateSocialMediaText(
   }
 }
 
+/**
+ * Send update to Slack channel
+ */
+async function sendSlackUpdate(channel, message, color = 'good', attachment = null) {
+  try {
+    const slackMessage = {
+      channel: `#${channel}`,
+      text: message || 'Article processing update',
+      attachments: attachment ? [{ color, ...attachment }] : [{ color, text: message }]
+    }
+    
+    await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`
+      },
+      body: JSON.stringify(slackMessage)
+    })
+    
+  } catch (error) {
+    console.error('Error sending Slack update:', error)
+  }
+}
+
 // Your existing routes
 slackRoutes.get('/test', (req, res) => {
   res.json({ message: 'Slack integration working!' })
@@ -528,7 +553,7 @@ slackRoutes.post('/social-task', async (req, res) => {
   try {
     const { channel_name, user_name, text } = req.body
 
-    if (!text || text.trim() === '') {s
+    if (!text || text.trim() === '') {
       return res.json({
         response_type: 'ephemeral',
         text: '❌ Usage: /social-task "Your news headline here"',
