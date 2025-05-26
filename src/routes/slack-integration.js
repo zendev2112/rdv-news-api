@@ -694,6 +694,14 @@ slackRoutes.post('/process-article', async (req, res) => {
   })
 })
 
+// Add this in slack-integration.js
+slackRoutes.get('/enviar-noticia', (req, res) => {
+  res.json({
+    message: 'This endpoint requires a POST request from Slack',
+    info: 'POST /api/slack/enviar-noticia'
+  });
+});
+
 /**
  * Process news article asynchronously
  */
