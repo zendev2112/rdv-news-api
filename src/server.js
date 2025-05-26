@@ -7,8 +7,6 @@ import webhookRoutes from './routes/webhook.js'
 import socialMediaImagesRouter from './routes/social-media-images.js'
 import slackRoutes from './routes/slack-integration.js' 
 
-// Remove or conditionally import background scripts
-// import './scripts/poll-sync-requests.js';
 
 // Initialize
 dotenv.config()
@@ -24,6 +22,7 @@ app.use(
 )
 app.use(morgan('dev'))
 app.use(express.json())
+app.use(express.urlencoded({ extended: true })) 
 
 // Root route handler
 app.get('/', (req, res) => {
