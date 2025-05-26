@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import * as cheerio from 'cheerio'
+import fetch from 'node-fetch'
 import logger from '../utils/logger.js'
 
 const slackRoutes = express.Router()
