@@ -657,19 +657,11 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
       ],
     })
     
-    // CRITICAL FIX: Process in a separate invocation to avoid timeouts
-    fetch('https://rdv-news-api.vercel.app/api/slack/process-article', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.INTERNAL_API_KEY || 'secret'}`
-      },
-      body: JSON.stringify({
-        url,
-        user_name,
-        channel_name
-      })
-    }).catch(err => console.error('Failed to start processing job:', err))
+    // CRITICAL FIX: Process directly instead of using internal API call
+    setTimeout(() => {
+      processNewsArticle(url, user_name, channel_name).catch(err => 
+        console.error('Failed to process article:', err))
+    }, 100)
     
   } catch (error) {
     console.error('Error in enviar-noticia command:', error)
