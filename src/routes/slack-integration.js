@@ -8,6 +8,9 @@ import * as cheerio from 'cheerio'
 import fetch from 'node-fetch'
 import logger from '../utils/logger.js'
 
+// Track processing URLs to prevent infinite loops
+const processingUrls = new Set();
+
 const slackRoutes = express.Router()
 
 // Initialize Airtable
@@ -296,7 +299,14 @@ async function generateMetadata(extractedText, maxRetries = 3) {
         }
       `
 
-      const result = await model.generateContent(prompt)
+      // Use Promise.race to apply a timeout
+      const result = await Promise.race([
+        model.generateContent(prompt),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Metadata generation timed out')), 30000)
+        )
+      ]);
+      
       const response = await result.response
       const text = response.text()
 
@@ -364,7 +374,14 @@ async function reelaborateText(
         Texto extraído: "${extractedText.substring(0, 5000)}"
       `
 
-      const result = await model.generateContent(prompt)
+      // Use Promise.race to apply a timeout
+      const result = await Promise.race([
+        model.generateContent(prompt),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Text reelaboration timed out')), 45000)
+        )
+      ]);
+      
       const response = await result.response
       let text = response.text()
 
@@ -518,6 +535,12 @@ async function generateSocialMediaText(
  */
 async function sendSlackUpdate(channel, message, color = 'good', attachment = null) {
   try {
+    // Add validation for missing or invalid channels
+    if (!channel) {
+      console.error('Missing channel in sendSlackUpdate call');
+      channel = 'general'; // Use a default channel
+    }
+    
     // Ensure channel doesn't have duplicate # prefix
     const formattedChannel = channel.startsWith('#') ? channel : `#${channel}`
     
@@ -675,25 +698,6 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
   }
 })
 
-// NEW ROUTE: Add this separate endpoint to handle the processing
-slackRoutes.post('/process-article', async (req, res) => {
-  // For security
-  const authHeader = req.headers.authorization
-  if (authHeader !== `Bearer ${process.env.INTERNAL_API_KEY || 'secret'}`) {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
-  
-  const { url, user_name, channel_name } = req.body
-  
-  // Respond immediately
-  res.status(200).json({ status: 'Processing started' })
-  
-  // Process in background
-  processNewsArticle(url, user_name, channel_name).catch(error => {
-    console.error('Background processing error:', error)
-  })
-})
-
 // Add this in slack-integration.js
 slackRoutes.get('/enviar-noticia', (req, res) => {
   res.json({
@@ -706,21 +710,35 @@ slackRoutes.get('/enviar-noticia', (req, res) => {
  * Process news article asynchronously
  */
 async function processNewsArticle(url, user_name, channel_name) {
+  // Prevent duplicate processing
+  if (processingUrls.has(url)) {
+    console.log(`Already processing ${url}, skipping duplicate request`);
+    return;
+  }
+  
+  processingUrls.add(url);
+  
   try {
     console.log(`=== STARTING ARTICLE PROCESSING ===`)
     console.log(`URL: ${url}`)
     console.log(`User: ${user_name}`)
     console.log(`Channel: ${channel_name}`)
     
+    // If channel_name is 'debug' (nonexistent channel), use 'general' instead
+    const notificationChannel = (!channel_name || channel_name === 'debug') ? 
+      'general' : channel_name;
+    
+    console.log(`Using notification channel: ${notificationChannel}`)
+    
     // Send initial confirmation to the channel
     await sendSlackUpdate(
-      channel_name,
+      notificationChannel,
       `🔄 Processing started for article: ${url}`,
       'good',
       {
         fields: [
           { title: 'URL', value: url, short: false },
-          { title: 'Requested by', value: user_name, short: true },
+          { title: 'Requested by', value: user_name || 'Unknown', short: true },
           { title: 'Status', value: 'Processing started', short: true },
         ],
       }
@@ -732,7 +750,7 @@ async function processNewsArticle(url, user_name, channel_name) {
     if (!htmlContent) {
       console.error('❌ Failed to fetch HTML content')
       await sendSlackUpdate(
-        channel_name,
+        notificationChannel,
         `❌ Failed to fetch content from ${url}`,
         'danger'
       )
@@ -751,7 +769,7 @@ async function processNewsArticle(url, user_name, channel_name) {
     if (!extractedText || extractedText.length < 50) {
       console.error('❌ Insufficient content extracted')
       await sendSlackUpdate(
-        channel_name,
+        notificationChannel,
         `❌ Insufficient content extracted from ${url}. Only ${extractedText.length} characters found.`,
         'danger'
       )
@@ -837,7 +855,7 @@ async function processNewsArticle(url, user_name, channel_name) {
 
     // Step 10: Send success notification to Slack
     console.log('Step 10: Sending success notification...')
-    await sendSlackUpdate(channel_name, null, 'good', {
+    await sendSlackUpdate(notificationChannel, null, 'good', {
       text: `✅ Article processed successfully!`,
       fields: [
         { title: 'Title', value: metadata.title, short: false },
@@ -872,8 +890,12 @@ async function processNewsArticle(url, user_name, channel_name) {
     
     // Add logging for Slack notification attempt
     try {
+      // Get a valid channel for error messages
+      const errorChannel = (!channel_name || channel_name === 'debug') ? 
+        'general' : channel_name;
+        
       await sendSlackUpdate(
-        channel_name,
+        errorChannel,
         `❌ Critical error processing article: ${error.message}`,
         'danger',
         {
@@ -884,10 +906,12 @@ async function processNewsArticle(url, user_name, channel_name) {
           ],
         }
       )
-      console.log('Error notification sent to Slack')
     } catch (slackError) {
       console.error('Failed to send error notification to Slack:', slackError)
     }
+  } finally {
+    // Always remove from processing set when done
+    processingUrls.delete(url);
   }
 }
 
@@ -955,7 +979,7 @@ slackRoutes.get('/debug-enviar-noticia', async (req, res) => {
       // Start processing in the background
       processingStarted = true;
       const testUser = 'debug-test';
-      const testChannel = 'debug';
+      const testChannel = 'general'; // Changed from 'debug' to 'general'
       
       setTimeout(() => {
         console.log(`Starting background test processing for ${testUrl}`);
