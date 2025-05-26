@@ -528,7 +528,7 @@ slackRoutes.post('/social-task', async (req, res) => {
   try {
     const { channel_name, user_name, text } = req.body
 
-    if (!text || text.trim() === '') {
+    if (!text || text.trim() === '') {s
       return res.json({
         response_type: 'ephemeral',
         text: '❌ Usage: /social-task "Your news headline here"',
@@ -642,11 +642,16 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
  */
 async function processNewsArticle(url, userName, channelName) {
   try {
-    console.log(`Starting article processing for: ${url}`)
+    console.log(`=== STARTING ARTICLE PROCESSING ===`)
+    console.log(`URL: ${url}`)
+    console.log(`User: ${userName}`)
+    console.log(`Channel: ${channelName}`)
 
     // Step 1: Fetch HTML content
+    console.log('Step 1: Fetching HTML content...')
     const htmlContent = await fetchContent(url)
     if (!htmlContent) {
+      console.error('❌ Failed to fetch HTML content')
       await sendSlackUpdate(
         channelName,
         `❌ Failed to fetch content from ${url}`,
@@ -654,56 +659,62 @@ async function processNewsArticle(url, userName, channelName) {
       )
       return
     }
+    console.log(`✅ HTML content fetched: ${htmlContent.length} characters`)
 
     // Step 2: Extract images and text
-    const { images, markdown: imageMarkdown } =
-      extractImagesAsMarkdown(htmlContent)
+    console.log('Step 2: Extracting images and text...')
+    const { images, markdown: imageMarkdown } = extractImagesAsMarkdown(htmlContent)
+    console.log(`✅ Images extracted: ${images.length} images`)
+    
     const extractedText = extractText(htmlContent)
+    console.log(`✅ Text extracted: ${extractedText.length} characters`)
 
     if (!extractedText || extractedText.length < 50) {
+      console.error('❌ Insufficient content extracted')
       await sendSlackUpdate(
         channelName,
-        `❌ Insufficient content extracted from ${url}`,
+        `❌ Insufficient content extracted from ${url}. Only ${extractedText.length} characters found.`,
         'danger'
       )
       return
     }
 
-    console.log(
-      `Extracted ${extractedText.length} characters of text and ${images.length} images`
-    )
-
     // Step 3: Extract embeds
+    console.log('Step 3: Extracting embeds...')
     const embeds = extractEmbeds(htmlContent)
+    console.log(`✅ Embeds extracted:`, Object.keys(embeds).filter(key => embeds[key]))
 
     // Step 4: Generate metadata
-    console.log('Generating metadata...')
+    console.log('Step 4: Generating metadata with AI...')
     const metadata = await generateMetadata(extractedText)
+    console.log(`✅ Metadata generated:`, metadata)
 
     // Step 5: Reelaborate text
-    console.log('Reelaborating text...')
+    console.log('Step 5: Reelaborating text with AI...')
     const reelaboratedText = await reelaborateText(extractedText, imageMarkdown)
+    console.log(`✅ Text reelaborated: ${reelaboratedText.length} characters`)
 
     // Step 6: Generate tags
-    console.log('Generating tags...')
+    console.log('Step 6: Generating tags with AI...')
     const tags = await generateTags(extractedText, metadata)
+    console.log(`✅ Tags generated: ${tags}`)
 
     // Step 7: Generate social media text
-    console.log('Generating social media text...')
-    const socialMediaText = await generateSocialMediaText(
-      extractedText,
-      metadata,
-      tags
-    )
+    console.log('Step 7: Generating social media text with AI...')
+    const socialMediaText = await generateSocialMediaText(extractedText, metadata, tags)
+    console.log(`✅ Social media text generated: ${socialMediaText.length} characters`)
 
     // Step 8: Prepare Airtable record
+    console.log('Step 8: Preparing Airtable record...')
     const sourceName = extractSourceName(url)
+    console.log(`✅ Source name: ${sourceName}`)
 
     // Format image attachments for Airtable
-    const imageAttachments =
-      images.length > 0 ? images.map((imageUrl) => ({ url: imageUrl })) : []
+    const imageAttachments = images.length > 0 ? images.map((imageUrl) => ({ url: imageUrl })) : []
+    console.log(`✅ Image attachments prepared: ${imageAttachments.length}`)
 
     // Generate next ID for the record
+    console.log('Step 8a: Getting next ID...')
     const existingRecords = await base('Slack Noticias')
       .select({
         fields: ['id'],
@@ -712,8 +723,8 @@ async function processNewsArticle(url, userName, channelName) {
       })
       .firstPage()
 
-    const nextId =
-      existingRecords.length > 0 ? (existingRecords[0].fields.id || 0) + 1 : 1
+    const nextId = existingRecords.length > 0 ? (existingRecords[0].fields.id || 0) + 1 : 1
+    console.log(`✅ Next ID: ${nextId}`)
 
     const recordFields = {
       id: nextId,
@@ -731,21 +742,22 @@ async function processNewsArticle(url, userName, channelName) {
       'tw-post': embeds.twitter || '',
       'yt-video': embeds.youtube || '',
       status: 'draft',
-      section: 'draft', // Default section
+      section: 'draft',
       tags: tags,
       socialMediaText: socialMediaText,
-      front: '', // Default empty
-      order: 'normal', // Default order
+      front: '',
+      order: 'normal',
     }
+
+    console.log('Step 9: Creating Airtable record...')
+    console.log('Record fields:', JSON.stringify(recordFields, null, 2))
 
     // Step 9: Insert into Airtable
     const record = await base('Slack Noticias').create(recordFields)
-
-    console.log(
-      `Successfully created record ${record.id} in Slack Noticias table`
-    )
+    console.log(`✅ Successfully created record ${record.id} in Slack Noticias table`)
 
     // Step 10: Send success notification to Slack
+    console.log('Step 10: Sending success notification...')
     await sendSlackUpdate(channelName, null, 'good', {
       text: `✅ Article processed successfully!`,
       fields: [
@@ -763,45 +775,30 @@ async function processNewsArticle(url, userName, channelName) {
         },
       ],
     })
+
+    console.log(`=== PROCESSING COMPLETE ===`)
+
   } catch (error) {
-    console.error('Error processing news article:', error)
+    console.error('❌ Critical Error in processNewsArticle:', error)
+    console.error('Error stack:', error.stack)
     await sendSlackUpdate(
       channelName,
-      `❌ Error processing article: ${error.message}`,
+      `❌ Critical error processing article: ${error.message}`,
       'danger'
     )
   }
 }
 
-/**
- * Send update to Slack channel
- */
-async function sendSlackUpdate(
-  channel,
-  message,
-  color = 'good',
-  attachment = null
-) {
-  try {
-    const slackMessage = {
-      channel: `#${channel}`,
-      text: message || 'Article processing update',
-      attachments: attachment
-        ? [{ color, ...attachment }]
-        : [{ color, text: message }],
-    }
-
-    await fetch('https://slack.com/api/chat.postMessage', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
-      },
-      body: JSON.stringify(slackMessage),
-    })
-  } catch (error) {
-    console.error('Error sending Slack update:', error)
-  }
-}
+// Add debug route for environment variables
+slackRoutes.get('/debug-env', (req, res) => {
+  res.json({
+    hasAirtableToken: !!process.env.AIRTABLE_TOKEN,
+    hasAirtableBaseId: !!process.env.AIRTABLE_BASE_ID,
+    hasGeminiApiKey: !!process.env.GEMINI_API_KEY,
+    hasSlackBotToken: !!process.env.SLACK_BOT_TOKEN,
+    geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+    nodeEnv: process.env.NODE_ENV
+  })
+})
 
 export default slackRoutes
