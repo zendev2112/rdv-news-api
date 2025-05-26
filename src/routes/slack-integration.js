@@ -866,7 +866,7 @@ slackRoutes.get('/debug-env', (req, res) => {
 // Add this test route:
 
 slackRoutes.get('/test-flow', async (req, res) => {
-  const testUrl = req.query.url || 'https://www.clarin.com/politica/alberto-fernandez-cristina-kirchner-separaron-oficina-fuerte-interna_0_MkJZUElBmX.html'
+  const testUrl = req.query.url || 'https://www.pagina12.com.ar/828737-cristina-kirchner-advirtio-la-inminencia-de-un-default-y-lla'
   
   try {
     // Test the entire flow sequentially
