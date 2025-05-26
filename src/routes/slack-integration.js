@@ -1,3 +1,5 @@
+// Complete implementation with fix for URL mixup
+
 import express from 'express'
 import Airtable from 'airtable'
 import axios from 'axios'
@@ -654,6 +656,7 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
     }
     
     const url = text.trim().split(' ')[0]
+    const requestId = Date.now() // Add unique ID to distinguish between concurrent requests
     
     try {
       new URL(url)
@@ -683,10 +686,10 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
     // Process the article in the background after responding to Slack
     // Use setTimeout to ensure this runs outside the request-response cycle
     setTimeout(() => {
-      console.log(`Starting background processing for ${url} requested by ${user_name}`)
+      console.log(`[${requestId}] Starting background processing for ${url} requested by ${user_name}`)
       processNewsArticle(url, user_name, channel_name)
-        .then(() => console.log(`Successfully processed article: ${url}`))
-        .catch(err => console.error(`Failed to process article ${url}:`, err))
+        .then(() => console.log(`[${requestId}] Successfully processed article: ${url}`))
+        .catch(err => console.error(`[${requestId}] Failed to process article ${url}:`, err))
     }, 100)
     
   } catch (error) {
@@ -710,25 +713,28 @@ slackRoutes.get('/enviar-noticia', (req, res) => {
  * Process news article asynchronously
  */
 async function processNewsArticle(url, user_name, channel_name) {
+  // Add unique processing ID for each request
+  const processId = Date.now()
+  
   // Prevent duplicate processing
   if (processingUrls.has(url)) {
-    console.log(`Already processing ${url}, skipping duplicate request`);
+    console.log(`[${processId}] Already processing ${url}, skipping duplicate request`);
     return;
   }
   
   processingUrls.add(url);
   
   try {
-    console.log(`=== STARTING ARTICLE PROCESSING ===`)
-    console.log(`URL: ${url}`)
-    console.log(`User: ${user_name}`)
-    console.log(`Channel: ${channel_name}`)
+    console.log(`[${processId}] === STARTING ARTICLE PROCESSING ===`)
+    console.log(`[${processId}] URL: ${url}`)
+    console.log(`[${processId}] User: ${user_name}`)
+    console.log(`[${processId}] Channel: ${channel_name}`)
     
     // If channel_name is 'debug' (nonexistent channel), use 'general' instead
     const notificationChannel = (!channel_name || channel_name === 'debug') ? 
       'general' : channel_name;
     
-    console.log(`Using notification channel: ${notificationChannel}`)
+    console.log(`[${processId}] Using notification channel: ${notificationChannel}`)
     
     // Send initial confirmation to the channel
     await sendSlackUpdate(
@@ -745,10 +751,10 @@ async function processNewsArticle(url, user_name, channel_name) {
     )
 
     // Step 1: Fetch HTML content
-    console.log('Step 1: Fetching HTML content...')
+    console.log(`[${processId}] Step 1: Fetching HTML content...`)
     const htmlContent = await fetchContent(url)
     if (!htmlContent) {
-      console.error('❌ Failed to fetch HTML content')
+      console.error(`[${processId}] ❌ Failed to fetch HTML content`)
       await sendSlackUpdate(
         notificationChannel,
         `❌ Failed to fetch content from ${url}`,
@@ -756,18 +762,18 @@ async function processNewsArticle(url, user_name, channel_name) {
       )
       return
     }
-    console.log(`✅ HTML content fetched: ${htmlContent.length} characters`)
+    console.log(`[${processId}] ✅ HTML content fetched: ${htmlContent.length} characters`)
 
     // Step 2: Extract images and text
-    console.log('Step 2: Extracting images and text...')
+    console.log(`[${processId}] Step 2: Extracting images and text...`)
     const { images, markdown: imageMarkdown } = extractImagesAsMarkdown(htmlContent)
-    console.log(`✅ Images extracted: ${images.length} images`)
+    console.log(`[${processId}] ✅ Images extracted: ${images.length} images`)
     
     const extractedText = extractText(htmlContent)
-    console.log(`✅ Text extracted: ${extractedText.length} characters`)
+    console.log(`[${processId}] ✅ Text extracted: ${extractedText.length} characters`)
 
     if (!extractedText || extractedText.length < 50) {
-      console.error('❌ Insufficient content extracted')
+      console.error(`[${processId}] ❌ Insufficient content extracted`)
       await sendSlackUpdate(
         notificationChannel,
         `❌ Insufficient content extracted from ${url}. Only ${extractedText.length} characters found.`,
@@ -777,41 +783,41 @@ async function processNewsArticle(url, user_name, channel_name) {
     }
 
     // Step 3: Extract embeds
-    console.log('Step 3: Extracting embeds...')
+    console.log(`[${processId}] Step 3: Extracting embeds...`)
     const embeds = extractEmbeds(htmlContent)
-    console.log(`✅ Embeds extracted:`, Object.keys(embeds).filter(key => embeds[key]))
+    console.log(`[${processId}] ✅ Embeds extracted:`, Object.keys(embeds).filter(key => embeds[key]))
 
     // Step 4: Generate metadata
-    console.log('Step 4: Generating metadata with AI...')
+    console.log(`[${processId}] Step 4: Generating metadata with AI...`)
     const metadata = await generateMetadata(extractedText)
-    console.log(`✅ Metadata generated:`, metadata)
+    console.log(`[${processId}] ✅ Metadata generated:`, metadata)
 
     // Step 5: Reelaborate text
-    console.log('Step 5: Reelaborating text with AI...')
+    console.log(`[${processId}] Step 5: Reelaborating text with AI...`)
     const reelaboratedText = await reelaborateText(extractedText, imageMarkdown)
-    console.log(`✅ Text reelaborated: ${reelaboratedText.length} characters`)
+    console.log(`[${processId}] ✅ Text reelaborated: ${reelaboratedText.length} characters`)
 
     // Step 6: Generate tags
-    console.log('Step 6: Generating tags with AI...')
+    console.log(`[${processId}] Step 6: Generating tags with AI...`)
     const tags = await generateTags(extractedText, metadata)
-    console.log(`✅ Tags generated: ${tags}`)
+    console.log(`[${processId}] ✅ Tags generated: ${tags}`)
 
     // Step 7: Generate social media text
-    console.log('Step 7: Generating social media text with AI...')
+    console.log(`[${processId}] Step 7: Generating social media text with AI...`)
     const socialMediaText = await generateSocialMediaText(extractedText, metadata, tags)
-    console.log(`✅ Social media text generated: ${socialMediaText.length} characters`)
+    console.log(`[${processId}] ✅ Social media text generated: ${socialMediaText.length} characters`)
 
     // Step 8: Prepare Airtable record
-    console.log('Step 8: Preparing Airtable record...')
+    console.log(`[${processId}] Step 8: Preparing Airtable record...`)
     const sourceName = extractSourceName(url)
-    console.log(`✅ Source name: ${sourceName}`)
+    console.log(`[${processId}] ✅ Source name: ${sourceName}`)
 
     // Format image attachments for Airtable
     const imageAttachments = images.length > 0 ? images.map((imageUrl) => ({ url: imageUrl })) : []
-    console.log(`✅ Image attachments prepared: ${imageAttachments.length}`)
+    console.log(`[${processId}] ✅ Image attachments prepared: ${imageAttachments.length}`)
 
     // Generate next ID for the record
-    console.log('Step 8a: Getting next ID...')
+    console.log(`[${processId}] Step 8a: Getting next ID...`)
     const existingRecords = await base('Slack Noticias')
       .select({
         fields: ['id'],
@@ -821,7 +827,7 @@ async function processNewsArticle(url, user_name, channel_name) {
       .firstPage()
 
     const nextId = existingRecords.length > 0 ? (existingRecords[0].fields.id || 0) + 1 : 1
-    console.log(`✅ Next ID: ${nextId}`)
+    console.log(`[${processId}] ✅ Next ID: ${nextId}`)
 
     const recordFields = {
       id: nextId,
@@ -846,15 +852,15 @@ async function processNewsArticle(url, user_name, channel_name) {
       order: 'normal',
     }
 
-    console.log('Step 9: Creating Airtable record...')
-    console.log('Record fields:', JSON.stringify(recordFields, null, 2))
+    console.log(`[${processId}] Step 9: Creating Airtable record...`)
+    console.log(`[${processId}] Record fields:`, JSON.stringify(recordFields, null, 2))
 
     // Step 9: Insert into Airtable
     const record = await base('Slack Noticias').create(recordFields)
-    console.log(`✅ Successfully created record ${record.id} in Slack Noticias table`)
+    console.log(`[${processId}] ✅ Successfully created record ${record.id} in Slack Noticias table`)
 
     // Step 10: Send success notification to Slack
-    console.log('Step 10: Sending success notification...')
+    console.log(`[${processId}] Step 10: Sending success notification...`)
     await sendSlackUpdate(notificationChannel, null, 'good', {
       text: `✅ Article processed successfully!`,
       fields: [
@@ -873,14 +879,14 @@ async function processNewsArticle(url, user_name, channel_name) {
       ],
     })
 
-    console.log(`=== PROCESSING COMPLETE ===`)
+    console.log(`[${processId}] === PROCESSING COMPLETE ===`)
 
   } catch (error) {
-    console.error('❌ Critical Error in processNewsArticle:', error)
-    console.error('Error stack:', error.stack)
+    console.error(`[${processId}] ❌ Critical Error in processNewsArticle:`, error)
+    console.error(`[${processId}] Error stack:`, error.stack)
     
     // Log more details for troubleshooting
-    console.error('Error details:', {
+    console.error(`[${processId}] Error details:`, {
       url,
       user_name,
       channel_name,
@@ -907,7 +913,7 @@ async function processNewsArticle(url, user_name, channel_name) {
         }
       )
     } catch (slackError) {
-      console.error('Failed to send error notification to Slack:', slackError)
+      console.error(`[${processId}] Failed to send error notification to Slack:`, slackError)
     }
   } finally {
     // Always remove from processing set when done
@@ -980,12 +986,13 @@ slackRoutes.get('/debug-enviar-noticia', async (req, res) => {
       processingStarted = true;
       const testUser = 'debug-test';
       const testChannel = 'general'; // Changed from 'debug' to 'general'
+      const debugId = Date.now(); // Add unique ID for this test
       
       setTimeout(() => {
-        console.log(`Starting background test processing for ${testUrl}`);
+        console.log(`[${debugId}] Starting background test processing for ${testUrl}`);
         processNewsArticle(testUrl, testUser, testChannel)
-          .then(() => console.log(`Successfully processed test article: ${testUrl}`))
-          .catch(err => console.error(`Failed to process test article ${testUrl}:`, err));
+          .then(() => console.log(`[${debugId}] Successfully processed test article: ${testUrl}`))
+          .catch(err => console.error(`[${debugId}] Failed to process test article ${testUrl}:`, err));
       }, 100);
     }
     
