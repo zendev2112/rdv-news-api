@@ -786,3 +786,5 @@ async function processStep5SaveToAirtable(stepData) {
     await sendSlackUpdate(channel_name, `❌ Failed to save to Airtable: ${error.message}`, 'danger')
   }
 }
+
+export default slackRoutes
