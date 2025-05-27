@@ -541,17 +541,7 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
       ],
     })
 
-    // Process the article in the background
-    setTimeout(() => {
-      console.log(`[${requestId}] Starting processing for ${url}`)
-      processNewsArticle(url, user_name, channel_name)
-        .then(() =>
-          console.log(`[${requestId}] Successfully processed article: ${url}`)
-        )
-        .catch((err) =>
-          console.error(`[${requestId}] Failed to process article ${url}:`, err)
-        )
-    }, 100)
+
 
     // Start the processing chain with step 1
     setTimeout(async () => {
