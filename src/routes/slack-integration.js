@@ -500,7 +500,7 @@ slackRoutes.use((req, res, next) => {
   next()
 })
 
-// Main Slack command
+// Replace your current /enviar-noticia endpoint with this
 slackRoutes.post('/enviar-noticia', async (req, res) => {
   try {
     const { channel_name, user_name, text } = req.body
@@ -541,18 +541,11 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
       ],
     })
 
-
-
-    // Start the processing chain with step 1
+    // Process sequentially like fetch-to-airtable
     setTimeout(async () => {
-      try {
-        console.log(`[${requestId}] Starting step 1: Content extraction`)
-        await processStep1ContentExtraction(url, user_name, channel_name, requestId)
-      } catch (error) {
-        console.error(`[${requestId}] Failed to start processing:`, error)
-        await sendSlackUpdate(channel_name, `❌ Failed to start processing: ${error.message}`, 'danger')
-      }
+      await processNewsArticleSequential(url, user_name, channel_name, requestId)
     }, 100)
+
   } catch (error) {
     console.error('Error in enviar-noticia command:', error)
     return res.json({
@@ -584,142 +577,64 @@ slackRoutes.get('/health', (req, res) => {
   })
 })
 
-// Step 1: Content Extraction
-async function processStep1ContentExtraction(url, user_name, channel_name, processId) {
+// Replace your current step-based approach with this single processing function
+async function processNewsArticleSequential(url, user_name, channel_name, processId) {
   try {
-    console.log(`[${processId}] === STEP 1: CONTENT EXTRACTION ===`)
+    console.log(`[${processId}] === STARTING SEQUENTIAL PROCESSING ===`)
+    console.log(`[${processId}] URL: ${url}`)
+    console.log(`[${processId}] User: ${user_name}`)
+    console.log(`[${processId}] Channel: ${channel_name}`)
+
+    // Step 1: Fetch and extract content
+    console.log(`[${processId}] Step 1: Fetching content...`)
+    await sendSlackUpdate(channel_name, `📄 Extracting content from ${extractSourceName(url)}...`, 'good')
     
-    // Fetch HTML content
     const htmlContent = await fetchContent(url)
     if (!htmlContent) {
       throw new Error('Failed to fetch HTML content')
     }
 
-    // Extract images and text
     const { images, markdown: imageMarkdown } = extractImagesAsMarkdown(htmlContent)
     const extractedText = extractText(htmlContent)
     const embeds = extractEmbeds(htmlContent)
+    const sourceName = extractSourceName(url)
 
     if (extractedText.length < 50) {
       throw new Error('Insufficient content extracted')
     }
 
-    console.log(`[${processId}] ✅ Content extracted successfully`)
+    console.log(`[${processId}] ✅ Content extracted: ${extractedText.length} chars, ${images.length} images`)
 
-    // Store temporary data for next step
-    const stepData = {
-      processId,
-      url,
-      user_name,
-      channel_name,
-      extractedText,
-      images,
-      imageMarkdown,
-      embeds,
-      sourceName: extractSourceName(url)
-    }
-
-    // Send update to Slack
-    await sendSlackUpdate(channel_name, `📄 Content extracted, generating metadata...`, 'good')
-
-    // Trigger step 2
-    setTimeout(() => processStep2Metadata(stepData), 100)
-
-  } catch (error) {
-    console.error(`[${processId}] Step 1 failed:`, error)
-    await sendSlackUpdate(channel_name, `❌ Content extraction failed: ${error.message}`, 'danger')
-  }
-}
-
-// Step 2: AI Metadata Generation
-async function processStep2Metadata(stepData) {
-  const { processId, extractedText, channel_name } = stepData
-  
-  try {
-    console.log(`[${processId}] === STEP 2: METADATA GENERATION ===`)
+    // Step 2: Generate metadata with AI
+    console.log(`[${processId}] Step 2: Generating metadata...`)
+    await sendSlackUpdate(channel_name, `🤖 Generating metadata...`, 'good')
     
     const metadata = await generateMetadata(extractedText)
-    console.log(`[${processId}] ✅ Metadata generated`)
+    console.log(`[${processId}] ✅ Metadata generated:`, metadata.title)
 
-    // Update step data
-    stepData.metadata = metadata
-
-    // Send update to Slack
-    await sendSlackUpdate(channel_name, `🤖 Metadata generated, reelaborating text...`, 'good')
-
-    // Trigger step 3
-    setTimeout(() => processStep3Reelaboration(stepData), 100)
-
-  } catch (error) {
-    console.error(`[${processId}] Step 2 failed:`, error)
-    await sendSlackUpdate(channel_name, `❌ Metadata generation failed: ${error.message}`, 'danger')
-  }
-}
-
-// Step 3: Text Reelaboration
-async function processStep3Reelaboration(stepData) {
-  const { processId, extractedText, imageMarkdown, channel_name } = stepData
-  
-  try {
-    console.log(`[${processId}] === STEP 3: TEXT REELABORATION ===`)
+    // Step 3: Reelaborate text
+    console.log(`[${processId}] Step 3: Reelaborating text...`)
+    await sendSlackUpdate(channel_name, `✍️ Reelaborating text...`, 'good')
     
     const reelaboratedText = await reelaborateText(extractedText, imageMarkdown)
-    console.log(`[${processId}] ✅ Text reelaborated`)
+    console.log(`[${processId}] ✅ Text reelaborated: ${reelaboratedText.length} characters`)
 
-    // Update step data
-    stepData.reelaboratedText = reelaboratedText
-
-    // Send update to Slack
-    await sendSlackUpdate(channel_name, `✍️ Text reelaborated, generating tags...`, 'good')
-
-    // Trigger step 4
-    setTimeout(() => processStep4Tags(stepData), 100)
-
-  } catch (error) {
-    console.error(`[${processId}] Step 3 failed:`, error)
-    await sendSlackUpdate(channel_name, `❌ Text reelaboration failed: ${error.message}`, 'danger')
-  }
-}
-
-// Step 4: Tags and Social Media
-async function processStep4Tags(stepData) {
-  const { processId, extractedText, metadata, channel_name } = stepData
-  
-  try {
-    console.log(`[${processId}] === STEP 4: TAGS AND SOCIAL MEDIA ===`)
+    // Step 4: Generate tags
+    console.log(`[${processId}] Step 4: Generating tags...`)
+    await sendSlackUpdate(channel_name, `🏷️ Generating tags...`, 'good')
     
     const tags = await generateTags(extractedText, metadata)
+    console.log(`[${processId}] ✅ Tags generated: ${tags}`)
+
+    // Step 5: Generate social media text
+    console.log(`[${processId}] Step 5: Generating social media text...`)
     const socialMediaText = await generateSocialMediaText(extractedText, metadata, tags)
-    
-    console.log(`[${processId}] ✅ Tags and social media text generated`)
+    console.log(`[${processId}] ✅ Social media text generated`)
 
-    // Update step data
-    stepData.tags = tags
-    stepData.socialMediaText = socialMediaText
+    // Step 6: Prepare for Airtable
+    console.log(`[${processId}] Step 6: Preparing Airtable record...`)
+    await sendSlackUpdate(channel_name, `💾 Saving to Airtable...`, 'good')
 
-    // Send update to Slack
-    await sendSlackUpdate(channel_name, `🏷️ Tags generated, saving to Airtable...`, 'good')
-
-    // Trigger final step
-    setTimeout(() => processStep5SaveToAirtable(stepData), 100)
-
-  } catch (error) {
-    console.error(`[${processId}] Step 4 failed:`, error)
-    await sendSlackUpdate(channel_name, `❌ Tags generation failed: ${error.message}`, 'danger')
-  }
-}
-
-// Step 5: Save to Airtable
-async function processStep5SaveToAirtable(stepData) {
-  const { 
-    processId, url, images, embeds, metadata, reelaboratedText, 
-    tags, socialMediaText, sourceName, channel_name 
-  } = stepData
-  
-  try {
-    console.log(`[${processId}] === STEP 5: SAVE TO AIRTABLE ===`)
-    
-    // Format image attachments
     const imageAttachments = images.length > 0 ? images.map((imageUrl) => ({ url: imageUrl })) : []
 
     // Get next ID
@@ -756,11 +671,11 @@ async function processStep5SaveToAirtable(stepData) {
       order: 'normal',
     }
 
-    // Create Airtable record
+    console.log(`[${processId}] Step 7: Creating Airtable record...`)
     const record = await base('Slack Noticias').create(recordFields)
     console.log(`[${processId}] ✅ Successfully created record ${record.id}`)
 
-    // Send final success notification
+    // Final success notification
     await sendSlackUpdate(channel_name, null, 'good', {
       text: `✅ Article processed successfully!`,
       fields: [
@@ -782,8 +697,8 @@ async function processStep5SaveToAirtable(stepData) {
     console.log(`[${processId}] === PROCESSING COMPLETE ===`)
 
   } catch (error) {
-    console.error(`[${processId}] Step 5 failed:`, error)
-    await sendSlackUpdate(channel_name, `❌ Failed to save to Airtable: ${error.message}`, 'danger')
+    console.error(`[${processId}] ❌ Error in sequential processing:`, error)
+    await sendSlackUpdate(channel_name, `❌ Error processing article: ${error.message}`, 'danger')
   }
 }
 
