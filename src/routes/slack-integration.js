@@ -487,213 +487,8 @@ async function sendSlackUpdate(
   }
 }
 
-/**
- * Process news article asynchronously
- */
-async function processNewsArticle(url, user_name, channel_name) {
-  // Add unique processing ID for each request
-  const processId = Date.now()
 
-  // Prevent duplicate processing
-  if (processingUrls.has(url)) {
-    console.log(
-      `[${processId}] Already processing ${url}, skipping duplicate request`
-    )
-    return
-  }
 
-  processingUrls.add(url)
-
-  try {
-    console.log(`[${processId}] === STARTING ARTICLE PROCESSING ===`)
-    console.log(`[${processId}] URL: ${url}`)
-    console.log(`[${processId}] User: ${user_name}`)
-    console.log(`[${processId}] Channel: ${channel_name}`)
-
-    // Use general channel if no channel provided
-    const notificationChannel = channel_name || 'general'
-
-    // Send initial confirmation to the channel
-    await sendSlackUpdate(
-      notificationChannel,
-      `🔄 Processing article from ${url}`,
-      'good',
-      {
-        fields: [
-          { title: 'URL', value: url, short: false },
-          { title: 'Requested by', value: user_name || 'Unknown', short: true },
-          { title: 'Status', value: 'Processing started', short: true },
-        ],
-      }
-    )
-
-    // Step 1: Fetch HTML content
-    console.log(`[${processId}] Step 1: Fetching HTML content...`)
-    const htmlContent = await fetchContent(url)
-    if (!htmlContent) {
-      throw new Error('Failed to fetch HTML content')
-    }
-    console.log(
-      `[${processId}] ✅ HTML content fetched: ${htmlContent.length} characters`
-    )
-
-    // Step 2: Extract images and text
-    console.log(`[${processId}] Step 2: Extracting images and text...`)
-    const { images, markdown: imageMarkdown } =
-      extractImagesAsMarkdown(htmlContent)
-    console.log(`[${processId}] ✅ Images extracted: ${images.length} images`)
-
-    const extractedText = extractText(htmlContent)
-    console.log(
-      `[${processId}] ✅ Text extracted: ${extractedText.length} characters`
-    )
-
-    if (extractedText.length < 50) {
-      throw new Error('Insufficient content extracted')
-    }
-
-    // Step 3: Extract embeds
-    console.log(`[${processId}] Step 3: Extracting embeds...`)
-    const embeds = extractEmbeds(htmlContent)
-    console.log(
-      `[${processId}] ✅ Embeds extracted:`,
-      Object.keys(embeds).filter((key) => embeds[key])
-    )
-
-    // Step 4: Generate metadata
-    console.log(`[${processId}] Step 4: Generating metadata with AI...`)
-    const metadata = await generateMetadata(extractedText)
-    console.log(`[${processId}] ✅ Metadata generated:`, metadata)
-
-    // Step 5: Reelaborate text
-    console.log(`[${processId}] Step 5: Reelaborating text with AI...`)
-    const reelaboratedText = await reelaborateText(extractedText, imageMarkdown)
-    console.log(
-      `[${processId}] ✅ Text reelaborated: ${reelaboratedText.length} characters`
-    )
-
-    // Step 6: Generate tags
-    console.log(`[${processId}] Step 6: Generating tags with AI...`)
-    const tags = await generateTags(extractedText, metadata)
-    console.log(`[${processId}] ✅ Tags generated: ${tags}`)
-
-    // Step 7: Generate social media text
-    console.log(
-      `[${processId}] Step 7: Generating social media text with AI...`
-    )
-    const socialMediaText = await generateSocialMediaText(
-      extractedText,
-      metadata,
-      tags
-    )
-    console.log(
-      `[${processId}] ✅ Social media text generated: ${socialMediaText.length} characters`
-    )
-
-    // Step 8: Prepare Airtable record
-    console.log(`[${processId}] Step 8: Preparing Airtable record...`)
-    const sourceName = extractSourceName(url)
-    console.log(`[${processId}] ✅ Source name: ${sourceName}`)
-
-    // Format image attachments for Airtable
-    const imageAttachments =
-      images.length > 0 ? images.map((imageUrl) => ({ url: imageUrl })) : []
-
-    // Generate next ID for the record
-    console.log(`[${processId}] Step 8a: Getting next ID...`)
-    const existingRecords = await base('Slack Noticias')
-      .select({
-        fields: ['id'],
-        sort: [{ field: 'id', direction: 'desc' }],
-        maxRecords: 1,
-      })
-      .firstPage()
-
-    const nextId =
-      existingRecords.length > 0 ? (existingRecords[0].fields.id || 0) + 1 : 1
-    console.log(`[${processId}] ✅ Next ID: ${nextId}`)
-
-    const recordFields = {
-      id: nextId,
-      title: metadata.title,
-      overline: metadata.volanta,
-      excerpt: metadata.bajada,
-      article: reelaboratedText,
-      image: imageAttachments,
-      imgUrl: images.length > 0 ? images[0] : '',
-      'article-images': images.join(', '),
-      url: url,
-      source: sourceName,
-      'ig-post': embeds.instagram || '',
-      'fb-post': embeds.facebook || '',
-      'tw-post': embeds.twitter || '',
-      'yt-video': embeds.youtube || '',
-      status: 'draft',
-      section: 'draft',
-      tags: tags,
-      socialMediaText: socialMediaText,
-      front: '',
-      order: 'normal',
-    }
-
-    console.log(`[${processId}] Step 9: Creating Airtable record...`)
-
-    // Step 9: Insert into Airtable
-    const record = await base('Slack Noticias').create(recordFields)
-    console.log(
-      `[${processId}] ✅ Successfully created record ${record.id} in Slack Noticias table`
-    )
-
-    // Step 10: Send success notification to Slack
-    console.log(`[${processId}] Step 10: Sending success notification...`)
-    await sendSlackUpdate(notificationChannel, null, 'good', {
-      text: `✅ Article processed successfully!`,
-      fields: [
-        { title: 'Title', value: metadata.title, short: false },
-        { title: 'Source', value: sourceName, short: true },
-        { title: 'Record ID', value: record.id, short: true },
-        { title: 'Tags', value: tags.substring(0, 100), short: false },
-      ],
-      actions: [
-        {
-          type: 'button',
-          text: 'View in Airtable',
-          url: `https://airtable.com/${process.env.AIRTABLE_BASE_ID}/Slack%20Noticias/${record.id}`,
-          style: 'primary',
-        },
-      ],
-    })
-
-    console.log(`[${processId}] === PROCESSING COMPLETE ===`)
-  } catch (error) {
-    console.error(`[${processId}] ❌ Error in processNewsArticle:`, error)
-
-    try {
-      // Send error notification
-      const errorChannel = channel_name || 'general'
-
-      await sendSlackUpdate(
-        errorChannel,
-        `❌ Error processing article: ${error.message}`,
-        'danger',
-        {
-          fields: [
-            { title: 'URL', value: url, short: false },
-            { title: 'Error', value: error.message, short: false },
-          ],
-        }
-      )
-    } catch (slackError) {
-      console.error(
-        `[${processId}] Failed to send error notification:`,
-        slackError
-      )
-    }
-  } finally {
-    // Always remove from processing set when done
-    processingUrls.delete(url)
-  }
-}
 
 // Request logging middleware
 slackRoutes.use((req, res, next) => {
@@ -788,4 +583,205 @@ slackRoutes.get('/health', (req, res) => {
   })
 })
 
-export default slackRoutes
+// Step 1: Content Extraction
+async function processStep1ContentExtraction(url, user_name, channel_name, processId) {
+  try {
+    console.log(`[${processId}] === STEP 1: CONTENT EXTRACTION ===`)
+    
+    // Fetch HTML content
+    const htmlContent = await fetchContent(url)
+    if (!htmlContent) {
+      throw new Error('Failed to fetch HTML content')
+    }
+
+    // Extract images and text
+    const { images, markdown: imageMarkdown } = extractImagesAsMarkdown(htmlContent)
+    const extractedText = extractText(htmlContent)
+    const embeds = extractEmbeds(htmlContent)
+
+    if (extractedText.length < 50) {
+      throw new Error('Insufficient content extracted')
+    }
+
+    console.log(`[${processId}] ✅ Content extracted successfully`)
+
+    // Store temporary data for next step
+    const stepData = {
+      processId,
+      url,
+      user_name,
+      channel_name,
+      extractedText,
+      images,
+      imageMarkdown,
+      embeds,
+      sourceName: extractSourceName(url)
+    }
+
+    // Send update to Slack
+    await sendSlackUpdate(channel_name, `📄 Content extracted, generating metadata...`, 'good')
+
+    // Trigger step 2
+    setTimeout(() => processStep2Metadata(stepData), 100)
+
+  } catch (error) {
+    console.error(`[${processId}] Step 1 failed:`, error)
+    await sendSlackUpdate(channel_name, `❌ Content extraction failed: ${error.message}`, 'danger')
+  }
+}
+
+// Step 2: AI Metadata Generation
+async function processStep2Metadata(stepData) {
+  const { processId, extractedText, channel_name } = stepData
+  
+  try {
+    console.log(`[${processId}] === STEP 2: METADATA GENERATION ===`)
+    
+    const metadata = await generateMetadata(extractedText)
+    console.log(`[${processId}] ✅ Metadata generated`)
+
+    // Update step data
+    stepData.metadata = metadata
+
+    // Send update to Slack
+    await sendSlackUpdate(channel_name, `🤖 Metadata generated, reelaborating text...`, 'good')
+
+    // Trigger step 3
+    setTimeout(() => processStep3Reelaboration(stepData), 100)
+
+  } catch (error) {
+    console.error(`[${processId}] Step 2 failed:`, error)
+    await sendSlackUpdate(channel_name, `❌ Metadata generation failed: ${error.message}`, 'danger')
+  }
+}
+
+// Step 3: Text Reelaboration
+async function processStep3Reelaboration(stepData) {
+  const { processId, extractedText, imageMarkdown, channel_name } = stepData
+  
+  try {
+    console.log(`[${processId}] === STEP 3: TEXT REELABORATION ===`)
+    
+    const reelaboratedText = await reelaborateText(extractedText, imageMarkdown)
+    console.log(`[${processId}] ✅ Text reelaborated`)
+
+    // Update step data
+    stepData.reelaboratedText = reelaboratedText
+
+    // Send update to Slack
+    await sendSlackUpdate(channel_name, `✍️ Text reelaborated, generating tags...`, 'good')
+
+    // Trigger step 4
+    setTimeout(() => processStep4Tags(stepData), 100)
+
+  } catch (error) {
+    console.error(`[${processId}] Step 3 failed:`, error)
+    await sendSlackUpdate(channel_name, `❌ Text reelaboration failed: ${error.message}`, 'danger')
+  }
+}
+
+// Step 4: Tags and Social Media
+async function processStep4Tags(stepData) {
+  const { processId, extractedText, metadata, channel_name } = stepData
+  
+  try {
+    console.log(`[${processId}] === STEP 4: TAGS AND SOCIAL MEDIA ===`)
+    
+    const tags = await generateTags(extractedText, metadata)
+    const socialMediaText = await generateSocialMediaText(extractedText, metadata, tags)
+    
+    console.log(`[${processId}] ✅ Tags and social media text generated`)
+
+    // Update step data
+    stepData.tags = tags
+    stepData.socialMediaText = socialMediaText
+
+    // Send update to Slack
+    await sendSlackUpdate(channel_name, `🏷️ Tags generated, saving to Airtable...`, 'good')
+
+    // Trigger final step
+    setTimeout(() => processStep5SaveToAirtable(stepData), 100)
+
+  } catch (error) {
+    console.error(`[${processId}] Step 4 failed:`, error)
+    await sendSlackUpdate(channel_name, `❌ Tags generation failed: ${error.message}`, 'danger')
+  }
+}
+
+// Step 5: Save to Airtable
+async function processStep5SaveToAirtable(stepData) {
+  const { 
+    processId, url, images, embeds, metadata, reelaboratedText, 
+    tags, socialMediaText, sourceName, channel_name 
+  } = stepData
+  
+  try {
+    console.log(`[${processId}] === STEP 5: SAVE TO AIRTABLE ===`)
+    
+    // Format image attachments
+    const imageAttachments = images.length > 0 ? images.map((imageUrl) => ({ url: imageUrl })) : []
+
+    // Get next ID
+    const existingRecords = await base('Slack Noticias')
+      .select({
+        fields: ['id'],
+        sort: [{ field: 'id', direction: 'desc' }],
+        maxRecords: 1,
+      })
+      .firstPage()
+
+    const nextId = existingRecords.length > 0 ? (existingRecords[0].fields.id || 0) + 1 : 1
+
+    const recordFields = {
+      id: nextId,
+      title: metadata.title,
+      overline: metadata.volanta,
+      excerpt: metadata.bajada,
+      article: reelaboratedText,
+      image: imageAttachments,
+      imgUrl: images.length > 0 ? images[0] : '',
+      'article-images': images.join(', '),
+      url: url,
+      source: sourceName,
+      'ig-post': embeds.instagram || '',
+      'fb-post': embeds.facebook || '',
+      'tw-post': embeds.twitter || '',
+      'yt-video': embeds.youtube || '',
+      status: 'draft',
+      section: 'draft',
+      tags: tags,
+      socialMediaText: socialMediaText,
+      front: '',
+      order: 'normal',
+    }
+
+    // Create Airtable record
+    const record = await base('Slack Noticias').create(recordFields)
+    console.log(`[${processId}] ✅ Successfully created record ${record.id}`)
+
+    // Send final success notification
+    await sendSlackUpdate(channel_name, null, 'good', {
+      text: `✅ Article processed successfully!`,
+      fields: [
+        { title: 'Title', value: metadata.title, short: false },
+        { title: 'Source', value: sourceName, short: true },
+        { title: 'Record ID', value: record.id, short: true },
+        { title: 'Tags', value: tags.substring(0, 100), short: false },
+      ],
+      actions: [
+        {
+          type: 'button',
+          text: 'View in Airtable',
+          url: `https://airtable.com/${process.env.AIRTABLE_BASE_ID}/Slack%20Noticias/${record.id}`,
+          style: 'primary',
+        },
+      ],
+    })
+
+    console.log(`[${processId}] === PROCESSING COMPLETE ===`)
+
+  } catch (error) {
+    console.error(`[${processId}] Step 5 failed:`, error)
+    await sendSlackUpdate(channel_name, `❌ Failed to save to Airtable: ${error.message}`, 'danger')
+  }
+}
