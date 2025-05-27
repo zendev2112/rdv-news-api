@@ -14,13 +14,13 @@ const airtableBase = new Airtable({
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Validate Supabase configuration
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing Supabase configuration. Please check your environment variables:');
-  console.error('- SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL must be set');
-  console.error('- SUPABASE_KEY or SUPABASE_SERVICE_ROLE_KEY must be set');
-  // We'll continue anyway, but Supabase operations will fail
-}
+// // Validate Supabase configuration
+// if (!supabaseUrl || !supabaseKey) {
+//   console.error('Missing Supabase configuration. Please check your environment variables:');
+//   console.error('- SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL must be set');
+//   console.error('- SUPABASE_KEY or SUPABASE_SERVICE_ROLE_KEY must be set');
+//   // We'll continue anyway, but Supabase operations will fail
+// }
 
 // Initialize Supabase with safety checks
 const supabase = supabaseUrl && supabaseKey 
