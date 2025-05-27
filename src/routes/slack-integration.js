@@ -552,6 +552,17 @@ slackRoutes.post('/enviar-noticia', async (req, res) => {
           console.error(`[${requestId}] Failed to process article ${url}:`, err)
         )
     }, 100)
+
+    // Start the processing chain with step 1
+    setTimeout(async () => {
+      try {
+        console.log(`[${requestId}] Starting step 1: Content extraction`)
+        await processStep1ContentExtraction(url, user_name, channel_name, requestId)
+      } catch (error) {
+        console.error(`[${requestId}] Failed to start processing:`, error)
+        await sendSlackUpdate(channel_name, `❌ Failed to start processing: ${error.message}`, 'danger')
+      }
+    }, 100)
   } catch (error) {
     console.error('Error in enviar-noticia command:', error)
     return res.json({
