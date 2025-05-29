@@ -6,6 +6,7 @@ import publishRoutes from './routes/publish.js'
 import webhookRoutes from './routes/webhook.js'
 import socialMediaImagesRouter from './routes/social-media-images.js'
 import slackRoutes from './routes/slack-integration.js' 
+import socialMediaPublishingRoutes from './routes/social-media-publishing.js'
 
 
 // Initialize
@@ -34,6 +35,7 @@ app.get('/', (req, res) => {
       api: '/api',
       webhooks: '/webhooks',
       socialMediaImages: '/api/social-media-images',
+      socialPublishing: '/api/social-publishing',
       slack: '/api/slack',
       health: '/health',
     },
@@ -46,6 +48,7 @@ app.use('/api/social-media-images', socialMediaImagesRouter)
 app.use('/api/slack', slackRoutes)  // Add this line
 app.use('/api', publishRoutes)
 app.use('/webhooks', webhookRoutes)
+app.use('/api/social-publishing', socialMediaPublishingRoutes)
 
 
 // Health check endpoint
