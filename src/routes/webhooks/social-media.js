@@ -149,6 +149,7 @@ router.post('/social-media', async (req, res) => {
       title: payload.title,
       overline: payload.overline || '',
       excerpt: payload.excerpt || '',
+      article: payload.article || '',
       url: payload.url,
       image: processedImage,
       imgUrl: payload.imgUrl || '',
