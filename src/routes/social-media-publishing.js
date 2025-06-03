@@ -6,6 +6,7 @@
 import express from 'express'
 import multer from 'multer'
 import fetch from 'node-fetch'
+import FormData from 'form-data'
 
 const router = express.Router()
 
@@ -35,10 +36,12 @@ const authenticateApiKey = (req, res, next) => {
 // Load environment variables with validation
 const REQUIRED_SOCIAL_ENV_VARS = [
   'RDV_API_KEY',
+  'META_APP_ID',
+  'META_APP_SECRET',
+  'META_ACCESS_TOKEN',
+  'FACEBOOK_PAGE_ID',
   'INSTAGRAM_ACCESS_TOKEN',
   'INSTAGRAM_ACCOUNT_ID',
-  'FACEBOOK_ACCESS_TOKEN',
-  'FACEBOOK_PAGE_ID',
   'TWITTER_BEARER_TOKEN',
   'TWITTER_API_KEY',
   'TWITTER_API_SECRET',
@@ -65,14 +68,17 @@ const SOCIAL_ENV_VALID = validateSocialEnvironment()
 // Social Media API configurations
 const SOCIAL_CONFIGS = {
   instagram: {
-    accessToken: process.env.INSTAGRAM_ACCESS_TOKEN,
+    accessToken:
+      process.env.INSTAGRAM_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN,
     accountId: process.env.INSTAGRAM_ACCOUNT_ID,
     apiUrl: 'https://graph.facebook.com/v18.0',
   },
   facebook: {
-    accessToken: process.env.FACEBOOK_ACCESS_TOKEN,
+    accessToken: process.env.META_ACCESS_TOKEN,
     pageId: process.env.FACEBOOK_PAGE_ID,
     apiUrl: 'https://graph.facebook.com/v18.0',
+    appId: process.env.META_APP_ID,
+    appSecret: process.env.META_APP_SECRET,
   },
   twitter: {
     bearerToken: process.env.TWITTER_BEARER_TOKEN,
@@ -95,6 +101,11 @@ router.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     environment_valid: SOCIAL_ENV_VALID,
     platforms_configured: Object.keys(SOCIAL_CONFIGS).length,
+    meta_configured: !!(
+      process.env.META_APP_ID &&
+      process.env.META_ACCESS_TOKEN &&
+      process.env.FACEBOOK_PAGE_ID
+    ),
   })
 })
 
@@ -230,6 +241,7 @@ router.post(
           )
           result = await simulatePublishing(platform, imageData, caption)
           result.note = 'Real API failed, used simulation'
+          result.error_details = apiError.message
         }
       } else {
         result = await simulatePublishing(platform, imageData, caption)
@@ -251,59 +263,158 @@ router.post(
 // Platform-specific publishing functions
 
 async function publishToInstagram(imageData, caption, config) {
-  console.log('📷 Publishing to Instagram...')
+  console.log('📷 Publishing to Instagram via Graph API...')
 
-  // TODO: Implement actual Instagram Business API calls
-  // For now, simulate the process
-  await new Promise((resolve) => setTimeout(resolve, 2000))
+  try {
+    // Step 1: Create media object (upload image)
+    const formData = new FormData()
+    formData.append('image_url', imageData) // For now, this needs to be a URL
+    formData.append('caption', caption)
+    formData.append('access_token', config.accessToken)
 
-  const mockId = `ig_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    // TODO: Implement proper Instagram Business API flow
+    // 1. Upload image to temporary location
+    // 2. Create media container
+    // 3. Publish media container
 
-  return {
-    success: true,
-    id: mockId,
-    postUrl: `https://www.instagram.com/p/${mockId.slice(-11)}`,
-    platform: 'instagram',
-    publishedAt: new Date().toISOString(),
-    method: 'real_api',
+    // For now, simulate successful Instagram publishing
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+
+    const mockId = `ig_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    return {
+      success: true,
+      id: mockId,
+      postUrl: `https://www.instagram.com/p/${mockId.slice(-11)}`,
+      platform: 'instagram',
+      publishedAt: new Date().toISOString(),
+      method: 'graph_api_simulation',
+      note: 'Instagram Graph API requires image URL - implementing file upload flow',
+    }
+  } catch (error) {
+    console.error('Instagram Graph API error:', error)
+    throw new Error(`Instagram publishing failed: ${error.message}`)
   }
 }
 
 async function publishToFacebook(imageData, caption, config) {
-  console.log('👥 Publishing to Facebook...')
+  console.log('📘 Publishing to Facebook via Graph API...')
 
-  // TODO: Implement actual Facebook Graph API calls
-  // For now, simulate the process
-  await new Promise((resolve) => setTimeout(resolve, 1500))
+  try {
+    // Step 1: Upload image to Facebook
+    console.log('📤 Uploading image to Facebook...')
+    const imageUploadResult = await uploadImageToFacebook(imageData, config)
 
-  const mockId = `fb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    // Step 2: Create post with uploaded image
+    console.log('📝 Creating Facebook post...')
+    const postResult = await createFacebookPost(
+      caption,
+      imageUploadResult.id,
+      config
+    )
 
-  return {
-    success: true,
-    id: mockId,
-    postUrl: `https://www.facebook.com/${config.pageId}/posts/${mockId}`,
-    platform: 'facebook',
-    publishedAt: new Date().toISOString(),
-    method: 'real_api',
+    return {
+      success: true,
+      id: postResult.id,
+      postUrl: `https://www.facebook.com/${config.pageId}/posts/${postResult.id}`,
+      platform: 'facebook',
+      publishedAt: new Date().toISOString(),
+      method: 'graph_api',
+      imageId: imageUploadResult.id,
+    }
+  } catch (error) {
+    console.error('Facebook Graph API error:', error)
+    throw new Error(`Facebook publishing failed: ${error.message}`)
   }
+}
+
+async function uploadImageToFacebook(imageData, config) {
+  const formData = new FormData()
+  formData.append('source', imageData, {
+    filename: `rdv-post-${Date.now()}.png`,
+    contentType: 'image/png',
+  })
+  formData.append('published', 'false') // Upload without publishing
+  formData.append('access_token', config.accessToken)
+
+  const response = await fetch(`${config.apiUrl}/${config.pageId}/photos`, {
+    method: 'POST',
+    body: formData,
+    headers: formData.getHeaders(),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok || result.error) {
+    throw new Error(
+      `Image upload failed: ${result.error?.message || 'Unknown error'}`
+    )
+  }
+
+  if (!result.id) {
+    throw new Error('No image ID received from Facebook')
+  }
+
+  console.log('✅ Image uploaded to Facebook:', result.id)
+  return result
+}
+
+async function createFacebookPost(message, photoId, config) {
+  const postData = {
+    message: message,
+    attached_media: [{ media_fbid: photoId }],
+    access_token: config.accessToken,
+  }
+
+  const response = await fetch(`${config.apiUrl}/${config.pageId}/feed`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(postData),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok || result.error) {
+    throw new Error(
+      `Post creation failed: ${result.error?.message || 'Unknown error'}`
+    )
+  }
+
+  if (!result.id) {
+    throw new Error('No post ID received from Facebook')
+  }
+
+  console.log('✅ Facebook post created:', result.id)
+  return result
 }
 
 async function publishToTwitter(imageData, caption, config) {
   console.log('🐦 Publishing to Twitter...')
 
-  // TODO: Implement actual Twitter API v2 calls
-  // For now, simulate the process
-  await new Promise((resolve) => setTimeout(resolve, 2500))
+  try {
+    // TODO: Implement actual Twitter API v2 calls
+    // 1. Upload media using v1.1 API
+    // 2. Create tweet with media using v2 API
 
-  const mockId = `tw_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    // For now, simulate the process
+    await new Promise((resolve) => setTimeout(resolve, 2500))
 
-  return {
-    success: true,
-    id: mockId,
-    postUrl: `https://twitter.com/radiodelvolga/status/${mockId}`,
-    platform: 'twitter',
-    publishedAt: new Date().toISOString(),
-    method: 'real_api',
+    const mockId = `tw_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    return {
+      success: true,
+      id: mockId,
+      postUrl: `https://twitter.com/radiodelvolga/status/${mockId}`,
+      platform: 'twitter',
+      publishedAt: new Date().toISOString(),
+      method: 'twitter_api_simulation',
+      note: 'Twitter API implementation pending',
+    }
+  } catch (error) {
+    console.error('Twitter API error:', error)
+    throw new Error(`Twitter publishing failed: ${error.message}`)
   }
 }
 
@@ -351,13 +462,16 @@ async function testInstagramConnection(config) {
       `${config.apiUrl}/${config.accountId}?access_token=${config.accessToken}`
     )
 
-    if (!response.ok) {
-      throw new Error('Instagram connection failed')
+    const data = await response.json()
+
+    if (!response.ok || data.error) {
+      throw new Error(data.error?.message || 'Instagram connection failed')
     }
 
     return {
       platform: 'instagram',
       status: 'connected',
+      account_id: config.accountId,
       tested_at: new Date().toISOString(),
     }
   } catch (error) {
@@ -373,16 +487,20 @@ async function testInstagramConnection(config) {
 async function testFacebookConnection(config) {
   try {
     const response = await fetch(
-      `${config.apiUrl}/${config.pageId}?access_token=${config.accessToken}`
+      `${config.apiUrl}/${config.pageId}?fields=id,name,access_token&access_token=${config.accessToken}`
     )
 
-    if (!response.ok) {
-      throw new Error('Facebook connection failed')
+    const data = await response.json()
+
+    if (!response.ok || data.error) {
+      throw new Error(data.error?.message || 'Facebook connection failed')
     }
 
     return {
       platform: 'facebook',
       status: 'connected',
+      page_id: data.id,
+      page_name: data.name,
       tested_at: new Date().toISOString(),
     }
   } catch (error) {
@@ -403,13 +521,17 @@ async function testTwitterConnection(config) {
       },
     })
 
-    if (!response.ok) {
-      throw new Error('Twitter connection failed')
+    const data = await response.json()
+
+    if (!response.ok || data.errors) {
+      throw new Error(data.errors?.[0]?.message || 'Twitter connection failed')
     }
 
     return {
       platform: 'twitter',
       status: 'connected',
+      user_id: data.data?.id,
+      username: data.data?.username,
       tested_at: new Date().toISOString(),
     }
   } catch (error) {
@@ -421,5 +543,111 @@ async function testTwitterConnection(config) {
     }
   }
 }
+
+/**
+ * Get Facebook page info
+ */
+router.get('/facebook/page-info', authenticateApiKey, async (req, res) => {
+  try {
+    const config = SOCIAL_CONFIGS.facebook
+
+    if (!config.accessToken || !config.pageId) {
+      return res.status(400).json({ error: 'Facebook not configured' })
+    }
+
+    const response = await fetch(
+      `${config.apiUrl}/${config.pageId}?fields=id,name,picture,fan_count,access_token&access_token=${config.accessToken}`
+    )
+
+    const data = await response.json()
+
+    if (!response.ok || data.error) {
+      throw new Error(data.error?.message || 'Failed to get page info')
+    }
+
+    res.json({
+      success: true,
+      page: {
+        id: data.id,
+        name: data.name,
+        picture: data.picture?.data?.url,
+        fan_count: data.fan_count,
+        has_access_token: !!data.access_token,
+      },
+      tested_at: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('Error getting Facebook page info:', error)
+    res.status(500).json({
+      error: 'Failed to get Facebook page info',
+      details: error.message,
+    })
+  }
+})
+
+/**
+ * Quick publish endpoint for frontend integration
+ */
+router.post('/quick-publish', authenticateApiKey, async (req, res) => {
+  try {
+    const { platform, imageBlob, caption, metadata } = req.body
+
+    if (!platform || !imageBlob || !caption) {
+      return res.status(400).json({
+        error: 'Missing required fields: platform, imageBlob, caption',
+      })
+    }
+
+    // Convert base64 to buffer
+    const base64Data = imageBlob.replace(/^data:image\/[a-z]+;base64,/, '')
+    const imageData = Buffer.from(base64Data, 'base64')
+
+    const config = SOCIAL_CONFIGS[platform]
+    if (!config) {
+      return res
+        .status(400)
+        .json({ error: `Platform ${platform} not supported` })
+    }
+
+    let result
+
+    if (SOCIAL_ENV_VALID) {
+      try {
+        switch (platform) {
+          case 'facebook':
+            result = await publishToFacebook(imageData, caption, config)
+            break
+          case 'instagram':
+            result = await publishToInstagram(imageData, caption, config)
+            break
+          case 'twitter':
+            result = await publishToTwitter(imageData, caption, config)
+            break
+          default:
+            return res.status(400).json({ error: 'Unsupported platform' })
+        }
+      } catch (apiError) {
+        console.warn(
+          `Real API failed for ${platform}, falling back to simulation:`,
+          apiError.message
+        )
+        result = await simulatePublishing(platform, imageData, caption)
+        result.note = 'Real API failed, used simulation'
+        result.error_details = apiError.message
+      }
+    } else {
+      result = await simulatePublishing(platform, imageData, caption)
+      result.note = 'Environment not configured, used simulation'
+    }
+
+    res.json(result)
+  } catch (error) {
+    console.error('Quick publish error:', error)
+    res.status(500).json({
+      error: 'Quick publish failed',
+      details: error.message,
+    })
+  }
+})
 
 export default router
