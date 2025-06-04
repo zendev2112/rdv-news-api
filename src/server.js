@@ -45,8 +45,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin')
   res.header('Access-Control-Allow-Credentials', 'true')
   
-  // CSP headers to allow frontend to call this API
-  res.header('Content-Security-Policy', "default-src 'self'; connect-src 'self' *")
+ 
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
