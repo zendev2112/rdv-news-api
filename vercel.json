@@ -14,5 +14,19 @@
       "src": "/(.*)",
       "dest": "src/server.js"
     }
-  ]
+  ],
+  "functions": {
+    "src/server.js": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/src/server.js"
+    }
+  ],
+  "env": {
+    "VERCEL_MAX_PAYLOAD_SIZE": "50mb"
+  }
 }
