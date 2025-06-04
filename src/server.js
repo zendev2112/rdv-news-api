@@ -17,11 +17,13 @@ const app = express()
 app.use(
   cors({
     origin: [
-      '*', // Allow all origins for now
+      '*', // Allow all origins for development
+      'https://rdv-image-generator.netlify.app', // Your frontend domain
       'http://localhost:3000',
       'http://localhost:5000',
-      'http://127.0.0.1:5500', // VS Code Live Server
-      'https://rdv-image-generator.vercel.app', // If you deploy frontend
+      'http://127.0.0.1:5500',
+      'https://rdv-news-api.vercel.app',
+      /\.netlify\.app$/, // Allow all Netlify apps
       /\.vercel\.app$/, // Allow all Vercel apps
       /localhost:\d+$/, // Allow any localhost port
     ],
@@ -33,19 +35,31 @@ app.use(
       'Accept',
       'Origin',
     ],
-    credentials: true, // Important for authentication
-    optionsSuccessStatus: 200, // Some legacy browsers choke on 204
+    credentials: true,
+    optionsSuccessStatus: 200,
   })
 )
-// Add explicit headers middleware for CSP and CORS
+// ALSO UPDATE the explicit headers middleware:
 app.use((req, res, next) => {
-  // CORS headers
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*')
+  // More explicit CORS headers
+  const origin = req.headers.origin
+  const allowedOrigins = [
+    'https://rdv-image-generator.netlify.app',
+    'https://rdv-news-api.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://127.0.0.1:5500',
+  ]
+  
+  if (allowedOrigins.includes(origin) || origin?.includes('netlify.app') || origin?.includes('vercel.app')) {
+    res.header('Access-Control-Allow-Origin', origin)
+  } else {
+    res.header('Access-Control-Allow-Origin', '*')
+  }
+  
   res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin')
   res.header('Access-Control-Allow-Credentials', 'true')
-  
- 
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
