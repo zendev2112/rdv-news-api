@@ -381,12 +381,6 @@ async function uploadImageToFacebook(imageData, config) {
 
   let imageBuffer = imageData
 
-  console.log('📊 Buffer details:', {
-    size: imageBuffer.length,
-    isBuffer: Buffer.isBuffer(imageBuffer),
-    first10bytes: Array.from(imageBuffer.slice(0, 10)),
-  })
-
   // Detect image format
   const isJPEG = imageBuffer[0] === 0xff && imageBuffer[1] === 0xd8 && imageBuffer[2] === 0xff
   const contentType = isJPEG ? 'image/jpeg' : 'image/png'
@@ -416,9 +410,9 @@ async function uploadImageToFacebook(imageData, config) {
     knownLength: imageBuffer.length
   })
   formData.append('published', 'false')
-  formData.append('access_token', config.accessToken)
 
-  const uploadUrl = `${config.apiUrl}/${config.pageId}/photos`
+  // ✅ CRITICAL FIX: Include access token in URL
+  const uploadUrl = `${config.apiUrl}/${config.pageId}/photos?access_token=${config.accessToken}`
   
   console.log('📤 Upload URL:', uploadUrl.replace(config.accessToken, 'TOKEN_HIDDEN'))
 
@@ -426,7 +420,7 @@ async function uploadImageToFacebook(imageData, config) {
     method: 'POST',
     body: formData,
     headers: {
-      ...formData.getHeaders() // This is crucial - let form-data set the headers
+      ...formData.getHeaders()
     }
   })
 
