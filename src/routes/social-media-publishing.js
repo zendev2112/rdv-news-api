@@ -378,73 +378,104 @@ async function publishToFacebook(imageData, caption, config) {
 
 async function uploadImageToFacebook(imageData, config) {
   console.log('📤 Uploading image via FormData method...')
-  
-  // Debug the incoming image data
-  console.log('🔍 Image data details:', {
-    type: typeof imageData,
-    isString: typeof imageData === 'string',
-    startsWithData: typeof imageData === 'string' && imageData.startsWith('data:'),
-    length: imageData?.length || 'unknown',
-    first50chars: typeof imageData === 'string' ? imageData.substring(0, 50) : 'not string'
-  })
-  
-  // Convert to buffer
-  let imageBuffer
-  if (typeof imageData === 'string' && imageData.startsWith('data:image')) {
-    console.log('🖼️ Processing data URL...')
-    const base64Data = imageData.split(',')[1]
-    imageBuffer = Buffer.from(base64Data, 'base64')
-  } else if (typeof imageData === 'string') {
-    console.log('🖼️ Processing base64 string...')
-    imageBuffer = Buffer.from(imageData, 'base64')
-  } else {
-    console.log('🖼️ Using data as buffer...')
-    imageBuffer = imageData
-  }
+
+  let imageBuffer = imageData
 
   console.log('📊 Buffer details:', {
     size: imageBuffer.length,
     isBuffer: Buffer.isBuffer(imageBuffer),
-    first10bytes: Array.from(imageBuffer.slice(0, 10))
+    first10bytes: Array.from(imageBuffer.slice(0, 10)),
   })
 
-  // Verify it's a valid PNG
-  const isPNG = imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50 && imageBuffer[2] === 0x4E && imageBuffer[3] === 0x47
-  console.log('🖼️ Image validation:', { isPNG, size: imageBuffer.length })
+  // Detect image format
+  const isPNG =
+    imageBuffer[0] === 0x89 &&
+    imageBuffer[1] === 0x50 &&
+    imageBuffer[2] === 0x4e &&
+    imageBuffer[3] === 0x47
+  const isJPEG =
+    imageBuffer[0] === 0xff &&
+    imageBuffer[1] === 0xd8 &&
+    imageBuffer[2] === 0xff
 
-  const formData = new FormData()
-  formData.append('source', imageBuffer, {
-    filename: `rdv-post-${Date.now()}.png`,
-    contentType: 'image/png',
+  let contentType = 'image/png'
+  let filename = `rdv-post-${Date.now()}.png`
+
+  if (isJPEG) {
+    contentType = 'image/jpeg'
+    filename = `rdv-post-${Date.now()}.jpg`
+  }
+
+  console.log('🖼️ Image validation:', {
+    isPNG,
+    isJPEG,
+    size: imageBuffer.length,
+    contentType,
+    filename,
   })
-  formData.append('published', 'false')
-  
+
+  // Use multipart/form-data manually to avoid form-data package issues
+  const boundary = `----formdata-${Date.now()}`
+
+  const formParts = [
+    `--${boundary}`,
+    `Content-Disposition: form-data; name="source"; filename="${filename}"`,
+    `Content-Type: ${contentType}`,
+    '',
+    imageBuffer,
+    `--${boundary}`,
+    'Content-Disposition: form-data; name="published"',
+    '',
+    'false',
+    `--${boundary}--`,
+  ]
+
+  // Create the multipart body
+  const formBody = Buffer.concat([
+    Buffer.from(formParts.slice(0, 4).join('\r\n') + '\r\n', 'utf8'),
+    imageBuffer,
+    Buffer.from('\r\n' + formParts.slice(5).join('\r\n'), 'utf8'),
+  ])
+
   const uploadUrl = `${config.apiUrl}/${config.pageId}/photos?access_token=${config.accessToken}`
-  
-  console.log('📤 Upload URL:', uploadUrl.replace(config.accessToken, 'TOKEN_HIDDEN'))
+
+  console.log(
+    '📤 Upload URL:',
+    uploadUrl.replace(config.accessToken, 'TOKEN_HIDDEN')
+  )
+  console.log('📤 Content-Type:', `multipart/form-data; boundary=${boundary}`)
 
   const response = await fetch(uploadUrl, {
     method: 'POST',
-    body: formData
+    headers: {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': formBody.length.toString(),
+    },
+    body: formBody,
   })
 
   const result = await response.json()
-  
+
   console.log('📊 Facebook upload response:', {
     status: response.status,
     ok: response.ok,
-    headers: Object.fromEntries(response.headers.entries()),
-    result: result
+    result: result,
   })
 
   if (!response.ok || result.error) {
     console.error('❌ Facebook upload failed:', result.error)
-    throw new Error(`Image upload failed: ${result.error?.message || 'Unknown error'}`)
+    throw new Error(
+      `Image upload failed: ${result.error?.message || 'Unknown error'}`
+    )
   }
 
+  if (!result.id) {
+    throw new Error('No image ID received from Facebook')
+  }
+
+  console.log('✅ Image uploaded to Facebook:', result.id)
   return result
 }
-
 async function createFacebookPost(message, photoId, config) {
   const postData = {
     message: message,
