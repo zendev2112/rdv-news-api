@@ -5,13 +5,59 @@ import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
+// ADD CORS MIDDLEWARE FOR AIRTABLE BLOCKS
+router.use((req, res, next) => {
+  // Allow Airtable blocks and your other domains
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'https://rdv-image-generator.netlify.app',
+    'https://rdv-news-api.vercel.app',
+    /\.airtableblocks\.com$/,  // Allow all Airtable block domains
+    /\.airtable\.com$/,        // Allow Airtable domains
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://127.0.0.1:5500'
+  ];
+  
+  // Check if origin is allowed
+  let isAllowed = false;
+  if (origin) {
+    isAllowed = allowedOrigins.some(allowed => {
+      if (typeof allowed === 'string') {
+        return allowed === origin;
+      } else if (allowed instanceof RegExp) {
+        return allowed.test(origin);
+      }
+      return false;
+    });
+  }
+  
+  if (isAllowed || !origin) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
 /**
  * Webhook handler for social media exports to Redes Sociales table
  */
 router.post('/social-media', async (req, res) => {
   try {
     const payload = req.body;
-    logger.info('Received social media export request', { payload });
+    logger.info('Received social media export request', { 
+      payload,
+      origin: req.headers.origin 
+    });
     
     // Validate required fields
     const requiredFields = ['title', 'url'];

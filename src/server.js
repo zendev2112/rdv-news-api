@@ -51,7 +51,11 @@ app.use((req, res, next) => {
     'http://127.0.0.1:5500',
   ]
   
-  if (allowedOrigins.includes(origin) || origin?.includes('netlify.app') || origin?.includes('vercel.app')) {
+  if (allowedOrigins.includes(origin) || 
+      origin?.includes('netlify.app') || 
+      origin?.includes('vercel.app') ||
+      origin?.includes('airtableblocks.com') ||
+      origin?.includes('airtable.com')) {
     res.header('Access-Control-Allow-Origin', origin)
   } else {
     res.header('Access-Control-Allow-Origin', '*')
