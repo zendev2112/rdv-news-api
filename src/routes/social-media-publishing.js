@@ -599,10 +599,22 @@ router.get('/facebook/page-info', authenticateApiKey, async (req, res) => {
   }
 })
 
+// Add this middleware for frontend-only access
+const authenticateFrontend = (req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Only allow your specific frontend domain
+  if (origin === 'https://rdv-image-generator.netlify.app') {
+    next();
+  } else {
+    res.status(403).json({ error: 'Access denied' });
+  }
+};
+
 /**
  * Quick publish endpoint for frontend integration
  */
-router.post('/quick-publish', authenticateApiKey, async (req, res) => {
+router.post('/quick-publish', authenticateFrontend, async (req, res) => {
   try {
     const { platform, imageBlob, caption, metadata } = req.body
 
