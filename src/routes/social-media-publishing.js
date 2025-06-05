@@ -311,18 +311,41 @@ async function publishToInstagram(imageData, caption, config) {
   }
 }
 
-// Update the publishToFacebook function to log errors:
+// Add this function to verify your token
+async function debugFacebookToken(config) {
+  console.log('🔍 Debugging Facebook access token...')
+  
+  // Test 1: Check what this token represents
+  const tokenResponse = await fetch(`https://graph.facebook.com/me?access_token=${config.accessToken}`)
+  const tokenData = await tokenResponse.json()
+  console.log('🔑 Token represents:', tokenData)
+  
+  // Test 2: Check token permissions
+  const permissionsResponse = await fetch(`https://graph.facebook.com/me/permissions?access_token=${config.accessToken}`)
+  const permissionsData = await permissionsResponse.json()
+  console.log('🔐 Token permissions:', permissionsData)
+  
+  // Test 3: Check if we can access the page
+  const pageResponse = await fetch(`https://graph.facebook.com/${config.pageId}?access_token=${config.accessToken}`)
+  const pageData = await pageResponse.json()
+  console.log('📄 Page access test:', pageData)
+  
+  return { tokenData, permissionsData, pageData }
+}
+
+// Update your publishToFacebook function to include this debug:
 async function publishToFacebook(imageData, caption, config) {
   console.log('📘 Publishing to Facebook via Graph API...')
-  console.log('🔧 Config check:', {
-    hasAccessToken: !!config.accessToken,
-    hasPageId: !!config.pageId,
-    pageId: config.pageId,
-    accessTokenLength: config.accessToken?.length
-  })
-
+  
+  // Add debugging
   try {
-    // Step 1: Upload image to Facebook
+    await debugFacebookToken(config)
+  } catch (debugError) {
+    console.error('🐛 Debug failed:', debugError)
+  }
+  
+  // Continue with your existing upload code...
+  try {
     console.log('📤 Uploading image to Facebook...')
     const imageUploadResult = await uploadImageToFacebook(imageData, config)
 
