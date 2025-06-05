@@ -82,7 +82,7 @@ app.get('/', (req, res) => {
       api: '/api',
       webhooks: '/webhooks',
       socialMediaImages: '/api/social-media-images',
-      socialPublishing: '/api/social-publishing',
+      socialPublishing: '/api/social-media-publishing',
       slack: '/api/slack',
       health: '/health',
     },
@@ -95,7 +95,7 @@ app.use('/api/social-media-images', socialMediaImagesRouter)
 app.use('/api/slack', slackRoutes)  // Add this line
 app.use('/api', publishRoutes)
 app.use('/webhooks', webhookRoutes)
-app.use('/api/social-publishing', socialMediaPublishingRoutes)
+app.use('/api/social-media-publishing', socialMediaPublishingRoutes)
 
 
 // Health check endpoint
