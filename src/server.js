@@ -25,6 +25,8 @@ app.use(
       'https://rdv-news-api.vercel.app',
       /\.netlify\.app$/, // Allow all Netlify apps
       /\.vercel\.app$/, // Allow all Vercel apps
+      /\.airtableblocks\.com$/, // ADD THIS
+      /\.airtable\.com$/, // ADD THIS
       /localhost:\d+$/, // Allow any localhost port
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -39,39 +41,7 @@ app.use(
     optionsSuccessStatus: 200,
   })
 )
-// ALSO UPDATE the explicit headers middleware:
-app.use((req, res, next) => {
-  // More explicit CORS headers
-  const origin = req.headers.origin
-  const allowedOrigins = [
-    'https://rdv-image-generator.netlify.app',
-    'https://rdv-news-api.vercel.app',
-    'http://localhost:3000',
-    'http://localhost:5000',
-    'http://127.0.0.1:5500',
-  ]
-  
-  if (allowedOrigins.includes(origin) || 
-      origin?.includes('netlify.app') || 
-      origin?.includes('vercel.app') ||
-      origin?.includes('airtableblocks.com') ||
-      origin?.includes('airtable.com')) {
-    res.header('Access-Control-Allow-Origin', origin)
-  } else {
-    res.header('Access-Control-Allow-Origin', '*')
-  }
-  
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin')
-  res.header('Access-Control-Allow-Credentials', 'true')
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200)
-  } else {
-    next()
-  }
-})
+
 app.use(morgan('dev'))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ limit: '50mb', extended: true })) 
