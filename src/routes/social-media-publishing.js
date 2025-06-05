@@ -377,7 +377,7 @@ async function publishToFacebook(imageData, caption, config) {
 }
 
 async function uploadImageToFacebook(imageData, config) {
-  console.log('📤 Uploading image via FormData method...')
+  console.log('📤 Uploading image via proper FormData package...')
 
   let imageBuffer = imageData
 
@@ -388,70 +388,46 @@ async function uploadImageToFacebook(imageData, config) {
   })
 
   // Detect image format
-  const isPNG =
-    imageBuffer[0] === 0x89 &&
-    imageBuffer[1] === 0x50 &&
-    imageBuffer[2] === 0x4e &&
-    imageBuffer[3] === 0x47
-  const isJPEG =
-    imageBuffer[0] === 0xff &&
-    imageBuffer[1] === 0xd8 &&
-    imageBuffer[2] === 0xff
-
-  let contentType = 'image/png'
-  let filename = `rdv-post-${Date.now()}.png`
-
-  if (isJPEG) {
-    contentType = 'image/jpeg'
-    filename = `rdv-post-${Date.now()}.jpg`
-  }
+  const isJPEG = imageBuffer[0] === 0xff && imageBuffer[1] === 0xd8 && imageBuffer[2] === 0xff
+  const contentType = isJPEG ? 'image/jpeg' : 'image/png'
+  const filename = isJPEG ? `rdv-post-${Date.now()}.jpg` : `rdv-post-${Date.now()}.png`
 
   console.log('🖼️ Image validation:', {
-    isPNG,
     isJPEG,
     size: imageBuffer.length,
     contentType,
     filename,
   })
 
-  // Use multipart/form-data manually to avoid form-data package issues
-  const boundary = `----formdata-${Date.now()}`
+  // Use the form-data package correctly
+  const formData = new FormData()
+  
+  // Create a readable stream from the buffer
+  const { Readable } = await import('stream')
+  const imageStream = new Readable({
+    read() {}
+  })
+  imageStream.push(imageBuffer)
+  imageStream.push(null) // End the stream
 
-  const formParts = [
-    `--${boundary}`,
-    `Content-Disposition: form-data; name="source"; filename="${filename}"`,
-    `Content-Type: ${contentType}`,
-    '',
-    imageBuffer,
-    `--${boundary}`,
-    'Content-Disposition: form-data; name="published"',
-    '',
-    'false',
-    `--${boundary}--`,
-  ]
+  formData.append('source', imageStream, {
+    filename: filename,
+    contentType: contentType,
+    knownLength: imageBuffer.length
+  })
+  formData.append('published', 'false')
+  formData.append('access_token', config.accessToken)
 
-  // Create the multipart body
-  const formBody = Buffer.concat([
-    Buffer.from(formParts.slice(0, 4).join('\r\n') + '\r\n', 'utf8'),
-    imageBuffer,
-    Buffer.from('\r\n' + formParts.slice(5).join('\r\n'), 'utf8'),
-  ])
-
-  const uploadUrl = `${config.apiUrl}/${config.pageId}/photos?access_token=${config.accessToken}`
-
-  console.log(
-    '📤 Upload URL:',
-    uploadUrl.replace(config.accessToken, 'TOKEN_HIDDEN')
-  )
-  console.log('📤 Content-Type:', `multipart/form-data; boundary=${boundary}`)
+  const uploadUrl = `${config.apiUrl}/${config.pageId}/photos`
+  
+  console.log('📤 Upload URL:', uploadUrl.replace(config.accessToken, 'TOKEN_HIDDEN'))
 
   const response = await fetch(uploadUrl, {
     method: 'POST',
+    body: formData,
     headers: {
-      'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      'Content-Length': formBody.length.toString(),
-    },
-    body: formBody,
+      ...formData.getHeaders() // This is crucial - let form-data set the headers
+    }
   })
 
   const result = await response.json()
@@ -464,9 +440,7 @@ async function uploadImageToFacebook(imageData, config) {
 
   if (!response.ok || result.error) {
     console.error('❌ Facebook upload failed:', result.error)
-    throw new Error(
-      `Image upload failed: ${result.error?.message || 'Unknown error'}`
-    )
+    throw new Error(`Image upload failed: ${result.error?.message || 'Unknown error'}`)
   }
 
   if (!result.id) {
