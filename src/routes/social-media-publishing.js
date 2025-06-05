@@ -311,8 +311,15 @@ async function publishToInstagram(imageData, caption, config) {
   }
 }
 
+// Update the publishToFacebook function to log errors:
 async function publishToFacebook(imageData, caption, config) {
   console.log('📘 Publishing to Facebook via Graph API...')
+  console.log('🔧 Config check:', {
+    hasAccessToken: !!config.accessToken,
+    hasPageId: !!config.pageId,
+    pageId: config.pageId,
+    accessTokenLength: config.accessToken?.length
+  })
 
   try {
     // Step 1: Upload image to Facebook
@@ -337,18 +344,29 @@ async function publishToFacebook(imageData, caption, config) {
       imageId: imageUploadResult.id,
     }
   } catch (error) {
-    console.error('Facebook Graph API error:', error)
-    throw new Error(`Facebook publishing failed: ${error.message}`)
+    console.error('❌ Facebook Graph API detailed error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    })
+    throw error  // Re-throw to see the exact error
   }
 }
 
+// Also update uploadImageToFacebook to log more details:
 async function uploadImageToFacebook(imageData, config) {
+  console.log('📤 Uploading image details:', {
+    imageSize: imageData.length,
+    pageId: config.pageId,
+    apiUrl: config.apiUrl
+  })
+
   const formData = new FormData()
   formData.append('source', imageData, {
     filename: `rdv-post-${Date.now()}.png`,
     contentType: 'image/png',
   })
-  formData.append('published', 'false') // Upload without publishing
+  formData.append('published', 'false')
   formData.append('access_token', config.accessToken)
 
   const response = await fetch(`${config.apiUrl}/${config.pageId}/photos`, {
@@ -358,8 +376,15 @@ async function uploadImageToFacebook(imageData, config) {
   })
 
   const result = await response.json()
+  
+  console.log('📊 Facebook upload response:', {
+    status: response.status,
+    ok: response.ok,
+    result: result
+  })
 
   if (!response.ok || result.error) {
+    console.error('❌ Facebook upload failed:', result.error)
     throw new Error(
       `Image upload failed: ${result.error?.message || 'Unknown error'}`
     )
