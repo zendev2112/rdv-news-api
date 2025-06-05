@@ -1,32 +1,13 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "src/server.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": ["src/templates/**", "src/assets/**"]
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "src/server.js"
-    }
-  ],
-  "functions": {
-    "src/server.js": {
-      "maxDuration": 30
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": "/src/server.js"
     }
   ],
-  "env": {
-    "VERCEL_MAX_PAYLOAD_SIZE": "50mb"
+  "functions": {
+    "src/server.js": {
+      "maxDuration": 30
+    }
   }
 }
