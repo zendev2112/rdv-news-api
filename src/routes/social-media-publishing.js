@@ -353,34 +353,51 @@ async function publishToFacebook(imageData, caption, config) {
   }
 }
 
-// Also update uploadImageToFacebook to log more details:
 async function uploadImageToFacebook(imageData, config) {
   console.log('📤 Uploading image details:', {
     imageSize: imageData.length,
     pageId: config.pageId,
-    apiUrl: config.apiUrl
+    apiUrl: config.apiUrl,
   })
 
+  // Convert base64 to buffer if needed
+  let imageBuffer
+  if (typeof imageData === 'string' && imageData.startsWith('data:image')) {
+    // Handle data URL
+    const base64Data = imageData.split(',')[1]
+    imageBuffer = Buffer.from(base64Data, 'base64')
+  } else if (typeof imageData === 'string') {
+    // Handle base64 string
+    imageBuffer = Buffer.from(imageData, 'base64')
+  } else {
+    // Already a buffer
+    imageBuffer = imageData
+  }
+
   const formData = new FormData()
-  formData.append('source', imageData, {
+  formData.append('source', imageBuffer, {
     filename: `rdv-post-${Date.now()}.png`,
     contentType: 'image/png',
   })
   formData.append('published', 'false')
   formData.append('access_token', config.accessToken)
 
+  console.log('📤 Uploading to:', `${config.apiUrl}/${config.pageId}/photos`)
+
   const response = await fetch(`${config.apiUrl}/${config.pageId}/photos`, {
     method: 'POST',
     body: formData,
-    headers: formData.getHeaders(),
+    headers: {
+      ...formData.getHeaders(),
+    },
   })
 
   const result = await response.json()
-  
+
   console.log('📊 Facebook upload response:', {
     status: response.status,
     ok: response.ok,
-    result: result
+    result: result,
   })
 
   if (!response.ok || result.error) {
