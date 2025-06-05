@@ -354,42 +354,28 @@ async function publishToFacebook(imageData, caption, config) {
 }
 
 async function uploadImageToFacebook(imageData, config) {
-  console.log('📤 Uploading image details:', {
-    imageSize: imageData.length,
-    pageId: config.pageId,
-    apiUrl: config.apiUrl,
-  })
+  console.log('📤 Uploading image via URL method...')
 
-  // Convert base64 to buffer if needed
+  // Convert to buffer
   let imageBuffer
   if (typeof imageData === 'string' && imageData.startsWith('data:image')) {
-    // Handle data URL
     const base64Data = imageData.split(',')[1]
     imageBuffer = Buffer.from(base64Data, 'base64')
   } else if (typeof imageData === 'string') {
-    // Handle base64 string
     imageBuffer = Buffer.from(imageData, 'base64')
   } else {
-    // Already a buffer
     imageBuffer = imageData
   }
 
-  const formData = new FormData()
-  formData.append('source', imageBuffer, {
-    filename: `rdv-post-${Date.now()}.png`,
-    contentType: 'image/png',
-  })
-  formData.append('published', 'false')
-  formData.append('access_token', config.accessToken)
+  // Upload using URL parameters
+  const uploadUrl = `${config.apiUrl}/${config.pageId}/photos?published=false&access_token=${config.accessToken}`
 
-  console.log('📤 Uploading to:', `${config.apiUrl}/${config.pageId}/photos`)
-
-  const response = await fetch(`${config.apiUrl}/${config.pageId}/photos`, {
+  const response = await fetch(uploadUrl, {
     method: 'POST',
-    body: formData,
     headers: {
-      ...formData.getHeaders(),
+      'Content-Type': 'image/png',
     },
+    body: imageBuffer,
   })
 
   const result = await response.json()
@@ -407,11 +393,6 @@ async function uploadImageToFacebook(imageData, config) {
     )
   }
 
-  if (!result.id) {
-    throw new Error('No image ID received from Facebook')
-  }
-
-  console.log('✅ Image uploaded to Facebook:', result.id)
   return result
 }
 
