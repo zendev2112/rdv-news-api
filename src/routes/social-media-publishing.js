@@ -651,30 +651,48 @@ router.get('/facebook/page-info', authenticateApiKey, async (req, res) => {
   }
 })
 
-// Add this middleware for frontend-only access
 const authenticateFrontend = (req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Only allow your specific frontend domain
-  if (origin === 'https://rdv-image-generator.netlify.app') {
-    next();
-  } else {
-    res.status(403).json({ error: 'Access denied' });
-  }
-};
+  const origin = req.headers.origin
+  const userAgent = req.headers['user-agent']
 
-/**
- * Quick publish endpoint for frontend integration
- */
-router.post('/quick-publish', authenticateFrontend, async (req, res) => {
+  console.log('🔍 Request authentication:', {
+    origin,
+    userAgent: userAgent?.substring(0, 50),
+    hasOrigin: !!origin,
+  })
+
+  // Allow requests from your frontend domain OR internal server requests (no origin)
+  if (
+    origin === 'https://rdv-image-generator.netlify.app' ||
+    origin === 'http://localhost:3000' ||
+    !origin // ✅ KEY FIX: Allow requests without origin (internal server requests)
+  ) {
+    next()
+  } else {
+    console.error('❌ Access denied for origin:', origin)
+    res.status(403).json({ error: 'Access denied' })
+  }
+}
+
+// WITH THIS:
+router.post('/quick-publish', authenticateApiKey, async (req, res) => {
   try {
     const { platform, imageBlob, caption, metadata } = req.body
+
+    console.log('🔑 Authenticated API request received:', {
+      platform,
+      hasImage: !!imageBlob,
+      captionLength: caption?.length || 0,
+      metadata
+    })
 
     if (!platform || !imageBlob || !caption) {
       return res.status(400).json({
         error: 'Missing required fields: platform, imageBlob, caption',
       })
     }
+
+    console.log(`📤 Quick publishing to ${platform}...`)
 
     // Convert base64 to buffer
     const base64Data = imageBlob.replace(/^data:image\/[a-z]+;base64,/, '')
