@@ -34,11 +34,20 @@ const authenticateApiKey = (req, res, next) => {
   next()
 }
 
-// CORS middleware
+// Even better CORS configuration:
 router.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*')
+  const origin = req.headers.origin;
+  
+  // Allow your specific domains
+  if (origin === 'https://rdv-image-generator.netlify.app' || 
+      origin === 'http://localhost:3000' || 
+      !origin) {
+    res.header('Access-Control-Allow-Origin', origin || '*')
+  }
+  
   res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-API-Key') // ✅ Added X-API-Key
+  res.header('Access-Control-Allow-Credentials', 'true')
 
   if (req.method === 'OPTIONS') {
     res.sendStatus(200)
