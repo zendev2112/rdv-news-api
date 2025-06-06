@@ -377,7 +377,7 @@ async function publishToFacebook(imageData, caption, config) {
 }
 
 async function uploadImageToFacebook(imageData, config) {
-  console.log('📤 Uploading image via direct buffer method...')
+  console.log('📤 Uploading image via corrected FormData method...')
 
   let imageBuffer = imageData
 
@@ -398,26 +398,29 @@ async function uploadImageToFacebook(imageData, config) {
     filename,
   })
 
-  // Use form-data package properly with buffer (not stream)
+  // Create FormData with ONLY the image and published flag
   const formData = new FormData()
 
-  // Append buffer directly (not stream)
   formData.append('source', imageBuffer, {
     filename: filename,
     contentType: contentType,
   })
   formData.append('published', 'false')
-  formData.append('access_token', config.accessToken)
+  // ✅ CRITICAL: Don't add access_token to FormData
 
-  const uploadUrl = `${config.apiUrl}/${config.pageId}/photos`
+  // ✅ CRITICAL: Put access_token in URL instead
+  const uploadUrl = `${config.apiUrl}/${config.pageId}/photos?access_token=${config.accessToken}`
 
-  console.log('📤 Upload URL:', uploadUrl)
+  console.log(
+    '📤 Upload URL:',
+    uploadUrl.replace(config.accessToken, 'TOKEN_HIDDEN')
+  )
   console.log('📤 FormData headers:', formData.getHeaders())
 
   const response = await fetch(uploadUrl, {
     method: 'POST',
     body: formData,
-    headers: formData.getHeaders(), // Let form-data set the headers
+    headers: formData.getHeaders(),
   })
 
   const result = await response.json()
@@ -443,23 +446,25 @@ async function uploadImageToFacebook(imageData, config) {
   return result
 }
 async function createFacebookPost(message, photoId, config) {
-  const postData = {
+  // Use URLSearchParams instead of JSON
+  const postData = new URLSearchParams({
     message: message,
-    attached_media: [{ media_fbid: photoId }],
+    attached_media: JSON.stringify([{ media_fbid: photoId }]),
     access_token: config.accessToken,
-  }
+  })
 
   const response = await fetch(`${config.apiUrl}/${config.pageId}/feed`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: JSON.stringify(postData),
+    body: postData.toString(),
   })
 
   const result = await response.json()
 
   if (!response.ok || result.error) {
+    console.error('❌ Facebook post creation failed:', result.error)
     throw new Error(
       `Post creation failed: ${result.error?.message || 'Unknown error'}`
     )
