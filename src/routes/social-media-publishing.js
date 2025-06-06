@@ -6,7 +6,7 @@
 import express from 'express'
 import multer from 'multer'
 import fetch from 'node-fetch'
-import FormData from 'form-data'
+
 
 const router = express.Router()
 
@@ -377,7 +377,7 @@ async function publishToFacebook(imageData, caption, config) {
 }
 
 async function uploadImageToFacebook(imageData, config) {
-  console.log('📤 Uploading image via corrected FormData method...')
+  console.log('📤 Uploading image via native fetch approach...')
 
   let imageBuffer = imageData
 
@@ -398,29 +398,66 @@ async function uploadImageToFacebook(imageData, config) {
     filename,
   })
 
-  // Create FormData with ONLY the image and published flag
-  const formData = new FormData()
+  // Use manual multipart/form-data construction
+  const boundary = `----WebKitFormBoundary${Math.random()
+    .toString(16)
+    .substr(2)}`
 
-  formData.append('source', imageBuffer, {
-    filename: filename,
-    contentType: contentType,
-  })
-  formData.append('published', 'false')
-  // ✅ CRITICAL: Don't add access_token to FormData
+  const formDataParts = [
+    `--${boundary}`,
+    `Content-Disposition: form-data; name="source"; filename="${filename}"`,
+    `Content-Type: ${contentType}`,
+    '',
+    imageBuffer,
+    `--${boundary}`,
+    `Content-Disposition: form-data; name="published"`,
+    '',
+    'false',
+    `--${boundary}--`,
+  ]
 
-  // ✅ CRITICAL: Put access_token in URL instead
+  // Build the body
+  const textParts =
+    [
+      formDataParts[0],
+      formDataParts[1],
+      formDataParts[2],
+      formDataParts[3],
+    ].join('\r\n') + '\r\n'
+
+  const endParts =
+    '\r\n' +
+    [
+      formDataParts[5],
+      formDataParts[6],
+      formDataParts[7],
+      formDataParts[8],
+      formDataParts[9],
+    ].join('\r\n')
+
+  // Combine all parts
+  const body = Buffer.concat([
+    Buffer.from(textParts, 'utf8'),
+    imageBuffer,
+    Buffer.from(endParts, 'utf8'),
+  ])
+
   const uploadUrl = `${config.apiUrl}/${config.pageId}/photos?access_token=${config.accessToken}`
 
   console.log(
     '📤 Upload URL:',
     uploadUrl.replace(config.accessToken, 'TOKEN_HIDDEN')
   )
-  console.log('📤 FormData headers:', formData.getHeaders())
+  console.log('📤 Body size:', body.length)
+  console.log('📤 Content-Type:', `multipart/form-data; boundary=${boundary}`)
 
   const response = await fetch(uploadUrl, {
     method: 'POST',
-    body: formData,
-    headers: formData.getHeaders(),
+    headers: {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': body.length.toString(),
+    },
+    body: body,
   })
 
   const result = await response.json()
