@@ -377,7 +377,7 @@ async function publishToFacebook(imageData, caption, config) {
 }
 
 async function uploadImageToFacebook(imageData, config) {
-  console.log('📤 Uploading image via native fetch approach...')
+  console.log('📤 Uploading image via corrected multipart approach...')
 
   let imageBuffer = imageData
 
@@ -398,48 +398,27 @@ async function uploadImageToFacebook(imageData, config) {
     filename,
   })
 
-  // Use manual multipart/form-data construction
-  const boundary = `----WebKitFormBoundary${Math.random()
-    .toString(16)
-    .substr(2)}`
+  // Create proper multipart form data
+  const boundary = `----formdata-polyfill-${Math.random().toString(16)}`
+  const CRLF = '\r\n'
 
-  const formDataParts = [
-    `--${boundary}`,
-    `Content-Disposition: form-data; name="source"; filename="${filename}"`,
-    `Content-Type: ${contentType}`,
-    '',
-    imageBuffer,
-    `--${boundary}`,
-    `Content-Disposition: form-data; name="published"`,
-    '',
-    'false',
-    `--${boundary}--`,
-  ]
+  const pre = [
+    `--${boundary}${CRLF}`,
+    `Content-Disposition: form-data; name="source"; filename="${filename}"${CRLF}`,
+    `Content-Type: ${contentType}${CRLF}${CRLF}`,
+  ].join('')
 
-  // Build the body
-  const textParts =
-    [
-      formDataParts[0],
-      formDataParts[1],
-      formDataParts[2],
-      formDataParts[3],
-    ].join('\r\n') + '\r\n'
+  const post = [
+    `${CRLF}--${boundary}${CRLF}`,
+    `Content-Disposition: form-data; name="published"${CRLF}${CRLF}`,
+    `false${CRLF}`,
+    `--${boundary}--${CRLF}`,
+  ].join('')
 
-  const endParts =
-    '\r\n' +
-    [
-      formDataParts[5],
-      formDataParts[6],
-      formDataParts[7],
-      formDataParts[8],
-      formDataParts[9],
-    ].join('\r\n')
-
-  // Combine all parts
   const body = Buffer.concat([
-    Buffer.from(textParts, 'utf8'),
+    Buffer.from(pre, 'utf8'),
     imageBuffer,
-    Buffer.from(endParts, 'utf8'),
+    Buffer.from(post, 'utf8'),
   ])
 
   const uploadUrl = `${config.apiUrl}/${config.pageId}/photos?access_token=${config.accessToken}`
@@ -449,7 +428,7 @@ async function uploadImageToFacebook(imageData, config) {
     uploadUrl.replace(config.accessToken, 'TOKEN_HIDDEN')
   )
   console.log('📤 Body size:', body.length)
-  console.log('📤 Content-Type:', `multipart/form-data; boundary=${boundary}`)
+  console.log('📤 Boundary:', boundary)
 
   const response = await fetch(uploadUrl, {
     method: 'POST',
@@ -470,6 +449,13 @@ async function uploadImageToFacebook(imageData, config) {
 
   if (!response.ok || result.error) {
     console.error('❌ Facebook upload failed:', result.error)
+
+    // Add more debugging info
+    console.error('🔍 Debug multipart structure:')
+    console.error('Pre:', pre.replace(/\r\n/g, '\\r\\n'))
+    console.error('Post:', post.replace(/\r\n/g, '\\r\\n'))
+    console.error('Image buffer size:', imageBuffer.length)
+
     throw new Error(
       `Image upload failed: ${result.error?.message || 'Unknown error'}`
     )
@@ -482,6 +468,8 @@ async function uploadImageToFacebook(imageData, config) {
   console.log('✅ Image uploaded to Facebook:', result.id)
   return result
 }
+
+
 async function createFacebookPost(message, photoId, config) {
   // Use URLSearchParams instead of JSON
   const postData = new URLSearchParams({
