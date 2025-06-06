@@ -377,14 +377,19 @@ async function publishToFacebook(imageData, caption, config) {
 }
 
 async function uploadImageToFacebook(imageData, config) {
-  console.log('📤 Uploading image via proper FormData package...')
+  console.log('📤 Uploading image via direct buffer method...')
 
   let imageBuffer = imageData
 
   // Detect image format
-  const isJPEG = imageBuffer[0] === 0xff && imageBuffer[1] === 0xd8 && imageBuffer[2] === 0xff
+  const isJPEG =
+    imageBuffer[0] === 0xff &&
+    imageBuffer[1] === 0xd8 &&
+    imageBuffer[2] === 0xff
   const contentType = isJPEG ? 'image/jpeg' : 'image/png'
-  const filename = isJPEG ? `rdv-post-${Date.now()}.jpg` : `rdv-post-${Date.now()}.png`
+  const filename = isJPEG
+    ? `rdv-post-${Date.now()}.jpg`
+    : `rdv-post-${Date.now()}.png`
 
   console.log('🖼️ Image validation:', {
     isJPEG,
@@ -393,35 +398,26 @@ async function uploadImageToFacebook(imageData, config) {
     filename,
   })
 
-  // Use the form-data package correctly
+  // Use form-data package properly with buffer (not stream)
   const formData = new FormData()
-  
-  // Create a readable stream from the buffer
-  const { Readable } = await import('stream')
-  const imageStream = new Readable({
-    read() {}
-  })
-  imageStream.push(imageBuffer)
-  imageStream.push(null) // End the stream
 
-  formData.append('source', imageStream, {
+  // Append buffer directly (not stream)
+  formData.append('source', imageBuffer, {
     filename: filename,
     contentType: contentType,
-    knownLength: imageBuffer.length
   })
   formData.append('published', 'false')
+  formData.append('access_token', config.accessToken)
 
-  // ✅ CRITICAL FIX: Include access token in URL
-  const uploadUrl = `${config.apiUrl}/${config.pageId}/photos?access_token=${config.accessToken}`
-  
-  console.log('📤 Upload URL:', uploadUrl.replace(config.accessToken, 'TOKEN_HIDDEN'))
+  const uploadUrl = `${config.apiUrl}/${config.pageId}/photos`
+
+  console.log('📤 Upload URL:', uploadUrl)
+  console.log('📤 FormData headers:', formData.getHeaders())
 
   const response = await fetch(uploadUrl, {
     method: 'POST',
     body: formData,
-    headers: {
-      ...formData.getHeaders()
-    }
+    headers: formData.getHeaders(), // Let form-data set the headers
   })
 
   const result = await response.json()
@@ -434,7 +430,9 @@ async function uploadImageToFacebook(imageData, config) {
 
   if (!response.ok || result.error) {
     console.error('❌ Facebook upload failed:', result.error)
-    throw new Error(`Image upload failed: ${result.error?.message || 'Unknown error'}`)
+    throw new Error(
+      `Image upload failed: ${result.error?.message || 'Unknown error'}`
+    )
   }
 
   if (!result.id) {
