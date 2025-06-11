@@ -1,0 +1,45 @@
+# Create this file: .github/workflows/cleanup-records.yml
+name: Cleanup Old Records
+
+on:
+  schedule:
+    # Daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run mode (show what would be deleted without deleting)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run cleanup script
+        run: node cleanup-old-records.js
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+
+      - name: Log cleanup completion
+        run: echo "🧹 Cleanup completed at $(date)"
+
+      - name: Send notification on failure
+        if: failure()
+        run: echo "❌ Cleanup failed at $(date)" >> $GITHUB_STEP_SUMMARY

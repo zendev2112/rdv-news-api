@@ -1,0 +1,48 @@
+# Create this file: .github/workflows/fetch-sections.yml
+name: Fetch 5 Sections
+
+on:
+  schedule:
+    # Every 4 hours
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      sections:
+        description: 'Sections to process (comma-separated)'
+        required: false
+        default: 'primera-plana,instituciones,local,local-facebook,la-sexta'
+
+jobs:
+  fetch-sections:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        section: [primera-plana, instituciones, local, local-facebook, la-sexta]
+      max-parallel: 1 # Process one section at a time
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch section content
+        run: node fetch-to-airtable.js ${{ matrix.section }} --limit 10
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+
+      - name: Add delay between sections
+        run: sleep 30
+
+      - name: Log completion
+        run: echo "✅ Completed section ${{ matrix.section }} at $(date)"
