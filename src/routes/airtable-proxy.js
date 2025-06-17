@@ -15,56 +15,58 @@ const authenticateApiKey = (req, res, next) => {
 }
 
 // Proxy for Airtable GET requests
+// Proxy for Airtable GET requests
 router.get('/record/:recordId', authenticateApiKey, async (req, res) => {
-  try {
-    const { recordId } = req.params
-
-    // Validate record ID format
-    if (!recordId || !recordId.startsWith('rec')) {
-      return res.status(400).json({ error: 'Invalid record ID format' })
-    }
-
-    const baseId = process.env.AIRTABLE_BASE_ID || 'appWtDlgG21KUI3IN'
-    const tableName = 'Redes Sociales'
-    const token =
-      process.env.AIRTABLE_TOKEN ||
-      'patlPzRF8YzZNnogn.8b3d2d68528bfa5b0643a212f832966d1a327f6ca85e8c0f373609452318af4c'
-
-    const airtableUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
-      tableName
-    )}/${recordId}`
-
-    const response = await fetch(airtableUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      return res.status(response.status).json({
-        error: 'Airtable request failed',
-        details: errorText,
+    try {
+      const { recordId } = req.params
+      
+      if (!recordId || !recordId.startsWith('rec')) {
+        return res.status(400).json({ error: 'Invalid record ID format' })
+      }
+      
+      const baseId = process.env.AIRTABLE_BASE_ID || 'appWtDlgG21KUI3IN'
+      const tableName = 'Redes Sociales'
+      const token = process.env.AIRTABLE_TOKEN || 'patlPzRF8YzZNnogn.8b3d2d68528bfa5b0643a212f832966d1a327f6ca85e8c0f373609452318af4c'
+      
+      const airtableUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}/${recordId}`
+      
+      const response = await fetch(airtableUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        return res.status(response.status).json({ 
+          error: 'Airtable request failed',
+          details: errorText 
+        })
+      }
+      
+      const airtableData = await response.json()
+      
+      // LOG THE AIRTABLE RESPONSE FOR DEBUGGING
+      console.log('🔍 Airtable raw response:', JSON.stringify(airtableData, null, 2))
+      
+      // Return the data in the same format your client expects
+      res.json({
+        success: true,
+        data: airtableData.fields,  // This should contain title, excerpt, etc.
+        recordId: airtableData.id,
+        fullRecord: airtableData,   // Include full record for debugging
+        timestamp: new Date().toISOString()
+      })
+      
+    } catch (error) {
+      console.error('Airtable proxy error:', error)
+      res.status(500).json({ 
+        error: 'Failed to fetch Airtable data',
+        timestamp: new Date().toISOString() 
       })
     }
-
-    const data = await response.json()
-
-    res.json({
-      success: true,
-      data: data.fields,
-      recordId: data.id,
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error('Airtable proxy error:', error)
-    res.status(500).json({
-      error: 'Failed to fetch Airtable data',
-      timestamp: new Date().toISOString(),
-    })
-  }
-})
+  })
 
 // Proxy for Airtable PATCH requests (updates)
 router.patch('/record/:recordId', authenticateApiKey, async (req, res) => {
