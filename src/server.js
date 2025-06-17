@@ -38,6 +38,8 @@ app.use(
       'X-Requested-With',
       'Accept',
       'Origin',
+      'X-API-Key', // ← ADD THIS LINE
+      'x-api-key', // ← ADD THIS LINE (lowercase version)
     ],
     credentials: true,
     optionsSuccessStatus: 200,
