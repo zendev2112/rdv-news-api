@@ -89,17 +89,17 @@ async function insertRecords(records, sectionId = 'test') {
 
   try {
     // Get the API URL
-    const airtableApiUrl = getAirtableApiUrl(sectionId);
-    
+    const airtableApiUrl = getAirtableApiUrl(sectionId)
+
     if (!airtableApiUrl) {
-      throw new Error(`Could not generate API URL for section ${sectionId}`);
+      throw new Error(`Could not generate API URL for section ${sectionId}`)
     }
 
     // Check for required Airtable configuration
-    const actualToken = config.airtable?.personalAccessToken || apiToken;
-    
+    const actualToken = config.airtable?.personalAccessToken || apiToken
+
     if (!actualToken) {
-      throw new Error('Missing Airtable API token');
+      throw new Error('Missing Airtable API token')
     }
 
     // Add section ID to each record and ensure all required fields are present
@@ -113,12 +113,12 @@ async function insertRecords(records, sectionId = 'test') {
       // CRITICAL: Make sure overline and excerpt are properly handled
       // Map volanta to overline if needed
       if (!record.fields.overline && record.fields.volanta) {
-        record.fields.overline = record.fields.volanta;
+        record.fields.overline = record.fields.volanta
       }
-      
+
       // Map bajada to excerpt if needed
       if (!record.fields.excerpt && record.fields.bajada) {
-        record.fields.excerpt = record.fields.bajada;
+        record.fields.excerpt = record.fields.bajada
       }
 
       // Only add section if it's not already present AND the table should have a section field
@@ -127,55 +127,57 @@ async function insertRecords(records, sectionId = 'test') {
         const sectionIdToAirtableValue = {
           'coronel-suarez': 'Coronel Suárez',
           'pueblos-alemanes': 'Pueblos Alemanes',
-          'huanguelen': 'Huanguelén',
+          huanguelen: 'Huanguelén',
           'la-sexta': 'La Sexta',
-          'politica': 'Política',
-          'economia': 'Economía',
-          'agro': 'Agro',
-          'sociedad': 'Sociedad',
-          'salud': 'Salud',
-          'cultura': 'Cultura',
-          'opinion': 'Opinión',
-          'deportes': 'Deportes',
-          'lifestyle': 'Lifestyle',
-          'vinos': 'Vinos',
+          politica: 'Política',
+          economia: 'Economía',
+          agro: 'Agro',
+          sociedad: 'Sociedad',
+          salud: 'Salud',
+          cultura: 'Cultura',
+          opinion: 'Opinión',
+          deportes: 'Deportes',
+          lifestyle: 'Lifestyle',
+          vinos: 'Vinos',
           'el-recetario': 'El Recetario',
           'santa-trinidad': 'Santa Trinidad',
           'san-jose': 'San José',
           'santa-maria': 'Santa María',
-          'iactualidad': 'IActualidad',
-          'dolar': 'Dólar',
-          'propiedades': 'Propiedades',
+          iactualidad: 'IActualidad',
+          dolar: 'Dólar',
+          propiedades: 'Propiedades',
           'pymes-emprendimientos': 'Pymes y Emprendimientos',
-          'inmuebles': 'Inmuebles',
-          'campos': 'Campos',
+          inmuebles: 'Inmuebles',
+          campos: 'Campos',
           'construccion-diseno': 'Construcción y Diseño',
-          'agricultura': 'Agricultura',
-          'ganaderia': 'Ganadería',
+          agricultura: 'Agricultura',
+          ganaderia: 'Ganadería',
           'tecnologias-agro': 'Tecnologías',
-          'educacion': 'Educación',
-          'policiales': 'Policiales',
-          'efemerides': 'Efemérides',
-          'ciencia': 'Ciencia',
+          educacion: 'Educación',
+          policiales: 'Policiales',
+          efemerides: 'Efemérides',
+          ciencia: 'Ciencia',
           'vida-armonia': 'Vida en Armonía',
           'nutricion-energia': 'Nutrición y Energía',
-          'fitness': 'Fitness',
+          fitness: 'Fitness',
           'salud-mental': 'Salud Mental',
-          'turismo': 'Turismo',
-          'horoscopo': 'Horóscopo',
-          'feriados': 'Feriados',
+          turismo: 'Turismo',
+          horoscopo: 'Horóscopo',
+          feriados: 'Feriados',
           'loterias-quinielas': 'Loterías y Quinielas',
           'moda-belleza': 'Moda y Belleza',
-          'mascotas': 'Mascotas',
-        };
+          mascotas: 'Mascotas',
+        }
 
         // Get section value from mapping, fall back to a default
-        let sectionValue = sectionIdToAirtableValue[sectionId] || '';
-        
-        console.log(`Setting section to "${sectionValue}" for article`);
-        record.fields.section = sectionValue;
+        let sectionValue = sectionIdToAirtableValue[sectionId] || ''
+
+        console.log(`Setting section to "${sectionValue}" for article`)
+        record.fields.section = sectionValue
       } else if (!record.fields.section && !shouldAddSectionField(sectionId)) {
-        console.log(`Skipping section field for ${sectionId} table as it doesn't need one`);
+        console.log(
+          `Skipping section field for ${sectionId} table as it doesn't need one`
+        )
       }
 
       // Ensure fields meet Airtable requirements (no undefined values)
@@ -186,11 +188,11 @@ async function insertRecords(records, sectionId = 'test') {
       })
 
       return true
-    });
+    })
 
     if (validRecords.length === 0) {
-      logger.warn(`No valid records to insert into ${sectionId} Airtable table`);
-      return null;
+      logger.warn(`No valid records to insert into ${sectionId} Airtable table`)
+      return null
     }
 
     // Log the first record for debugging
@@ -198,13 +200,13 @@ async function insertRecords(records, sectionId = 'test') {
       url: validRecords[0].fields.url,
       title: validRecords[0].fields.title,
       overline: validRecords[0].fields.overline, // Show overline in logs
-      excerpt: validRecords[0].fields.excerpt,    // Show excerpt in logs
-      fieldCount: Object.keys(validRecords[0].fields).length
-    });
+      excerpt: validRecords[0].fields.excerpt, // Show excerpt in logs
+      fieldCount: Object.keys(validRecords[0].fields).length,
+    })
 
     logger.info(
       `Attempting to insert ${validRecords.length} records into ${sectionId} table via ${airtableApiUrl}`
-    );
+    )
 
     // Step 1: Insert records into Airtable (existing code)
     const response = await axios.post(
@@ -216,55 +218,96 @@ async function insertRecords(records, sectionId = 'test') {
           'Content-Type': 'application/json',
         },
       }
-    );
+    )
 
     logger.info(
       `Success! Inserted ${validRecords.length} records into ${sectionId} Airtable table`
-    );
+    )
 
-    // ✅ NEW STEP 2: Extract Airtable attachment URLs and update records
-    const createdRecords = response.data.records;
-    const recordsToUpdate = [];
+    // ✅ NEW STEP 2: Wait for Airtable to process attachments, then fetch and update
+    const createdRecords = response.data.records
+    const recordsToUpdate = []
 
-    
+    // Wait 2-3 seconds for Airtable to process the images
+    await new Promise((resolve) => setTimeout(resolve, 3000))
 
+    // Re-fetch each record to get the processed Airtable URLs
     for (const record of createdRecords) {
-      const fields = record.fields;
-      
-      // Extract Airtable attachment URLs from the 'image' field
-      let airtableImageUrl = '';
-      let allAirtableImageUrls = [];
-      
-      if (fields.image && Array.isArray(fields.image) && fields.image.length > 0) {
-        // Get the first image URL (for imgUrl field)
-        airtableImageUrl = fields.image[0].url; // This is the v5.airtableusercontent.com URL
-        
-        // Get all image URLs (for article-images field)
-        allAirtableImageUrls = fields.image.map(img => img.url);
-      }
-      
-      // Only update if we have Airtable URLs and they're different from original
-      if (airtableImageUrl) {
-        const updateData = {
-          imgUrl: airtableImageUrl, // ✅ Update with Airtable URL
-        };
-        
-        // Update article-images with all Airtable attachment URLs
-        if (allAirtableImageUrls.length > 0) {
-          updateData['article-images'] = allAirtableImageUrls.join(', ');
+      try {
+        // Re-fetch the record to get processed attachment URLs
+        const refetchResponse = await axios.get(
+          `${airtableApiUrl}/${record.id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${actualToken}`,
+            },
+          }
+        )
+
+        const freshFields = refetchResponse.data.fields
+
+        // Now extract the Airtable URLs from the fresh data
+        let airtableImageUrl = ''
+        let allAirtableImageUrls = []
+
+        if (
+          freshFields.image &&
+          Array.isArray(freshFields.image) &&
+          freshFields.image.length > 0
+        ) {
+          // Check if the URL is now an Airtable URL
+          const firstImageUrl = freshFields.image[0].url
+
+          if (
+            firstImageUrl &&
+            firstImageUrl.includes('airtableusercontent.com')
+          ) {
+            airtableImageUrl = firstImageUrl
+            allAirtableImageUrls = freshFields.image
+              .filter(
+                (img) => img.url && img.url.includes('airtableusercontent.com')
+              )
+              .map((img) => img.url)
+
+            console.log(
+              `✅ Found Airtable URL for record ${record.id}: ${airtableImageUrl}`
+            )
+          } else {
+            console.log(
+              `⚠️ Record ${record.id} still has original URL: ${firstImageUrl}`
+            )
+          }
         }
-        
-        recordsToUpdate.push({
-          id: record.id,
-          fields: updateData
-        });
+
+        // Update the record if we have Airtable URLs
+        if (airtableImageUrl) {
+          const updateData = {
+            imgUrl: airtableImageUrl,
+          }
+
+          if (allAirtableImageUrls.length > 0) {
+            updateData['article-images'] = allAirtableImageUrls.join(', ')
+          }
+
+          recordsToUpdate.push({
+            id: record.id,
+            fields: updateData,
+          })
+        }
+      } catch (fetchError) {
+        console.log(
+          `❌ Error re-fetching record ${record.id}:`,
+          fetchError.message
+        )
       }
     }
 
     // ✅ NEW STEP 3: Update records with Airtable URLs if needed
     if (recordsToUpdate.length > 0) {
-      logger.info(`Updating ${recordsToUpdate.length} records with Airtable attachment URLs`);
-      
+      logger.info(
+        `Updating ${recordsToUpdate.length} records with Airtable attachment URLs`
+      )
+
       try {
         await axios.patch(
           airtableApiUrl,
@@ -275,16 +318,21 @@ async function insertRecords(records, sectionId = 'test') {
               'Content-Type': 'application/json',
             },
           }
-        );
-        
-        logger.info(`Successfully updated ${recordsToUpdate.length} records with Airtable URLs`);
+        )
+
+        logger.info(
+          `Successfully updated ${recordsToUpdate.length} records with Airtable URLs`
+        )
       } catch (updateError) {
-        logger.error(`Error updating records with Airtable URLs:`, updateError.message);
+        logger.error(
+          `Error updating records with Airtable URLs:`,
+          updateError.message
+        )
         // Don't throw here - the records were created successfully
       }
     }
 
-    return response.data;
+    return response.data
   } catch (error) {
     logger.error(
       `Error inserting records into ${sectionId} Airtable table:`,
