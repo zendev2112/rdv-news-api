@@ -261,26 +261,33 @@ async function insertRecords(records, sectionId = 'test') {
           // Check if the URL is now an Airtable URL
           const firstImageUrl = freshFields.image[0].url
 
-          if (
-            firstImageUrl &&
-            firstImageUrl.includes('airtableusercontent.com')
-          ) {
-            airtableImageUrl = firstImageUrl
-            allAirtableImageUrls = freshFields.image
-              .filter(
-                (img) => img.url && img.url.includes('airtableusercontent.com')
-              )
-              .map((img) => img.url)
-              .slice(1)
+           if (
+             firstImageUrl &&
+             firstImageUrl.includes('airtableusercontent.com')
+           ) {
+             airtableImageUrl = firstImageUrl
 
-            console.log(
-              `✅ Found Airtable URL for record ${record.id}: ${airtableImageUrl}`
-            )
-          } else {
-            console.log(
-              `⚠️ Record ${record.id} still has original URL: ${firstImageUrl}`
-            )
-          }
+             // ✅ FIXED: Get ALL Airtable URLs first
+             const allAirtableUrls = freshFields.image
+               .filter(
+                 (img) => img.url && img.url.includes('airtableusercontent.com')
+               )
+               .map((img) => img.url)
+
+             // ✅ FIXED: Get only the additional images (excluding first one)
+             allAirtableImageUrls = allAirtableUrls.slice(1)
+
+             console.log(
+               `✅ Found Airtable URL for record ${record.id}: ${airtableImageUrl}`
+             )
+             console.log(
+               `✅ Total images: ${allAirtableUrls.length}, Additional images: ${allAirtableImageUrls.length}`
+             )
+           } else {
+             console.log(
+               `⚠️ Record ${record.id} still has original URL: ${firstImageUrl}`
+             )
+           }
         }
 
         // Update the record if we have Airtable URLs
@@ -289,9 +296,11 @@ async function insertRecords(records, sectionId = 'test') {
             imgUrl: airtableImageUrl,
           }
 
-          if (allAirtableImageUrls.length > 0) {
-            updateData['article-images'] = allAirtableImageUrls.join(', ')
-          }
+          // ✅ FIXED: Always try to update article-images, even if empty
+          // This will clear the field if there are no additional images
+          updateData['article-images'] = allAirtableImageUrls.join(', ')
+
+          console.log(`📝 Update data for record ${record.id}:`, updateData)
 
           recordsToUpdate.push({
             id: record.id,
