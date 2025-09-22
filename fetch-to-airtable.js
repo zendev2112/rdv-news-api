@@ -1090,26 +1090,31 @@ async function processArticle(item, sectionId) {
     const sourceName = extractSourceName(item.url)
     console.log(`Extracted source name: ${sourceName} from URL: ${item.url}`)
 
+    // Find the recordFields creation around line 1036 and modify it:
+
     const recordFields = {
       title: metadata ? metadata.title : item.title,
       overline: metadata ? metadata.volanta : 'No overline available.',
       excerpt: metadata ? metadata.bajada : 'No summary available.',
       article: processedText,
-      image: imageAttachments, // Array of attachment objects for Airtable
-      imgUrl: imgUrl || (images.length > 0 ? images[0] : ''),
-      'article-images': images.join(', '),
+      image: imageAttachments, // ✅ Array of attachment objects for Airtable
+
+      // ✅ MODIFIED: Set placeholder values that will be updated with Airtable URLs
+      imgUrl: '', // Will be populated with Airtable URL after insertion
+      'article-images': '', // Will be populated with Airtable URLs after insertion
+
       url: item.url,
-      source: sourceName, // Add the extracted source name
+      source: sourceName,
       'ig-post': instagramContent || '',
       'fb-post': facebookContent || '',
       'tw-post': twitterContent || '',
       'yt-video': youtubeContent || '',
-      section: sectionValue, // Using exact dropdown value from Airtable options
+      section: sectionValue,
       status: 'draft',
       tags: tags,
-      socialMediaText: socialMediaText, // Using exact dropdown value 'draft' instead of 'Borrador'
-      front: '', // Default to empty (no front page section assigned)
-      order: '', // Default to empty (no specific display order assigned)
+      socialMediaText: socialMediaText,
+      front: '',
+      order: '',
     }
 
     console.log(

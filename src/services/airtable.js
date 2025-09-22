@@ -43,6 +43,38 @@ function getAirtableApiUrl(sectionId) {
   return `https://api.airtable.com/v0/${actualBaseId}/${encodeURIComponent(section.tableName)}`;
 }
 
+// Add this helper function to airtable.js before the insertRecords function:
+
+/**
+ * Validates and processes Airtable attachment URLs
+ * @param {Array} attachments - Array of Airtable attachment objects
+ * @returns {Object} - Object with main URL and all URLs
+ */
+function processAirtableAttachments(attachments) {
+  try {
+    if (!Array.isArray(attachments) || attachments.length === 0) {
+      return { mainUrl: '', allUrls: [] };
+    }
+    
+    const validAttachments = attachments.filter(att => 
+      att && att.url && att.url.includes('airtableusercontent.com')
+    );
+    
+    if (validAttachments.length === 0) {
+      return { mainUrl: '', allUrls: [] };
+    }
+    
+    const mainUrl = validAttachments[0].url;
+    const allUrls = validAttachments.map(att => att.url);
+    
+    logger.info(`Processed ${validAttachments.length} Airtable attachment URLs`);
+    return { mainUrl, allUrls };
+  } catch (error) {
+    logger.error('Error processing Airtable attachments:', error.message);
+    return { mainUrl: '', allUrls: [] };
+  }
+}
+
 /**
  * Inserts records into Airtable
  * @param {Array} records - Array of records to insert
@@ -174,6 +206,7 @@ async function insertRecords(records, sectionId = 'test') {
       `Attempting to insert ${validRecords.length} records into ${sectionId} table via ${airtableApiUrl}`
     );
 
+    // Step 1: Insert records into Airtable (existing code)
     const response = await axios.post(
       airtableApiUrl,
       { records: validRecords },
@@ -188,6 +221,67 @@ async function insertRecords(records, sectionId = 'test') {
     logger.info(
       `Success! Inserted ${validRecords.length} records into ${sectionId} Airtable table`
     );
+
+    // ✅ NEW STEP 2: Extract Airtable attachment URLs and update records
+    const createdRecords = response.data.records;
+    const recordsToUpdate = [];
+
+    for (const record of createdRecords) {
+      const fields = record.fields;
+      
+      // Extract Airtable attachment URLs from the 'image' field
+      let airtableImageUrl = '';
+      let allAirtableImageUrls = [];
+      
+      if (fields.image && Array.isArray(fields.image) && fields.image.length > 0) {
+        // Get the first image URL (for imgUrl field)
+        airtableImageUrl = fields.image[0].url; // This is the v5.airtableusercontent.com URL
+        
+        // Get all image URLs (for article-images field)
+        allAirtableImageUrls = fields.image.map(img => img.url);
+      }
+      
+      // Only update if we have Airtable URLs and they're different from original
+      if (airtableImageUrl && (!fields.imgUrl || !fields.imgUrl.includes('airtableusercontent.com'))) {
+        const updateData = {
+          imgUrl: airtableImageUrl, // ✅ Update with Airtable URL
+        };
+        
+        // Update article-images with all Airtable attachment URLs
+        if (allAirtableImageUrls.length > 0) {
+          updateData['article-images'] = allAirtableImageUrls.join(', ');
+        }
+        
+        recordsToUpdate.push({
+          id: record.id,
+          fields: updateData
+        });
+      }
+    }
+
+    // ✅ NEW STEP 3: Update records with Airtable URLs if needed
+    if (recordsToUpdate.length > 0) {
+      logger.info(`Updating ${recordsToUpdate.length} records with Airtable attachment URLs`);
+      
+      try {
+        await axios.patch(
+          airtableApiUrl,
+          { records: recordsToUpdate },
+          {
+            headers: {
+              Authorization: `Bearer ${actualToken}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        
+        logger.info(`Successfully updated ${recordsToUpdate.length} records with Airtable URLs`);
+      } catch (updateError) {
+        logger.error(`Error updating records with Airtable URLs:`, updateError.message);
+        // Don't throw here - the records were created successfully
+      }
+    }
+
     return response.data;
   } catch (error) {
     logger.error(
