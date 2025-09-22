@@ -1,17 +1,18 @@
-import axios from 'axios';
-import Airtable from 'airtable';
-import config from '../config/index.js';
-import logger from '../utils/logger.js';
+import axios from 'axios'
+import Airtable from 'airtable'
+import config from '../config/index.js'
+import logger from '../utils/logger.js'
 
 // Airtable configuration - use config object if available, fallback to env vars
-const apiToken = config.airtable?.personalAccessToken || process.env.AIRTABLE_TOKEN;
-const baseId = config.airtable?.baseId || process.env.AIRTABLE_BASE_ID;
+const apiToken =
+  config.airtable?.personalAccessToken || process.env.AIRTABLE_TOKEN
+const baseId = config.airtable?.baseId || process.env.AIRTABLE_BASE_ID
 
 // Debug log to verify credentials are available
 console.log('Airtable credentials available:', {
   hasToken: !!apiToken,
-  hasBaseId: !!baseId
-});
+  hasBaseId: !!baseId,
+})
 
 /**
  * Gets the Airtable API URL for a specific section table
@@ -19,28 +20,30 @@ console.log('Airtable credentials available:', {
  * @returns {string} - Airtable API URL
  */
 function getAirtableApiUrl(sectionId) {
-  const section = config.getSection(sectionId);
-  
+  const section = config.getSection(sectionId)
+
   // Debug log to check if section and tableName exist
-  console.log(`Section data for ${sectionId}:`, { 
+  console.log(`Section data for ${sectionId}:`, {
     hasSection: !!section,
-    tableName: section?.tableName || 'NOT_FOUND' 
-  });
-  
+    tableName: section?.tableName || 'NOT_FOUND',
+  })
+
   // Use explicit baseId fallback to ensure we have a value
-  const actualBaseId = config.airtable?.baseId || baseId;
-  
+  const actualBaseId = config.airtable?.baseId || baseId
+
   if (!section || !section.tableName) {
     // Special handling for primera-plana
     if (sectionId === 'primera-plana') {
-      logger.info(`Using hardcoded table name for primera-plana`);
-      return `https://api.airtable.com/v0/${actualBaseId}/Primera%20Plana`;
+      logger.info(`Using hardcoded table name for primera-plana`)
+      return `https://api.airtable.com/v0/${actualBaseId}/Primera%20Plana`
     }
-    logger.error(`Missing section or tableName for ${sectionId}`);
-    return null;
+    logger.error(`Missing section or tableName for ${sectionId}`)
+    return null
   }
-  
-  return `https://api.airtable.com/v0/${actualBaseId}/${encodeURIComponent(section.tableName)}`;
+
+  return `https://api.airtable.com/v0/${actualBaseId}/${encodeURIComponent(
+    section.tableName
+  )}`
 }
 
 // Add this helper function to airtable.js before the insertRecords function:
@@ -53,25 +56,25 @@ function getAirtableApiUrl(sectionId) {
 function processAirtableAttachments(attachments) {
   try {
     if (!Array.isArray(attachments) || attachments.length === 0) {
-      return { mainUrl: '', allUrls: [] };
+      return { mainUrl: '', allUrls: [] }
     }
-    
-    const validAttachments = attachments.filter(att => 
-      att && att.url && att.url.includes('airtableusercontent.com')
-    );
-    
+
+    const validAttachments = attachments.filter(
+      (att) => att && att.url && att.url.includes('airtableusercontent.com')
+    )
+
     if (validAttachments.length === 0) {
-      return { mainUrl: '', allUrls: [] };
+      return { mainUrl: '', allUrls: [] }
     }
-    
-    const mainUrl = validAttachments[0].url;
-    const allUrls = validAttachments.map(att => att.url);
-    
-    logger.info(`Processed ${validAttachments.length} Airtable attachment URLs`);
-    return { mainUrl, allUrls };
+
+    const mainUrl = validAttachments[0].url
+    const allUrls = validAttachments.map((att) => att.url)
+
+    logger.info(`Processed ${validAttachments.length} Airtable attachment URLs`)
+    return { mainUrl, allUrls }
   } catch (error) {
-    logger.error('Error processing Airtable attachments:', error.message);
-    return { mainUrl: '', allUrls: [] };
+    logger.error('Error processing Airtable attachments:', error.message)
+    return { mainUrl: '', allUrls: [] }
   }
 }
 
@@ -83,8 +86,8 @@ function processAirtableAttachments(attachments) {
  */
 async function insertRecords(records, sectionId = 'test') {
   if (!records || records.length === 0) {
-    logger.warn(`No records to insert into ${sectionId} Airtable table`);
-    return null;
+    logger.warn(`No records to insert into ${sectionId} Airtable table`)
+    return null
   }
 
   try {
@@ -268,6 +271,7 @@ async function insertRecords(records, sectionId = 'test') {
                 (img) => img.url && img.url.includes('airtableusercontent.com')
               )
               .map((img) => img.url)
+              .slice(1)
 
             console.log(
               `✅ Found Airtable URL for record ${record.id}: ${airtableImageUrl}`
@@ -337,45 +341,45 @@ async function insertRecords(records, sectionId = 'test') {
     logger.error(
       `Error inserting records into ${sectionId} Airtable table:`,
       error.message
-    );
+    )
 
     // Log detailed error information
     if (error.response) {
-      logger.error(`Error status: ${error.response.status}`);
-      logger.error(`Error response: ${JSON.stringify(error.response.data)}`);
+      logger.error(`Error status: ${error.response.status}`)
+      logger.error(`Error response: ${JSON.stringify(error.response.data)}`)
 
       // For 422 errors, log more details about the data being sent
       if (error.response.status === 422) {
         logger.error(
           'This is likely due to invalid field values, missing required fields, or fields not matching the Airtable schema'
-        );
+        )
 
         // Log sample of the records being inserted (first 2)
         const sampleRecords = records.slice(0, 2).map((record) => {
           // Create a safe copy without potentially large text content
-          const safeCopy = { fields: { ...record.fields } };
+          const safeCopy = { fields: { ...record.fields } }
 
           // Truncate large text fields for logging
           if (safeCopy.fields.article) {
             safeCopy.fields.article =
-              safeCopy.fields.article.substring(0, 100) + '...';
+              safeCopy.fields.article.substring(0, 100) + '...'
           }
 
-          return safeCopy;
-        });
+          return safeCopy
+        })
 
         logger.error(
           `Sample of records trying to insert: ${JSON.stringify(sampleRecords)}`
-        );
+        )
       }
     } else if (error.request) {
-      logger.error('Error: No response received from Airtable');
+      logger.error('Error: No response received from Airtable')
     } else {
-      logger.error(`Error message: ${error.message}`);
+      logger.error(`Error message: ${error.message}`)
     }
-    
+
     // Re-throw the error so the calling function can handle it
-    throw error;
+    throw error
   }
 }
 
@@ -387,21 +391,21 @@ async function insertRecords(records, sectionId = 'test') {
  */
 async function getRecords(sectionId = 'test', params = {}) {
   try {
-    const airtableApiUrl = getAirtableApiUrl(sectionId);
+    const airtableApiUrl = getAirtableApiUrl(sectionId)
     if (!airtableApiUrl) {
-      logger.error(`Could not generate API URL for section ${sectionId}`);
-      return null;
+      logger.error(`Could not generate API URL for section ${sectionId}`)
+      return null
     }
 
     // Build query string
-    const queryParams = new URLSearchParams();
+    const queryParams = new URLSearchParams()
 
     if (params.maxRecords) {
-      queryParams.append('maxRecords', params.maxRecords);
+      queryParams.append('maxRecords', params.maxRecords)
     }
 
     if (params.view) {
-      queryParams.append('view', params.view);
+      queryParams.append('view', params.view)
     }
 
     if (params.sort) {
@@ -410,57 +414,57 @@ async function getRecords(sectionId = 'test', params = {}) {
       if (Array.isArray(params.sort)) {
         params.sort.forEach((sortItem, index) => {
           if (sortItem.field) {
-            queryParams.append(`sort[${index}][field]`, sortItem.field);
+            queryParams.append(`sort[${index}][field]`, sortItem.field)
             if (sortItem.direction) {
               queryParams.append(
                 `sort[${index}][direction]`,
                 sortItem.direction
-              );
+              )
             }
           }
-        });
+        })
       } else {
         // Remove this line that's causing the problem:
         // queryParams.append('sort', JSON.stringify(params.sort));
-        logger.warn('Sort parameter is not an array, skipping sort');
+        logger.warn('Sort parameter is not an array, skipping sort')
       }
     }
-    const queryString = queryParams.toString();
+    const queryString = queryParams.toString()
     const url = queryString
       ? `${airtableApiUrl}?${queryString}`
-      : airtableApiUrl;
+      : airtableApiUrl
 
-    logger.info(`Fetching records from ${url}`);
+    logger.info(`Fetching records from ${url}`)
 
     const response = await axios.get(url, {
       headers: {
         Authorization: `Bearer ${config.airtable.personalAccessToken}`,
       },
-    });
+    })
 
     if (!response.data || !response.data.records) {
       logger.warn(
         `No records found or invalid response format from ${sectionId} Airtable table`
-      );
-      return [];
+      )
+      return []
     }
 
     logger.info(
       `Retrieved ${response.data.records.length} records from ${sectionId} Airtable table`
-    );
-    return response.data.records;
+    )
+    return response.data.records
   } catch (error) {
     logger.error(
       `Error getting records from ${sectionId} Airtable table:`,
       error
-    );
+    )
 
     if (error.response) {
-      logger.error(`Status: ${error.response.status}`);
-      logger.error(`Response: ${JSON.stringify(error.response.data)}`);
+      logger.error(`Status: ${error.response.status}`)
+      logger.error(`Response: ${JSON.stringify(error.response.data)}`)
     }
 
-    return []; // Return empty array instead of null to avoid further errors
+    return [] // Return empty array instead of null to avoid further errors
   }
 }
 
@@ -472,57 +476,67 @@ async function getRecords(sectionId = 'test', params = {}) {
  */
 async function getRecord(recordId, sectionId = 'primera-plana') {
   try {
-    logger.info(`Fetching record ${recordId} from section ${sectionId}`);
-    
+    logger.info(`Fetching record ${recordId} from section ${sectionId}`)
+
     // Use the apiToken variable that's already defined at the top of the file
     // instead of process.env.AIRTABLE_API_KEY
     if (!apiToken) {
-      throw new Error('Airtable API token is missing');
+      throw new Error('Airtable API token is missing')
     }
-    
+
     // Initialize Airtable with the correct API key
     const base = new Airtable({
-      apiKey: apiToken  // Use apiToken instead of process.env.AIRTABLE_API_KEY
-    }).base(baseId);    // Use baseId instead of process.env.AIRTABLE_BASE_ID
-    
+      apiKey: apiToken, // Use apiToken instead of process.env.AIRTABLE_API_KEY
+    }).base(baseId) // Use baseId instead of process.env.AIRTABLE_BASE_ID
+
     // Special handling for the Instituciones table
     if (sectionId.toLowerCase() === 'instituciones') {
       try {
         // Try to access the table directly with the exact name
-        const record = await base('Instituciones').find(recordId);
-        logger.info(`Successfully retrieved record ${recordId} from Instituciones`);
-        return record;
+        const record = await base('Instituciones').find(recordId)
+        logger.info(
+          `Successfully retrieved record ${recordId} from Instituciones`
+        )
+        return record
       } catch (error) {
-        logger.error(`Error fetching record from Instituciones: ${error.message}`);
-        throw error;
+        logger.error(
+          `Error fetching record from Instituciones: ${error.message}`
+        )
+        throw error
       }
     }
-    
+
     // For other tables, try the original section ID first
     try {
-      const record = await base(sectionId).find(recordId);
-      logger.info(`Successfully retrieved record ${recordId} from ${sectionId}`);
-      return record;
+      const record = await base(sectionId).find(recordId)
+      logger.info(`Successfully retrieved record ${recordId} from ${sectionId}`)
+      return record
     } catch (tableError) {
       // If the exact name fails, try with Title Case
       const titleCaseTable = sectionId
         .split(/[-_]/)
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
-      
+        .map(
+          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        )
+        .join(' ')
+
       try {
-        const record = await base(titleCaseTable).find(recordId);
-        logger.info(`Found record in table with Title Case: "${titleCaseTable}"`);
-        return record;
+        const record = await base(titleCaseTable).find(recordId)
+        logger.info(
+          `Found record in table with Title Case: "${titleCaseTable}"`
+        )
+        return record
       } catch (error) {
         // If both attempts fail, log error and throw
-        logger.error(`Cannot find record ${recordId} in table ${sectionId} or ${titleCaseTable}`);
-        throw new Error(`Record not found: ${recordId} in section ${sectionId}`);
+        logger.error(
+          `Cannot find record ${recordId} in table ${sectionId} or ${titleCaseTable}`
+        )
+        throw new Error(`Record not found: ${recordId} in section ${sectionId}`)
       }
     }
   } catch (error) {
-    logger.error(`Error fetching record: ${error.message}`);
-    throw error;
+    logger.error(`Error fetching record: ${error.message}`)
+    throw error
   }
 }
 
@@ -539,25 +553,25 @@ async function getRecord(recordId, sectionId = 'primera-plana') {
 async function fetchRecords(sectionId = 'primera-plana', params = {}) {
   try {
     // Get the API URL for the section
-    const airtableApiUrl = getAirtableApiUrl(sectionId);
+    const airtableApiUrl = getAirtableApiUrl(sectionId)
     if (!airtableApiUrl) {
-      logger.error(`Could not generate API URL for section ${sectionId}`);
-      return [];
+      logger.error(`Could not generate API URL for section ${sectionId}`)
+      return []
     }
 
     // Build query string with all parameters
-    const queryParams = new URLSearchParams();
+    const queryParams = new URLSearchParams()
 
     if (params.maxRecords) {
-      queryParams.append('maxRecords', params.maxRecords);
+      queryParams.append('maxRecords', params.maxRecords)
     }
 
     if (params.view) {
-      queryParams.append('view', params.view);
+      queryParams.append('view', params.view)
     }
-    
+
     if (params.filterByFormula) {
-      queryParams.append('filterByFormula', params.filterByFormula);
+      queryParams.append('filterByFormula', params.filterByFormula)
     }
 
     if (params.sort) {
@@ -565,44 +579,55 @@ async function fetchRecords(sectionId = 'primera-plana', params = {}) {
       if (Array.isArray(params.sort)) {
         params.sort.forEach((sortItem, index) => {
           if (sortItem.field) {
-            queryParams.append(`sort[${index}][field]`, sortItem.field);
+            queryParams.append(`sort[${index}][field]`, sortItem.field)
             if (sortItem.direction) {
-              queryParams.append(`sort[${index}][direction]`, sortItem.direction);
+              queryParams.append(
+                `sort[${index}][direction]`,
+                sortItem.direction
+              )
             }
           }
-        });
+        })
       } else {
-        logger.warn('Sort parameter is not an array, skipping sort');
+        logger.warn('Sort parameter is not an array, skipping sort')
       }
     }
 
-    const queryString = queryParams.toString();
-    const url = queryString ? `${airtableApiUrl}?${queryString}` : airtableApiUrl;
+    const queryString = queryParams.toString()
+    const url = queryString
+      ? `${airtableApiUrl}?${queryString}`
+      : airtableApiUrl
 
-    logger.info(`Fetching records from ${url}`);
+    logger.info(`Fetching records from ${url}`)
 
     const response = await axios.get(url, {
       headers: {
-        Authorization: `Bearer ${config.airtable.personalAccessToken || apiToken}`,
+        Authorization: `Bearer ${
+          config.airtable.personalAccessToken || apiToken
+        }`,
       },
-    });
+    })
 
     if (!response.data || !response.data.records) {
-      logger.warn(`No records found or invalid response format from ${sectionId} Airtable table`);
-      return [];
+      logger.warn(
+        `No records found or invalid response format from ${sectionId} Airtable table`
+      )
+      return []
     }
 
-    logger.info(`Retrieved ${response.data.records.length} records from ${sectionId}`);
-    return response.data.records;
+    logger.info(
+      `Retrieved ${response.data.records.length} records from ${sectionId}`
+    )
+    return response.data.records
   } catch (error) {
-    logger.error(`Error fetching records from ${sectionId}:`, error.message);
+    logger.error(`Error fetching records from ${sectionId}:`, error.message)
 
     if (error.response) {
-      logger.error(`Status: ${error.response.status}`);
-      logger.error(`Response: ${JSON.stringify(error.response.data)}`);
+      logger.error(`Status: ${error.response.status}`)
+      logger.error(`Response: ${JSON.stringify(error.response.data)}`)
     }
 
-    return []; // Return empty array instead of null to avoid further errors
+    return [] // Return empty array instead of null to avoid further errors
   }
 }
 
@@ -611,13 +636,13 @@ async function fetchRecords(sectionId = 'primera-plana', params = {}) {
  */
 async function updateRecord(recordId, fields, sectionId) {
   try {
-    const tableName = encodeURIComponent(sectionId);
-    const url = `https://api.airtable.com/v0/${baseId}/${tableName}/${recordId}`;
+    const tableName = encodeURIComponent(sectionId)
+    const url = `https://api.airtable.com/v0/${baseId}/${tableName}/${recordId}`
 
     console.log(
       `[INFO] Updating record ${recordId} in ${sectionId} Airtable table`
-    );
-    console.log('With fields:', fields);
+    )
+    console.log('With fields:', fields)
 
     const response = await axios.patch(
       url,
@@ -628,20 +653,20 @@ async function updateRecord(recordId, fields, sectionId) {
           'Content-Type': 'application/json',
         },
       }
-    );
+    )
 
     console.log(
       `[INFO] Updated record ${recordId} in ${sectionId} Airtable table`
-    );
+    )
 
-    return response.data;
+    return response.data
   } catch (error) {
     console.error(
       `[ERROR] Error updating Airtable record:`,
       error.response?.status,
       error.response?.data || error.message
-    );
-    throw error;
+    )
+    throw error
   }
 }
 
@@ -652,15 +677,15 @@ async function updateRecord(recordId, fields, sectionId) {
  */
 function shouldAddSectionField(tableIdentifier) {
   // Convert to lowercase for case-insensitive comparison
-  const normalized = tableIdentifier.toLowerCase();
-  
+  const normalized = tableIdentifier.toLowerCase()
+
   // Tables known to NOT use the "section" field
   return !(
-    normalized === 'instituciones' || 
+    normalized === 'instituciones' ||
     normalized.includes('social') ||
     normalized.includes('config') ||
     normalized.includes('settings')
-  );
+  )
 }
 
 // Change module.exports to export default
@@ -670,6 +695,6 @@ const airtableService = {
   getRecord,
   updateRecord,
   fetchRecords, // Add the new function
-};
+}
 
-export default airtableService;
+export default airtableService
