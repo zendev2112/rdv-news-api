@@ -226,6 +226,8 @@ async function insertRecords(records, sectionId = 'test') {
     const createdRecords = response.data.records;
     const recordsToUpdate = [];
 
+    
+
     for (const record of createdRecords) {
       const fields = record.fields;
       
@@ -242,7 +244,7 @@ async function insertRecords(records, sectionId = 'test') {
       }
       
       // Only update if we have Airtable URLs and they're different from original
-      if (airtableImageUrl && (!fields.imgUrl || !fields.imgUrl.includes('airtableusercontent.com'))) {
+      if (airtableImageUrl) {
         const updateData = {
           imgUrl: airtableImageUrl, // ✅ Update with Airtable URL
         };
