@@ -2,6 +2,7 @@ import axios from 'axios'
 import Airtable from 'airtable'
 import config from '../config/index.js'
 import logger from '../utils/logger.js'
+import { uploadArticleImagesToCloudinary } from './articleImageUploader.js'
 
 // Airtable configuration - use config object if available, fallback to env vars
 const apiToken =
@@ -249,67 +250,87 @@ async function insertRecords(records, sectionId = 'test') {
 
         const freshFields = refetchResponse.data.fields
 
-        // Now extract the Airtable URLs from the fresh data
-        let airtableImageUrl = ''
-        let allAirtableImageUrls = []
-
+        // Extract Airtable URLs
+        let airtableUrls = []
         if (
           freshFields.image &&
           Array.isArray(freshFields.image) &&
           freshFields.image.length > 0
         ) {
-          // Check if the URL is now an Airtable URL
-          const firstImageUrl = freshFields.image[0].url
-
-           if (
-             firstImageUrl &&
-             firstImageUrl.includes('airtableusercontent.com')
-           ) {
-             airtableImageUrl = firstImageUrl
-
-             // ✅ FIXED: Get ALL Airtable URLs first
-             const allAirtableUrls = freshFields.image
-               .filter(
-                 (img) => img.url && img.url.includes('airtableusercontent.com')
-               )
-               .map((img) => img.url)
-
-             // ✅ FIXED: Get only the additional images (excluding first one)
-             allAirtableImageUrls = allAirtableUrls.slice(1)
-
-             console.log(
-               `✅ Found Airtable URL for record ${record.id}: ${airtableImageUrl}`
-             )
-             console.log(
-               `✅ Total images: ${allAirtableUrls.length}, Additional images: ${allAirtableImageUrls.length}`
-             )
-           } else {
-             console.log(
-               `⚠️ Record ${record.id} still has original URL: ${firstImageUrl}`
-             )
-           }
+          airtableUrls = freshFields.image
+            .filter(
+              (img) => img.url && img.url.includes('airtableusercontent.com')
+            )
+            .map((img) => img.url)
         }
 
-        // Update the record if we have Airtable URLs
-        if (airtableImageUrl) {
-          const updateData = {
-            imgUrl: airtableImageUrl,
+        // ✅ Upload to Cloudinary for permanent, optimized storage
+        // ✅ Upload to Cloudinary for permanent, optimized storage
+        if (airtableUrls.length > 0) {
+          logger.info(
+            `📤 Uploading ${airtableUrls.length} images to Cloudinary...`
+          )
+
+          try {
+            const cloudinaryUrls = await uploadArticleImagesToCloudinary(
+              airtableUrls,
+              record.id,
+              sectionId
+            )
+
+            if (cloudinaryUrls.length > 0) {
+              // Prepare update data
+              const updateData = {
+                imgUrl: cloudinaryUrls[0], // First image is always the main one
+              }
+
+              // Handle additional images (all images except the first one)
+              if (cloudinaryUrls.length > 1) {
+                updateData['article-images'] = cloudinaryUrls
+                  .slice(1)
+                  .join(', ')
+              } else {
+                updateData['article-images'] = '' // Clear field if only one image
+              }
+
+              recordsToUpdate.push({
+                id: record.id,
+                fields: updateData,
+              })
+
+              logger.info(
+                `✅ Processed ${cloudinaryUrls.length} images for record ${
+                  record.id
+                } - Main: 1, Additional: ${cloudinaryUrls.length - 1}`
+              )
+            }
+          } catch (cloudinaryError) {
+            logger.error(
+              `❌ Cloudinary upload failed for record ${record.id}:`,
+              cloudinaryError.message
+            )
+
+            // Fallback to Airtable URLs in existing fields
+            const updateData = {
+              imgUrl: airtableUrls[0],
+            }
+
+            // Handle additional Airtable images
+            if (airtableUrls.length > 1) {
+              updateData['article-images'] = airtableUrls.slice(1).join(', ')
+            } else {
+              updateData['article-images'] = ''
+            }
+
+            recordsToUpdate.push({
+              id: record.id,
+              fields: updateData,
+            })
           }
-
-          // ✅ FIXED: Always try to update article-images, even if empty
-          // This will clear the field if there are no additional images
-          updateData['article-images'] = allAirtableImageUrls.join(', ')
-
-          console.log(`📝 Update data for record ${record.id}:`, updateData)
-
-          recordsToUpdate.push({
-            id: record.id,
-            fields: updateData,
-          })
         }
       } catch (fetchError) {
-        console.log(
-          `❌ Error re-fetching record ${record.id}:`,
+        logger.error(
+          `❌ Error processing record ${record.id}:`,
           fetchError.message
         )
       }
@@ -318,7 +339,7 @@ async function insertRecords(records, sectionId = 'test') {
     // ✅ NEW STEP 3: Update records with Airtable URLs if needed
     if (recordsToUpdate.length > 0) {
       logger.info(
-        `Updating ${recordsToUpdate.length} records with Airtable attachment URLs`
+        `Updating ${recordsToUpdate.length} records with enhanced URLs`
       )
 
       try {
@@ -334,14 +355,13 @@ async function insertRecords(records, sectionId = 'test') {
         )
 
         logger.info(
-          `Successfully updated ${recordsToUpdate.length} records with Airtable URLs`
+          `Successfully updated ${recordsToUpdate.length} records with enhanced URLs`
         )
       } catch (updateError) {
         logger.error(
-          `Error updating records with Airtable URLs:`,
+          `Error updating records with enhanced URLs:`,
           updateError.message
         )
-        // Don't throw here - the records were created successfully
       }
     }
 

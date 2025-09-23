@@ -1,9 +1,6 @@
-import airtableService from './airtable.js';
+import { uploadArticleImagesToCloudinary } from './articleImageUploader.js'
+import airtableService from './airtable.js'
 
-import * as embeds from './embeds/index.js';
+import * as embeds from './embeds/index.js'
 
-export {
-  airtableService,
- 
-  embeds,
-};
+export { airtableService, embeds, uploadArticleImagesToCloudinary }
