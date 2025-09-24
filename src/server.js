@@ -9,6 +9,7 @@ import slackRoutes from './routes/slack-integration.js'
 import socialMediaPublishingRoutes from './routes/social-media-publishing.js'
 import configRoutes from './routes/config.js'
 import airtableProxyRoutes from './routes/airtable-proxy.js'
+import { startAutoPublisher } from './services/autoPublisher.js'
 
 
 // Initialize
@@ -76,6 +77,9 @@ app.use('/webhooks', webhookRoutes)
 app.use('/api/social-media-publishing', socialMediaPublishingRoutes)
 app.use('/api/config', configRoutes)
 app.use('/api/airtable-proxy', airtableProxyRoutes)
+
+
+startAutoPublisher()
 
 
 // Health check endpoint
