@@ -20,6 +20,8 @@ async function checkForNewlyPublished() {
       { name: 'Politica', sectionId: 'politica' },
       { name: 'Deportes', sectionId: 'deportes' },
       { name: 'Economia', sectionId: 'economia' },
+      { name: 'La Sexta', sectionId: 'la-sexta' },
+      { name: 'Instituciones', sectionId: 'instituciones'},
       // Add more tables as needed
     ]
 
