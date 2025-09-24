@@ -257,19 +257,39 @@ async function insertRecords(records, sectionId = 'test') {
           Array.isArray(freshFields.image) &&
           freshFields.image.length > 0
         ) {
+          // ✅ DEBUG: Log exactly what Airtable returned
+          console.log(`🔍 RECORD ${record.id} - RAW AIRTABLE DATA:`)
+          console.log(`🔍 Total attachments: ${freshFields.image.length}`)
+
+          freshFields.image.forEach((img, i) => {
+            console.log(`🔍 Image ${i + 1}: ${img.url}`)
+            console.log(
+              `🔍 Is Airtable URL? ${img.url.includes(
+                'airtableusercontent.com'
+              )}`
+            )
+          })
           airtableUrls = freshFields.image
             .filter(
               (img) => img.url && img.url.includes('airtableusercontent.com')
             )
             .map((img) => img.url)
+
+                      console.log(
+                        `🔍 FILTERED AIRTABLE URLs: ${airtableUrls.length}`
+                      )
+                      airtableUrls.forEach((url, i) => {
+                        console.log(`🔍 Airtable URL ${i + 1}: ${url}`)
+                      })
         }
 
         // ✅ Upload to Cloudinary for permanent, optimized storage
         // ✅ Upload to Cloudinary for permanent, optimized storage
         if (airtableUrls.length > 0) {
-          logger.info(
-            `📤 Uploading ${airtableUrls.length} images to Cloudinary...`
-          )
+                  console.log(
+                    `📤 STARTING CLOUDINARY UPLOAD FOR ${airtableUrls.length} IMAGES`
+                  )
+
 
           try {
             const cloudinaryUrls = await uploadArticleImagesToCloudinary(
@@ -277,6 +297,13 @@ async function insertRecords(records, sectionId = 'test') {
               record.id,
               sectionId
             )
+
+                        console.log(
+                          `📤 CLOUDINARY RETURNED ${cloudinaryUrls.length} URLs:`
+                        )
+                        cloudinaryUrls.forEach((url, i) => {
+                          console.log(`📤 Cloudinary URL ${i + 1}: ${url}`)
+                        })
 
             if (cloudinaryUrls.length > 0) {
               // Prepare update data
@@ -289,9 +316,18 @@ async function insertRecords(records, sectionId = 'test') {
                 updateData['article-images'] = cloudinaryUrls
                   .slice(1)
                   .join(', ')
+                  console.log(`✅ MAIN IMAGE: ${cloudinaryUrls[0]}`)
+                  console.log(
+                    `✅ ADDITIONAL IMAGES (${
+                      additionalUrls.length
+                    }): ${additionalUrls.join(', ')}`
+                  )
               } else {
                 updateData['article-images'] = '' // Clear field if only one image
+                console.log(`ℹ️ ONLY 1 IMAGE - article-images will be EMPTY`)
               }
+
+              console.log(`📝 FINAL UPDATE DATA:`, updateData)
 
               recordsToUpdate.push({
                 id: record.id,
