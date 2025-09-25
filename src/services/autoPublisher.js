@@ -78,8 +78,6 @@ export function startAutoPublisher() {
   // Run immediately
   checkForNewlyPublished()
 
-  // Then run every 2 minutes
-  setInterval(checkForNewlyPublished, 2 * 60 * 1000)
 }
 
 export default {

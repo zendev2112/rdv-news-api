@@ -2,7 +2,8 @@ import express from 'express';
 import airtableService from '../services/airtable.js';
 import supabaseService from '../services/supabase.js';
 import logger from '../utils/logger.js';
-import socialMediaRouter from './webhooks/social-media.js' 
+import socialMediaRouter from './webhooks/social-media.js';
+import { handlePublishStatusChange } from '../services/statusChangeHandler.js';
 
 const router = express.Router();
 
@@ -104,6 +105,50 @@ router.post('/airtable/publish', async (req, res) => {
   } catch (error) {
     logger.error('Error in webhook handler:', error);
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Webhook endpoint for Airtable Automations when record status changes
+ * POST /webhooks/status-change
+ */
+router.post('/status-change', async (req, res) => {
+  try {
+    // Security check with secret header
+    const secret = req.headers['x-automation-secret'];
+    if (!secret || secret !== process.env.AIRTABLE_AUTOMATION_SECRET) {
+      logger.warn('⚠️ Unauthorized webhook attempt');
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+    
+    const { recordId, tableName, sectionId } = req.body;
+    
+    // Validate required fields
+    if (!recordId || !tableName || !sectionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: recordId, tableName, sectionId'
+      });
+    }
+    
+    logger.info(`🔔 Webhook received for record ${recordId} in ${tableName}`);
+    
+    // Process the single record
+    const success = await handlePublishStatusChange(recordId, tableName, sectionId);
+    
+    res.json({
+      success: true,
+      processed: success,
+      recordId,
+      tableName
+    });
+    
+  } catch (error) {
+    logger.error('❌ Webhook error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 
