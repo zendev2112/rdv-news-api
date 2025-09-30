@@ -1,14 +1,8 @@
-import { uploadArticleImagesToCloudinary } from './articleImageUploader.js'
+import { uploadImagesOnPublish } from './publishImageUploader.js'
 import logger from '../utils/logger.js'
 import axios from 'axios'
 import config from '../config/index.js'
 
-/**
- * Handle status change from 'draft' to 'published' - upload images to Cloudinary
- * @param {string} recordId - Airtable record ID
- * @param {string} tableName - Airtable table name
- * @param {string} sectionId - Section ID for Cloudinary folders
- */
 export async function handlePublishStatusChange(
   recordId,
   tableName,
@@ -24,102 +18,57 @@ export async function handlePublishStatusChange(
       tableName
     )}`
 
-    // Get current record
+    // 1. Check current record status and imgUrl
     const response = await axios.get(`${airtableApiUrl}/${recordId}`, {
-      headers: {
-        Authorization: `Bearer ${apiToken}`,
-      },
+      headers: { Authorization: `Bearer ${apiToken}` },
     })
 
     const fields = response.data.fields
 
-    // Check if it's published and has Airtable URLs (needs Cloudinary upload)
-    const isPublished = fields.status === 'published'
-    const hasAirtableUrl =
-      fields.imgUrl && fields.imgUrl.includes('airtableusercontent.com')
-
-    if (!isPublished) {
-      logger.info(`ℹ️ Record ${recordId} is not published - no action needed`)
-      return false
-    }
-
-    if (!hasAirtableUrl) {
-      logger.info(
-        `ℹ️ Record ${recordId} already has Cloudinary URLs - no action needed`
-      )
-      return false
-    }
-
-    logger.info(
-      `🚀 Record ${recordId} published with Airtable URLs - uploading to Cloudinary...`
-    )
-
-    // Extract Airtable URLs from image field
-    let airtableUrls = []
+    // Only proceed if status is 'published' and imgUrl contains Airtable URL
     if (
-      fields.image &&
-      Array.isArray(fields.image) &&
-      fields.image.length > 0
+      fields.status !== 'published' ||
+      !fields.imgUrl ||
+      !fields.imgUrl.includes('airtableusercontent.com')
     ) {
-      airtableUrls = fields.image
-        .filter((img) => img.url && img.url.includes('airtableusercontent.com'))
-        .map((img) => img.url)
-    }
-
-    if (airtableUrls.length === 0) {
-      logger.error(
-        `❌ No Airtable URLs found in image field for record ${recordId}`
-      )
+      logger.info(`Record ${recordId} doesn't need processing`)
       return false
     }
 
-    // Upload to Cloudinary
-    const cloudinaryUrls = await uploadArticleImagesToCloudinary(
-      airtableUrls,
+    // 2. Upload images to Cloudinary (this function only returns URLs)
+    const cloudinaryFields = await uploadImagesOnPublish(
       recordId,
-      sectionId
+      sectionId,
+      tableName
     )
 
-    if (cloudinaryUrls.length > 0) {
-      // Update record with Cloudinary URLs
-      const updateData = {
-        imgUrl: cloudinaryUrls[0], // Main Cloudinary URL
-        'article-images': cloudinaryUrls.slice(1).join(', '), // Additional Cloudinary URLs
-      }
-
-      await axios.patch(
-        `${airtableApiUrl}/${recordId}`,
-        { fields: updateData },
-        {
-          headers: {
-            Authorization: `Bearer ${apiToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      )
-
-      logger.info(`✅ Updated record ${recordId} with Cloudinary URLs`)
-      logger.info(`📝 Main image: ${cloudinaryUrls[0]}`)
-      if (cloudinaryUrls.length > 1) {
-        logger.info(
-          `📝 Additional images: ${cloudinaryUrls.slice(1).join(', ')}`
-        )
-      }
-
-      return true
-    } else {
-      logger.error(`❌ No Cloudinary URLs returned for record ${recordId}`)
+    if (!cloudinaryFields || !cloudinaryFields.imgUrl) {
+      logger.info(`No images uploaded for record ${recordId}`)
       return false
     }
-  } catch (error) {
-    logger.error(
-      `❌ Error handling status change for ${recordId}:`,
-      error.message
+
+    // 3. Update Airtable record with Cloudinary URLs (but keep status as 'published')
+    const updateData = {
+      imgUrl: cloudinaryFields.imgUrl,
+      'article-images': cloudinaryFields['article-images'],
+      // DON'T update status - it's already 'published'
+    }
+
+    await axios.patch(
+      `${airtableApiUrl}/${recordId}`,
+      { fields: updateData },
+      {
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
     )
+
+    logger.info(`✅ Updated record ${recordId} with Cloudinary URLs`)
+    return true
+  } catch (error) {
+    logger.error(`❌ Error processing status change:`, error.message)
     throw error
   }
-}
-
-export default {
-  handlePublishStatusChange,
 }
