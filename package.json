@@ -17,7 +17,7 @@
     "fetch:local-facebook": "node fetch-to-airtable.js local-facebook",
     "fetch:local-facebook:limited": "node fetch-to-airtable.js local-facebook --limit 10",
     "fetch:la-sexta": "node fetch-to-airtable.js la-sexta",
-    "fetch:la-sexta:limited": "node fetch-to-airtable.js la-sexta --limit 3",
+    "fetch:la-sexta:limited": "node fetch-to-airtable.js la-sexta --limit 10",
     "fetch:agro": "node fetch-to-airtable.js agro",
     "fetch:deportes": "node fetch-to-airtable.js deportes",
     "fetch:politica": "node fetch-to-airtable.js politica",

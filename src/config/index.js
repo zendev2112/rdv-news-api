@@ -129,7 +129,7 @@ const config = {
 
   cerebras: {
     apiKey: process.env.CEREBRAS_API_KEY || '',
-    model: process.env.CEREBRAS_MODEL || 'cpt-7b',
+    model: process.env.CEREBRAS_MODEL || 'llama-3.3-70b',
   },
   openrouter: {
     apiKey: process.env.OPENROUTER_API_KEY || '',
