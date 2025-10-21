@@ -121,7 +121,7 @@ const config = {
 
   groq: {
     apiKey: process.env.GROQ_API_KEY || '',
-    model: process.env.GROQ_MODEL || 'llama-3.1-70b-versatile', // Fast and good quality
+    model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', // Fast and good quality
     // Alternative models:
     // 'mixtral-8x7b-32768' - Good for Spanish
     // 'llama-3.1-8b-instant' - Fastest

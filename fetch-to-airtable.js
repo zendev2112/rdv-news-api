@@ -683,8 +683,9 @@ async function generateMetadata(extractedText, maxRetries = 3) {
 
     // ✅ USE NEW AI SERVICE
     const result = await generateContent(prompt, {
-      maxRetries,
+      maxRetries: 3,
       requireJson: true,
+      preferGroq: false, // Use Gemini for JSON
     })
 
     if (!result.text) {
@@ -796,8 +797,8 @@ async function reelaborateText(
 
     // ✅ USE NEW AI SERVICE
     const result = await generateContent(prompt, {
-      maxRetries,
-      preferGroq: false, // Try Gemini first for long-form content
+      maxRetries: 3,
+      preferGroq: false, // Use Gemini for long-form
     })
 
     if (!result.text) {
@@ -1666,9 +1667,9 @@ async function generateTags(extractedText, metadata, maxRetries = 3) {
 
     // ✅ USE NEW AI SERVICE - Groq is good for simple tasks
     const result = await generateContent(prompt, {
-      maxRetries,
+      maxRetries: 3,
       requireJson: true,
-      preferGroq: true, // Groq is faster for simple tasks
+      preferGroq: true, // ✅ Groq is faster for simple tasks
     })
 
     if (!result.text) {
@@ -1797,8 +1798,8 @@ async function generateSocialMediaText(
 
     // ✅ USE NEW AI SERVICE - Groq is good for short creative tasks
     const result = await generateContent(prompt, {
-      maxRetries,
-      preferGroq: true, // Groq is faster for short content
+      maxRetries: 3,
+      preferGroq: true, // ✅ Groq is faster for short content
     })
 
     if (!result.text) {
