@@ -144,9 +144,8 @@ async function generateWithGroq(prompt) {
  */
 async function generateWithCerebras(prompt) {
   const apiKey = config.cerebras?.apiKey || process.env.CEREBRAS_API_KEY
-  const model = config.cerebras?.model || process.env.CEREBRAS_MODEL || 'llama-3.3-70b'
+  const model = config.cerebras?.model || process.env.CEREBRAS_MODEL || 'llama-3.3-70b' // ✅ Remove cpt-7b fallback
   
-  // ✅ ADD DEBUG LOGS
   console.log('Cerebras config:', {
     apiKey: apiKey ? '✓ present' : '✗ missing',
     model: model,
@@ -156,39 +155,29 @@ async function generateWithCerebras(prompt) {
     throw new Error('Cerebras API key not configured')
   }
 
-  try {
-    const response = await axios.post(
-      'https://api.cerebras.ai/v1/chat/completions',
-      {
-        model: model,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 8000,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
+  const response = await axios.post(
+    'https://api.cerebras.ai/v1/chat/completions',
+    {
+      model: model,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
         },
-        timeout: 30000,
-      }
-    )
+      ],
+      temperature: 0.7,
+      max_tokens: 8000,
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 30000,
+    }
+  )
 
-    return response.data?.choices?.[0]?.message?.content || ''
-  } catch (error) {
-    console.error('Cerebras error details:', {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      message: error.message,
-    })
-    throw error
-  }
+  return response.data?.choices?.[0]?.message?.content || ''
 }
 
 /**
