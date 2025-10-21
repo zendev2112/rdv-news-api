@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { generateContent, printUsageReport } from './src/services/ai-service.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
@@ -163,9 +163,7 @@ if (!fs.existsSync(STATE_DIR)) {
   fs.mkdirSync(STATE_DIR)
 }
 
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY)
-const model = genAI.getGenerativeModel({ model: GEMINI_MODEL })
+
 
 /**
  * Load the persisted state for a section
@@ -665,78 +663,45 @@ function generateFallbackMetadata(extractedText) {
 /**
  * Generates metadata for an article with retry logic and fallback
  */
-async function generateMetadata(extractedText, maxRetries = 5) {
-  let retries = 0
-  while (retries < maxRetries) {
-    try {
-      // Add a longer delay with exponential backoff
-      const delayTime = API_DELAY * Math.pow(1.5, retries)
-      console.log(
-        `Waiting ${delayTime / 1000} seconds before generating metadata...`
-      )
-      await delay(delayTime)
-
-      const prompt = `
-        Extracted Text: "${extractedText.substring(0, 5000)}"
-        
-        Basado en el texto anterior, genera lo siguiente:
-        1. Un título conciso y atractivo. **No uses mayúsculas en todas las palabras** (evita el title case). Solo usa mayúsculas al principio del título y en nombres propios. ESTO ES MUY IMPORTANTE Y HAY QUE RESPETARLO A RAJATABLA.
-        2. Un resumen (bajada) de 40 a 50 palabras que capture los puntos clave. **No uses mayúsculas en todas las palabras**. Solo usa mayúsculas al principio de cada oración y en nombres propios.
-        3. Una volanta corta que brinde contexto o destaque la importancia del artículo. **No uses mayúsculas en todas las palabras**. Solo usa mayúsculas al principio y en nombres propios.
-        
-        Return the output in JSON format:
-        {
-          "title": "Generated Title",
-          "bajada": "Generated 40-50 word summary",
-          "volanta": "Generated overline"
-        }
-      `
-
-      const result = await model.generateContent(prompt)
-      const response = await result.response
-      const text = response.text()
-
-      const cleanedText = text
-        .replace(/```json/g, '')
-        .replace(/```/g, '')
-        .trim()
-
-      return JSON.parse(cleanedText)
-    } catch (error) {
-      if (error.message && error.message.includes('429')) {
-        const waitTime = Math.pow(2, retries) * 1000
-        console.warn(
-          `Rate limit exceeded. Retrying in ${waitTime / 1000} seconds...`
-        )
-        await delay(waitTime)
-        retries++
-      } else if (
-        error.message &&
-        (error.message.includes('503') ||
-          error.message.includes('Service Unavailable'))
-      ) {
-        console.error(
-          `Gemini service unavailable. Using fallback metadata extraction...`
-        )
-        return generateFallbackMetadata(extractedText)
-      } else {
-        console.error(`Error generating metadata:`, error.message)
-
-        if (retries >= 2) {
-          console.warn('Multiple failures, using fallback metadata')
-          return generateFallbackMetadata(extractedText)
-        }
-
-        retries++
-        await delay(3000)
+async function generateMetadata(extractedText, maxRetries = 3) {
+  try {
+    const prompt = `
+      Extracted Text: "${extractedText.substring(0, 5000)}"
+      
+      Basado en el texto anterior, genera lo siguiente:
+      1. Un título conciso y atractivo. **No uses mayúsculas en todas las palabras** (evita el title case). Solo usa mayúsculas al principio del título y en nombres propios. ESTO ES MUY IMPORTANTE Y HAY QUE RESPETARLO A RAJATABLA.
+      2. Un resumen (bajada) de 40 a 50 palabras que capture los puntos clave. **No uses mayúsculas en todas las palabras**. Solo usa mayúsculas al principio de cada oración y en nombres propios.
+      3. Una volanta corta que brinde contexto o destaque la importancia del artículo. **No uses mayúsculas en todas las palabras**. Solo usa mayúsculas al principio y en nombres propios.
+      
+      Return the output in JSON format:
+      {
+        "title": "Generated Title",
+        "bajada": "Generated 40-50 word summary",
+        "volanta": "Generated overline"
       }
-    }
-  }
+    `
 
-  console.error(
-    'Max retries reached. Unable to generate metadata. Using fallback.'
-  )
-  return generateFallbackMetadata(extractedText)
+    // ✅ USE NEW AI SERVICE
+    const result = await generateContent(prompt, {
+      maxRetries,
+      requireJson: true,
+    })
+
+    if (!result.text) {
+      // AI failed, use fallback
+      return generateFallbackMetadata(extractedText)
+    }
+
+    const cleanedText = result.text
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim()
+
+    return JSON.parse(cleanedText)
+  } catch (error) {
+    console.error('Error generating metadata:', error.message)
+    return generateFallbackMetadata(extractedText)
+  }
 }
 
 /**
@@ -745,168 +710,117 @@ async function generateMetadata(extractedText, maxRetries = 5) {
 async function reelaborateText(
   extractedText,
   imageMarkdown = '',
-  maxRetries = 5
+  maxRetries = 3
 ) {
-  let retries = 0
-  while (retries < maxRetries) {
-    try {
-      // Add a longer delay with exponential backoff
-      const delayTime = API_DELAY * Math.pow(1.5, retries)
-      console.log(
-        `Waiting ${delayTime / 1000} seconds before reelaborating text...`
-      )
-      await delay(delayTime)
+  try {
+    // Add image markdown content if available
+    const imagesPrompt = imageMarkdown
+      ? 'Las siguientes descripciones de imágenes fueron extraídas del artículo original. Intégralas en el texto reelaborado en los lugares más apropiados según el contexto:\n\n' +
+        imageMarkdown
+      : ''
 
-      // Add image markdown content if available
-      const imagesPrompt = imageMarkdown
-        ? 'Las siguientes descripciones de imágenes fueron extraídas del artículo original. Intégralas en el texto reelaborado en los lugares más apropiados según el contexto:\n\n' +
-          imageMarkdown
-        : ''
+    const prompt = `
+      Reelaborar la siguiente noticia siguiendo estas pautas:
 
-      const prompt = `
-        Reelaborar la siguiente noticia siguiendo estas pautas:
+      1. **Lenguaje**:
+         - Utilizar un **español rioplatense formal**, adecuado para un contexto periodístico o informativo.
+         - Emplear expresiones y giros propios del español rioplatense, pero mantener un tono profesional y respetuoso.
+      
+      2. **Objetividad**:
+         - Mantener un tono neutral y objetivo. No incluir juicios de valor, opiniones personales o lenguaje tendencioso.
+         - Limitarse a presentar los hechos de manera clara y precisa.
+      
+      3. **Claridad y Sencillez**:
+         - Usar un lenguaje sencillo y accesible, evitando tecnicismos innecesarios.
+         - Asegurarse de que la información sea fácil de entender para un público general.
+      
+      4. **Estructura**:
+         - OBLIGATORIO: Dividir el texto en secciones con subtítulos claros usando formato markdown (## Subtítulo).
+         - OBLIGATORIO: Utilizar al menos 2-3 subtítulos en formato H2 (##) para dividir el texto en secciones temáticas.
+         - Organizar la información en párrafos cortos y bien estructurados.
+         - Concluir sin añadir interpretaciones o valoraciones. Está prohibido usar títulos y expresiones explícitos como "en resumen", "conclusión", "en conclusión", "en resumen", "en síntesis" o similares.
+      
+      5. **Sintaxis y Visualidad**:
+         - OBLIGATORIO: Usar oraciones cortas y directas para facilitar la lectura.
+         - OBLIGATORIO: Incorporar elementos visuales como:
+           - OBLIGATORIO: INCLUIR AL MENOS UNA LISTA con viñetas para enumerar puntos clave. Usar este formato exacto:
+             - Primer punto clave
+             - Segundo punto clave 
+             - Tercer punto clave
+           - OBLIGATORIO: Usar **negritas** para resaltar información importante.
+           - OBLIGATORIO: Si hay citas textuales, usar el formato de cita: > Cita textual
+         - OBLIGATORIO: Si la noticia menciona una serie de pasos o elementos, formatearlos como lista numerada:
+           1. Primer elemento
+           2. Segundo elemento
+           3. Tercer elemento
+      
+      6. **Formato Markdown**: 
+         - ABSOLUTAMENTE OBLIGATORIO: Usar correctamente estos elementos de formato markdown:
+           - Subtítulos: ## Subtítulo (al menos 2 subtítulos)
+           - OBLIGATORIO: Incluir al menos una lista con viñetas usando este formato exacto:
+             - Primer elemento
+             - Segundo elemento
+             - Tercer elemento
+           - Negritas: **texto importante** (usar en al menos 3 lugares)
+           - Cursivas: *texto en cursiva* (usar al menos una vez)
+           - Citas: > Texto citado (si hay citas en el texto original)
+      
+      7. **Imágenes**: 
+         - Incluir las descripciones de imágenes proporcionadas en el texto.
+         - Simplemente insertar el texto de la imagen (que ya está formateado) en un lugar relevante.
+      
+      8. **Fuentes**:
+         - Si la noticia original incluye fuentes o referencias, asegurarse de citarlas correctamente.
+         - Si no hay fuentes, evitar especulaciones o suposiciones.
+      
+      9. **Formato de Salida**:
+         - Devolver la noticia reelaborada ÚNICAMENTE en formato Markdown.
+         - NO incluir backticks (\`\`\`) ni indicar que es un bloque de markdown.
+      
+      10. **Palabras Estrictamente Prohibidas**: Las siguiente palabras no deben aparecer en ninguna parte del texto: fusionar - fusionándose - reflejar - reflejándose - sumergir - sumergirse - en resumen - conclusión - en síntesis - markdown
 
-        1. **Lenguaje**:
-           - Utilizar un **español rioplatense formal**, adecuado para un contexto periodístico o informativo.
-           - Emplear expresiones y giros propios del español rioplatense, pero mantener un tono profesional y respetuoso.
-        
-        2. **Objetividad**:
-           - Mantener un tono neutral y objetivo. No incluir juicios de valor, opiniones personales o lenguaje tendencioso.
-           - Limitarse a presentar los hechos de manera clara y precisa.
-        
-        3. **Claridad y Sencillez**:
-           - Usar un lenguaje sencillo y accesible, evitando tecnicismos innecesarios.
-           - Asegurarse de que la información sea fácil de entender para un público general.
-        
-        4. **Estructura**:
-           - OBLIGATORIO: Dividir el texto en secciones con subtítulos claros usando formato markdown (## Subtítulo).
-           - OBLIGATORIO: Utilizar al menos 2-3 subtítulos en formato H2 (##) para dividir el texto en secciones temáticas.
-           - Organizar la información en párrafos cortos y bien estructurados.
-           - Concluir sin añadir interpretaciones o valoraciones. Está prohibido usar títulos y expresiones explícitos como "en resumen", "conclusión", "en conclusión", "en resumen", "en síntesis" o similares.
-        
-        5. **Sintaxis y Visualidad**:
-           - OBLIGATORIO: Usar oraciones cortas y directas para facilitar la lectura.
-           - OBLIGATORIO: Incorporar elementos visuales como:
-             - OBLIGATORIO: INCLUIR AL MENOS UNA LISTA con viñetas para enumerar puntos clave. Usar este formato exacto:
-               - Primer punto clave
-               - Segundo punto clave 
-               - Tercer punto clave
-             - OBLIGATORIO: Usar **negritas** para resaltar información importante.
-             - OBLIGATORIO: Si hay citas textuales, usar el formato de cita: > Cita textual
-           - OBLIGATORIO: Si la noticia menciona una serie de pasos o elementos, formatearlos como lista numerada:
-             1. Primer elemento
-             2. Segundo elemento
-             3. Tercer elemento
-        
-        6. **Formato Markdown**: 
-           - ABSOLUTAMENTE OBLIGATORIO: Usar correctamente estos elementos de formato markdown:
-             - Subtítulos: ## Subtítulo (al menos 2 subtítulos)
-             - OBLIGATORIO: Incluir al menos una lista con viñetas usando este formato exacto:
-               - Primer elemento
-               - Segundo elemento
-               - Tercer elemento
-             - Negritas: **texto importante** (usar en al menos 3 lugares)
-             - Cursivas: *texto en cursiva* (usar al menos una vez)
-             - Citas: > Texto citado (si hay citas en el texto original)
-        
-        7. **Imágenes**: 
-           - Incluir las descripciones de imágenes proporcionadas en el texto.
-           - Simplemente insertar el texto de la imagen (que ya está formateado) en un lugar relevante.
-        
-        8. **Fuentes**:
-           - Si la noticia original incluye fuentes o referencias, asegurarse de citarlas correctamente.
-           - Si no hay fuentes, evitar especulaciones o suposiciones.
-        
-        9. **Formato de Salida**:
-           - Devolver la noticia reelaborada ÚNICAMENTE en formato Markdown.
-           - NO incluir backticks (\`\`\`) ni indicar que es un bloque de markdown.
-        
-        10. **Palabras Estrictamente Prohibidas**: Las siguiente palabras no deben aparecer en ninguna parte del texto: fusionar - fusionándose - reflejar - reflejándose - sumergir - sumergirse - en resumen - conclusión - en síntesis - markdown
+      11. **Títulos**: No incluir un título principal (# Título) en el artículo bajo ninguna circunstancia. El título ya está generado en otro campo del registro de Airtable, por lo que no es necesario repetirlo en el contenido. IMPORTANTE: Comenzar directamente con el cuerpo del texto.
+      
+      12. **IMPORTANTE - VERIFICACIÓN FINAL**:
+         - Antes de enviar tu respuesta, verifica que:
+           1. Has incluido al menos 2 subtítulos (## Subtítulo)
+           2. Has incluido al menos 1 lista con viñetas (- Elemento)
+           3. Has usado negritas (**texto**) en al menos 3 lugares
+           4. No has usado símbolos extraños o caracteres que podrían verse mal
+         - Si falta alguno de estos elementos, agrégalo antes de enviar.
+      
+      ${imagesPrompt}
+      
+      Texto extraído: "${extractedText.substring(0, 5000)}"
+    `
 
-        11. **Títulos**: No incluir un título principal (# Título) en el artículo bajo ninguna circunstancia. El título ya está generado en otro campo del registro de Airtable, por lo que no es necesario repetirlo en el contenido. IMPORTANTE: Comenzar directamente con el cuerpo del texto.
-        
-        12. **IMPORTANTE - VERIFICACIÓN FINAL**:
-           - Antes de enviar tu respuesta, verifica que:
-             1. Has incluido al menos 2 subtítulos (## Subtítulo)
-             2. Has incluido al menos 1 lista con viñetas (- Elemento)
-             3. Has usado negritas (**texto**) en al menos 3 lugares
-             4. No has usado símbolos extraños o caracteres que podrían verse mal
-           - Si falta alguno de estos elementos, agrégalo antes de enviar.
-        
-        ${imagesPrompt}
-        
-        Texto extraído: "${extractedText.substring(0, 5000)}"
-      `
+    // ✅ USE NEW AI SERVICE
+    const result = await generateContent(prompt, {
+      maxRetries,
+      preferGroq: false, // Try Gemini first for long-form content
+    })
 
-      const result = await model.generateContent(prompt)
-      const response = await result.response
-      let text = response.text()
-
-      // Check if text has proper formatting - require at least one ## heading and one list
-      const hasHeadings = text.includes('## ')
-      const hasList = text.includes('- ')
-
-      if (!hasHeadings || !hasList) {
-        console.warn('Generated text is missing proper formatting, retrying...')
-        retries++
-        continue
-      }
-
-      // Post-process to fix any remaining issues
-      text = postProcessText(text)
-
-      return text
-    } catch (error) {
-      if (error.message && error.message.includes('429')) {
-        const waitTime = Math.pow(2, retries) * 1000
-        console.warn(
-          `Rate limit exceeded. Retrying in ${waitTime / 1000} seconds...`
-        )
-        await delay(waitTime)
-        retries++
-      } else if (
-        error.message &&
-        (error.message.includes('503') ||
-          error.message.includes('Service Unavailable'))
-      ) {
-        console.error(
-          `Gemini service unavailable. Trying alternative approach...`
-        )
-
-        // Try simpler formatting first
-        try {
-          return await generateSimpleFormattedText(extractedText, imageMarkdown)
-        } catch (simpleError) {
-          // If that fails too, use the basic fallback
-          console.error('Simple formatting failed:', simpleError.message)
-          return formatTextAsFallback(extractedText, imageMarkdown)
-        }
-      } else {
-        console.error(`Error reelaborating text:`, error.message)
-
-        // If we've already retried several times, use the fallback
-        if (retries >= 2) {
-          console.warn('Multiple failures, using fallback text formatting')
-          try {
-            return await generateSimpleFormattedText(
-              extractedText,
-              imageMarkdown
-            )
-          } catch (e) {
-            return formatTextAsFallback(extractedText, imageMarkdown)
-          }
-        }
-
-        retries++
-        await delay(3000) // Wait a bit before retrying
-      }
+    if (!result.text) {
+      // AI failed, use fallback
+      return formatTextAsFallback(extractedText, imageMarkdown)
     }
-  }
 
-  console.error(
-    'Max retries reached. Unable to reelaborate text. Using fallback formatting.'
-  )
-  return formatTextAsFallback(extractedText, imageMarkdown)
+    // Validate formatting
+    const hasHeadings = result.text.includes('## ')
+    const hasList = result.text.includes('- ')
+
+    if (!hasHeadings || !hasList) {
+      console.warn(
+        'Generated text missing proper formatting, using fallback...'
+      )
+      return formatTextAsFallback(extractedText, imageMarkdown)
+    }
+
+    return postProcessText(result.text)
+  } catch (error) {
+    console.error('Error reelaborating text:', error.message)
+    return formatTextAsFallback(extractedText, imageMarkdown)
+  }
 }
 
 /**
@@ -1724,84 +1638,70 @@ function extractSourceName(url) {
  * @returns {string} - Comma-separated list of generated tags
  */
 async function generateTags(extractedText, metadata, maxRetries = 3) {
-  let retries = 0;
-  while (retries < maxRetries) {
-    try {
-      // Add delay with exponential backoff
-      const delayTime = API_DELAY * Math.pow(1.5, retries);
-      console.log(`Waiting ${delayTime / 1000} seconds before generating tags...`);
-      await delay(delayTime);
+  try {
+    const title = metadata?.title || ''
+    const bajada = metadata?.bajada || ''
 
-      const title = metadata?.title || '';
-      const bajada = metadata?.bajada || '';
-      
-      const prompt = `
-        Analiza este artículo y genera entre 5 y 8 etiquetas (tags) relevantes para categorizarlo.
+    const prompt = `
+      Analiza este artículo y genera entre 5 y 8 etiquetas (tags) relevantes para categorizarlo.
 
-        TÍTULO: ${title}
-        BAJADA: ${bajada}
-        CONTENIDO: "${extractedText.substring(0, 4000)}"
-        
-        INSTRUCCIONES:
-        1. Identifica nombres propios importantes (personas, lugares, organizaciones, eventos).
-        2. Identifica temas principales y subtemas.
-        3. Prioriza sustantivos y conceptos clave.
-        4. Cada etiqueta debe tener entre 1 y 3 palabras.
-        5. NO utilices hashtags (#).
-        6. Enfócate en sujetos y temas, NO en adjetivos o emociones.
-        7. Las etiquetas deben ser específicas pero no demasiado largas.
-        8. Las etiquetas pueden ser en singular o plural, según corresponda.
-        9. NO incluyas palabras muy genéricas como "noticia", "actualidad", etc.
-        
-        Devuelve SOLO un array de strings en formato JSON, sin ningún otro texto:
-        ["etiqueta1", "etiqueta2", "etiqueta3", ...]
-      `;
+      TÍTULO: ${title}
+      BAJADA: ${bajada}
+      CONTENIDO: "${extractedText.substring(0, 4000)}"
+      
+      INSTRUCCIONES:
+      1. Identifica nombres propios importantes (personas, lugares, organizaciones, eventos).
+      2. Identifica temas principales y subtemas.
+      3. Prioriza sustantivos y conceptos clave.
+      4. Cada etiqueta debe tener entre 1 y 3 palabras.
+      5. NO utilices hashtags (#).
+      6. Enfócate en sujetos y temas, NO en adjetivos o emociones.
+      7. Las etiquetas deben ser específicas pero no demasiado largas.
+      8. Las etiquetas pueden ser en singular o plural, según corresponda.
+      9. NO incluyas palabras muy genéricas como "noticia", "actualidad", etc.
+      
+      Devuelve SOLO un array de strings en formato JSON, sin ningún otro texto:
+      ["etiqueta1", "etiqueta2", "etiqueta3", ...]
+    `
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+    // ✅ USE NEW AI SERVICE - Groq is good for simple tasks
+    const result = await generateContent(prompt, {
+      maxRetries,
+      requireJson: true,
+      preferGroq: true, // Groq is faster for simple tasks
+    })
 
-      // Clean up the response - extract just the JSON array
-      const jsonMatch = text.match(/\[.*?\]/s);
-      if (!jsonMatch) {
-        throw new Error('No valid JSON array found in response');
-      }
-      
-      const cleanedJson = jsonMatch[0].replace(/```json|```/g, '').trim();
-      const tags = JSON.parse(cleanedJson);
-      
-      // Validate tags
-      if (!Array.isArray(tags) || tags.length === 0) {
-        throw new Error('Generated tags are not in expected format');
-      }
-      
-      // Format tags: capitalize first letter of each word
-      const formattedTags = tags.map(tag => 
-        tag.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-      );
-      
-      // Join tags with commas to create a string
-      const tagsString = formattedTags.join(', ');
-      
-      console.log(`Generated tags: ${tagsString}`);
-      return tagsString;
-    } catch (error) {
-      console.error(`Error generating tags (attempt ${retries + 1}):`, error.message);
-      retries++;
-      
-      if (retries >= maxRetries) {
-        // Return basic fallback tags
-        console.warn('Using fallback tag generation');
-        return generateFallbackTags(extractedText, metadata);
-      }
-      
-      await delay(2000); // Wait before retrying
+    if (!result.text) {
+      return generateFallbackTags(extractedText, metadata)
     }
-  }
-  
-  return ''; // Shouldn't reach here, but just in case
-}
 
+    const jsonMatch = result.text.match(/\[.*?\]/s)
+    if (!jsonMatch) {
+      throw new Error('No valid JSON array found')
+    }
+
+    const cleanedJson = jsonMatch[0].replace(/```json|```/g, '').trim()
+    const tags = JSON.parse(cleanedJson)
+
+    if (!Array.isArray(tags) || tags.length === 0) {
+      throw new Error('Invalid tags format')
+    }
+
+    const formattedTags = tags.map((tag) =>
+      tag
+        .split(' ')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ')
+    )
+
+    const tagsString = formattedTags.join(', ')
+    console.log(`Generated tags: ${tagsString}`)
+    return tagsString
+  } catch (error) {
+    console.error('Error generating tags:', error.message)
+    return generateFallbackTags(extractedText, metadata)
+  }
+}
 /**
  * Generate fallback tags based on keyword frequency when AI fails
  * @returns {string} - Comma-separated string of tags
@@ -1856,69 +1756,67 @@ function generateFallbackTags(extractedText, metadata) {
  * @param {string} tags - The generated tags (comma-separated)
  * @returns {string} - Social media text with hashtags (< 500 chars)
  */
-async function generateSocialMediaText(extractedText, metadata, tags, maxRetries = 3) {
-  let retries = 0;
-  while (retries < maxRetries) {
-    try {
-      // Add delay with exponential backoff
-      const delayTime = API_DELAY * Math.pow(1.5, retries);
-      console.log(`Waiting ${delayTime / 1000} seconds before generating social text...`);
-      await delay(delayTime);
+/**
+ * Generate social media text with hashtags and emojis
+ * @param {string} extractedText - The raw text content
+ * @param {object} metadata - The article metadata
+ * @param {string} tags - The generated tags (comma-separated)
+ * @returns {string} - Social media text with hashtags (< 500 chars)
+ */
+async function generateSocialMediaText(
+  extractedText,
+  metadata,
+  tags,
+  maxRetries = 3
+) {
+  try {
+    const title = metadata?.title || ''
+    const bajada = metadata?.bajada || ''
 
-      const title = metadata?.title || '';
-      const bajada = metadata?.bajada || '';
-      
-      const prompt = `
-        Crea un texto atractivo para redes sociales de MENOS DE 500 CARACTERES (EXTREMADAMENTE IMPORTANTE) 
-        que promocione este artículo. Incluye hashtags y emojis relevantes.
+    const prompt = `
+      Crea un texto atractivo para redes sociales de MENOS DE 500 CARACTERES (EXTREMADAMENTE IMPORTANTE) 
+      que promocione este artículo. Incluye hashtags y emojis relevantes.
 
-        TÍTULO: ${title}
-        BAJADA: ${bajada}
-        ETIQUETAS: ${tags}
-        CONTENIDO: "${extractedText.substring(0, 2000)}"
-        
-        INSTRUCCIONES:
-        1. El texto DEBE tener MENOS DE 500 CARACTERES en total (incluyendo hashtags y emojis).
-        2. Escribe en español rioplatense con tono conversacional.
-        3. Incluye 2-4 emojis estratégicamente ubicados para aumentar el impacto visual.
-        4. Termina con 3-5 hashtags relevantes al contenido.
-        5. Usa frases cortas y directas que generen interés.
-        6. NO incluyas enlaces ni menciones (@).
-        7. El contenido debe ser informativo pero intrigante para generar clics.
-        8. CRUCIAL: Verifica que el texto final tenga MENOS DE 500 CARACTERES.
-        
-        Devuelve SOLO el texto para redes sociales, sin ningún comentario adicional.
-      `;
+      TÍTULO: ${title}
+      BAJADA: ${bajada}
+      ETIQUETAS: ${tags}
+      CONTENIDO: "${extractedText.substring(0, 2000)}"
+      
+      INSTRUCCIONES:
+      1. El texto DEBE tener MENOS DE 500 CARACTERES en total (incluyendo hashtags y emojis).
+      2. Escribe en español rioplatense con tono conversacional.
+      3. Incluye 2-4 emojis estratégicamente ubicados para aumentar el impacto visual.
+      4. Termina con 3-5 hashtags relevantes al contenido.
+      5. Usa frases cortas y directas que generen interés.
+      6. NO incluyas enlaces ni menciones (@).
+      7. El contenido debe ser informativo pero intrigante para generar clics.
+      8. CRUCIAL: Verifica que el texto final tenga MENOS DE 500 CARACTERES.
+      
+      Devuelve SOLO el texto para redes sociales, sin ningún comentario adicional.
+    `
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      let socialText = response.text().trim();
-      
-      // Clean up any markdown or extra formatting
-      socialText = socialText.replace(/^```[\s\S]*```$/gm, '').trim();
-      
-      // Enforce character limit
-      if (socialText.length > 500) {
-        socialText = socialText.substring(0, 497) + '...';
-      }
-      
-      console.log(`Generated social media text: ${socialText.length} characters`);
-      return socialText;
-    } catch (error) {
-      console.error(`Error generating social media text (attempt ${retries + 1}):`, error.message);
-      retries++;
-      
-      if (retries >= maxRetries) {
-        // Return basic fallback social media text
-        console.warn('Using fallback social media text generation');
-        return generateFallbackSocialText(metadata, tags);
-      }
-      
-      await delay(2000); // Wait before retrying
+    // ✅ USE NEW AI SERVICE - Groq is good for short creative tasks
+    const result = await generateContent(prompt, {
+      maxRetries,
+      preferGroq: true, // Groq is faster for short content
+    })
+
+    if (!result.text) {
+      return generateFallbackSocialText(metadata, tags)
     }
+
+    let socialText = result.text.replace(/^```[\s\S]*```$/gm, '').trim()
+
+    if (socialText.length > 500) {
+      socialText = socialText.substring(0, 497) + '...'
+    }
+
+    console.log(`Generated social media text: ${socialText.length} characters`)
+    return socialText
+  } catch (error) {
+    console.error('Error generating social media text:', error.message)
+    return generateFallbackSocialText(metadata, tags)
   }
-  
-  return generateFallbackSocialText(metadata, tags);
 }
 
 /**
@@ -1965,3 +1863,11 @@ function generateFallbackSocialText(metadata, tags) {
     return '📰 Nuevo artículo disponible en nuestro portal. ¡No te lo pierdas! #Noticias';
   }
 }
+
+// ✅ AT THE END OF THE SCRIPT, ADD USAGE REPORT
+processAllRequestedSections()
+  .then(() => {
+    console.log('Process completed')
+    printUsageReport() // Show AI usage statistics
+  })
+  .catch((error) => console.error('Process failed:', error.message))

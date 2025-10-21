@@ -119,22 +119,30 @@ const config = {
     model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
   },
 
+  groq: {
+    apiKey: process.env.GROQ_API_KEY || '',
+    model: process.env.GROQ_MODEL || 'llama-3.1-70b-versatile', // Fast and good quality
+    // Alternative models:
+    // 'mixtral-8x7b-32768' - Good for Spanish
+    // 'llama-3.1-8b-instant' - Fastest
+  },
+
   sections: NEWS_SECTIONS,
 
   // Find a section by its ID
   getSection(sectionId) {
-    return this.sections.find((section) => section.id === sectionId) || null;
+    return this.sections.find((section) => section.id === sectionId) || null
   },
 
   // Get default section
   getDefaultSection() {
-    return this.sections[0] || null;
+    return this.sections[0] || null
   },
 
   // Get all sections
   getSections() {
-    return this.sections;
+    return this.sections
   },
-};
+}
 
 export default config;
