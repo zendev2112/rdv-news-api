@@ -21,7 +21,7 @@ const usage = {
 }
 
 /**
- * Generate content with cascading fallback: Gemini → Groq → HuggingFace → Cerebras → OpenRouter → Rule-based
+ * Generate content with cascading fallback: Gemini → Groq → Cerebras → OpenRouter → Rule-based
  */
 export async function generateContent(prompt, options = {}) {
   const {
@@ -50,9 +50,6 @@ export async function generateContent(prompt, options = {}) {
             break
           case 'groq':
             response = await generateWithGroq(prompt)
-            break
-          case 'huggingface':
-            response = await generateWithHuggingFace(prompt)
             break
           case 'cerebras':
             response = await generateWithCerebras(prompt)
@@ -143,42 +140,6 @@ async function generateWithGroq(prompt) {
 }
 
 /**
- * Generate content using HuggingFace Inference API
- */
-async function generateWithHuggingFace(prompt) {
-  const apiKey = config.huggingface?.apiKey || process.env.HUGGINGFACE_API_KEY
-  if (!apiKey) {
-    throw new Error('HuggingFace API key not configured')
-  }
-
-  const model = config.huggingface?.model || 'meta-llama/Llama-2-70b-chat-hf'
-
-  const response = await axios.post(
-    `https://api-inference.huggingface.co/models/${model}`,
-    {
-      inputs: prompt,
-      parameters: {
-        max_new_tokens: 8000,
-        temperature: 0.7,
-        top_p: 0.95,
-      },
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-      timeout: 30000,
-    }
-  )
-
-  if (Array.isArray(response.data)) {
-    return response.data[0]?.generated_text || ''
-  }
-
-  return response.data?.generated_text || ''
-}
-
-/**
  * Generate content using Cerebras API
  */
 async function generateWithCerebras(prompt) {
@@ -187,7 +148,7 @@ async function generateWithCerebras(prompt) {
     throw new Error('Cerebras API key not configured')
   }
 
-  const model = config.cerebras?.model || 'cpt-7b'
+  const model = config.cerebras?.model || 'llama3.1-8b'
 
   const response = await axios.post(
     'https://api.cerebras.ai/v1/chat/completions',
@@ -223,7 +184,7 @@ async function generateWithOpenRouter(prompt) {
     throw new Error('OpenRouter API key not configured')
   }
 
-  const model = config.openrouter?.model || 'meta-llama/llama-2-70b-chat'
+  const model = config.openrouter?.model || 'meta-llama/llama-3.1-70b-instruct'
 
   const response = await axios.post(
     'https://openrouter.ai/api/v1/chat/completions',
