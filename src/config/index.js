@@ -127,6 +127,19 @@ const config = {
     // 'llama-3.1-8b-instant' - Fastest
   },
 
+  huggingface: {
+    apiKey: process.env.HUGGINGFACE_API_KEY || '',
+    model: process.env.HUGGINGFACE_MODEL || 'meta-llama/Llama-2-70b-chat-hf',
+  },
+  cerebras: {
+    apiKey: process.env.CEREBRAS_API_KEY || '',
+    model: process.env.CEREBRAS_MODEL || 'cpt-7b',
+  },
+  openrouter: {
+    apiKey: process.env.OPENROUTER_API_KEY || '',
+    model: process.env.OPENROUTER_MODEL || 'meta-llama/llama-2-70b-chat',
+  },
+
   sections: NEWS_SECTIONS,
 
   // Find a section by its ID
