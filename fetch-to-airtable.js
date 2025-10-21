@@ -673,18 +673,17 @@ async function generateMetadata(extractedText, maxRetries = 3) {
       2. Un resumen (bajada) de 40 a 50 palabras que capture los puntos clave. **No uses mayúsculas en todas las palabras**. Solo usa mayúsculas al principio de cada oración y en nombres propios.
       3. Una volanta corta que brinde contexto o destaque la importancia del artículo. **No uses mayúsculas en todas las palabras**. Solo usa mayúsculas al principio y en nombres propios.
       
-      Return the output in JSON format:
-      {
-        "title": "Generated Title",
-        "bajada": "Generated 40-50 word summary",
-        "volanta": "Generated overline"
-      }
+      IMPORTANTE: Devuelve SOLO el objeto JSON sin ningún texto adicional antes o después.
+      NO incluyas explicaciones, comentarios, ni bloques de código markdown.
+      
+      Formato requerido:
+      {"title": "Generated Title", "bajada": "Generated 40-50 word summary", "volanta": "Generated overline"}
     `
 
     // ✅ USE NEW AI SERVICE
     const result = await generateContent(prompt, {
       maxRetries: 3,
-      requireJson: true,
+      requireJson: false, // Don't validate yet, we'll extract manually
       preferGroq: false, // Use Gemini for JSON
     })
 
@@ -693,12 +692,46 @@ async function generateMetadata(extractedText, maxRetries = 3) {
       return generateFallbackMetadata(extractedText)
     }
 
-    const cleanedText = result.text
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
+    // ✅ IMPROVED JSON EXTRACTION
+    let cleanedText = result.text.trim()
+
+    // Remove markdown code blocks
+    cleanedText = cleanedText
+      .replace(/```json\s*/g, '')
+      .replace(/```\s*/g, '')
       .trim()
 
-    return JSON.parse(cleanedText)
+    // Try to find JSON object using regex
+    const jsonMatch = cleanedText.match(/\{[\s\S]*\}/)
+
+    if (!jsonMatch) {
+      console.warn(
+        'No JSON object found in response:',
+        cleanedText.substring(0, 200)
+      )
+      throw new Error('No valid JSON object found')
+    }
+
+    const jsonStr = jsonMatch[0]
+
+    // Try to parse
+    let parsed
+    try {
+      parsed = JSON.parse(jsonStr)
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError.message)
+      console.error('Attempted to parse:', jsonStr.substring(0, 200))
+      throw new Error('Invalid JSON format')
+    }
+
+    // Validate structure
+    if (!parsed.title || !parsed.bajada || !parsed.volanta) {
+      console.warn('Missing required fields in metadata:', Object.keys(parsed))
+      throw new Error('Incomplete metadata structure')
+    }
+
+    console.log('Successfully generated metadata')
+    return parsed
   } catch (error) {
     console.error('Error generating metadata:', error.message)
     return generateFallbackMetadata(extractedText)
@@ -1661,14 +1694,17 @@ async function generateTags(extractedText, metadata, maxRetries = 3) {
       8. Las etiquetas pueden ser en singular o plural, según corresponda.
       9. NO incluyas palabras muy genéricas como "noticia", "actualidad", etc.
       
-      Devuelve SOLO un array de strings en formato JSON, sin ningún otro texto:
-      ["etiqueta1", "etiqueta2", "etiqueta3", ...]
+      IMPORTANTE: Devuelve SOLO un array JSON sin ningún texto adicional.
+      NO incluyas explicaciones, comentarios, ni bloques de código markdown.
+      
+      Formato requerido:
+      ["etiqueta1", "etiqueta2", "etiqueta3", "etiqueta4", "etiqueta5"]
     `
 
     // ✅ USE NEW AI SERVICE - Groq is good for simple tasks
     const result = await generateContent(prompt, {
       maxRetries: 3,
-      requireJson: true,
+      requireJson: false, // Don't validate yet
       preferGroq: true, // ✅ Groq is faster for simple tasks
     })
 
@@ -1676,16 +1712,40 @@ async function generateTags(extractedText, metadata, maxRetries = 3) {
       return generateFallbackTags(extractedText, metadata)
     }
 
-    const jsonMatch = result.text.match(/\[.*?\]/s)
+    // ✅ IMPROVED JSON EXTRACTION
+    let cleanedText = result.text.trim()
+
+    // Remove markdown code blocks
+    cleanedText = cleanedText
+      .replace(/```json\s*/g, '')
+      .replace(/```\s*/g, '')
+      .trim()
+
+    // Try to find JSON array using regex
+    const jsonMatch = cleanedText.match(/\[[\s\S]*?\]/)
+
     if (!jsonMatch) {
+      console.warn(
+        'No JSON array found in response:',
+        cleanedText.substring(0, 200)
+      )
       throw new Error('No valid JSON array found')
     }
 
-    const cleanedJson = jsonMatch[0].replace(/```json|```/g, '').trim()
-    const tags = JSON.parse(cleanedJson)
+    const jsonStr = jsonMatch[0]
+
+    // Try to parse
+    let tags
+    try {
+      tags = JSON.parse(jsonStr)
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError.message)
+      console.error('Attempted to parse:', jsonStr.substring(0, 200))
+      throw new Error('Invalid JSON format')
+    }
 
     if (!Array.isArray(tags) || tags.length === 0) {
-      throw new Error('Invalid tags format')
+      throw new Error('Invalid tags format or empty array')
     }
 
     const formattedTags = tags.map((tag) =>
