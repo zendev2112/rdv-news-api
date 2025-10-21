@@ -127,10 +127,6 @@ const config = {
     // 'llama-3.1-8b-instant' - Fastest
   },
 
-  huggingface: {
-    apiKey: process.env.HUGGINGFACE_API_KEY || '',
-    model: process.env.HUGGINGFACE_MODEL || 'meta-llama/Llama-2-70b-chat-hf',
-  },
   cerebras: {
     apiKey: process.env.CEREBRAS_API_KEY || '',
     model: process.env.CEREBRAS_MODEL || 'cpt-7b',
