@@ -52,17 +52,22 @@ export async function uploadArticleImagesToCloudinary(
       ).padStart(2, '0')}`
       const folderPath = `rdv-articles/${sectionId}/${yearMonth}`
 
-      // Generate unique public_id
-      const publicId = `${recordId}-${i}-${Date.now()}`
+      // Generate unique public_id with timestamp
+      const timestamp = Date.now()
+      const publicId = `${recordId}-${i}-${timestamp}`
 
+      // ✅ UPLOAD WITH MAXIMUM QUALITY - NO TRANSFORMATIONS
       const uploadResult = await cloudinary.uploader.upload(url, {
         folder: folderPath,
         public_id: publicId,
-        transformation: [
-          { width: 1200, height: 800, crop: 'limit' },
-          { quality: 'auto:good' },
-          { fetch_format: 'auto' },
-        ],
+        resource_type: 'auto',
+        quality: 100, // ✅ Maximum quality on upload
+        use_filename: true,
+        unique_filename: true,
+        overwrite: true,
+        invalidate: true, // ✅ Clear CDN cache
+        // ✅ NO TRANSFORMATION at upload time
+        transformation: [],
         tags: [sectionId, 'rdv-news', yearMonth, 'article-image'],
       })
 
