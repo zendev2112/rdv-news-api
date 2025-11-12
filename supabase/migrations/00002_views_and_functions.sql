@@ -231,3 +231,42 @@ BEGIN
   RETURN article_count;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Function to update article section by airtable_id
+CREATE OR REPLACE FUNCTION update_article_section(
+  airtable_id_param TEXT,
+  new_section_id TEXT
+)
+RETURNS TABLE (
+  article_id UUID,
+  airtable_id TEXT,
+  old_section_id TEXT,
+  new_section_id TEXT
+) AS $$
+DECLARE
+  v_article_id UUID;
+  v_old_section_id TEXT;
+BEGIN
+  -- Get article
+  SELECT id INTO v_article_id
+  FROM articles
+  WHERE airtable_id = airtable_id_param;
+
+  IF v_article_id IS NULL THEN
+    RAISE EXCEPTION 'Article with airtable_id % not found', airtable_id_param;
+  END IF;
+
+  -- Get old section
+  SELECT section_id INTO v_old_section_id
+  FROM article_sections
+  WHERE article_id = v_article_id AND is_primary = TRUE;
+
+  -- Update section
+  UPDATE article_sections
+  SET section_id = new_section_id
+  WHERE article_id = v_article_id AND is_primary = TRUE;
+
+  RETURN QUERY
+  SELECT v_article_id, airtable_id_param, v_old_section_id, new_section_id;
+END;
+$$ LANGUAGE plpgsql;

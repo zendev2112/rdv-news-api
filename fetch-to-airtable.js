@@ -1023,6 +1023,8 @@ async function processArticle(item, sectionId) {
       'loterias-quinielas': 'Loterías y Quinielas',
       'moda-belleza': 'Moda y Belleza',
       mascotas: 'Mascotas',
+      mundo: 'Mundo', // ✅ ADD THIS
+      espectaculos: 'Espectáculos', // ✅ ADD THIS
     }
 
     // Replace the hardcoded section mapping with this more dynamic lookup
