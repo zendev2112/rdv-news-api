@@ -171,6 +171,7 @@ async function insertRecords(records, sectionId = 'test') {
           'loterias-quinielas': 'Loterías y Quinielas',
           'moda-belleza': 'Moda y Belleza',
           mascotas: 'Mascotas',
+          ambiente: 'Ambiente' 
         }
 
         // Get section value from mapping, fall back to a default
