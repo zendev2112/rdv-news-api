@@ -270,3 +270,19 @@ BEGIN
   SELECT v_article_id, airtable_id_param, v_old_section_id, new_section_id;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE VIEW article_simple AS
+SELECT
+  a.airtable_id,
+  a.title,
+  s.name AS section
+FROM
+  articles a
+LEFT JOIN
+  article_sections as_junction ON a.id = as_junction.article_id
+LEFT JOIN
+  sections s ON as_junction.section_id = s.id
+WHERE
+  as_junction.is_primary = TRUE OR as_junction.is_primary IS NULL
+ORDER BY
+  a.airtable_id;
