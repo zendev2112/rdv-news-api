@@ -174,6 +174,7 @@ async function insertRecords(records, sectionId = 'test') {
           ambiente: 'Ambiente',
           clima: 'Clima',
           tecnologia: 'Tecnología',
+          actualidad: 'Actualidad'
         }
 
         // Get section value from mapping, fall back to a default

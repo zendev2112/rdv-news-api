@@ -1027,7 +1027,8 @@ async function processArticle(item, sectionId) {
       espectaculos: 'Espectáculos', // ✅ ADD THIS
       ambiente: 'Ambiente',
       clima: 'Clima',
-      tecnologia: 'Tecnología'
+      tecnologia: 'Tecnología',
+      actualidad: 'Actualidad'
     }
 
     // Replace the hardcoded section mapping with this more dynamic lookup
