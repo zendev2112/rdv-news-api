@@ -172,9 +172,11 @@ async function insertRecords(records, sectionId = 'test') {
           'moda-belleza': 'Moda y Belleza',
           mascotas: 'Mascotas',
           ambiente: 'Ambiente',
+          mundo: 'Mundo',
           clima: 'Clima',
           tecnologia: 'Tecnología',
-          actualidad: 'Actualidad'
+          actualidad: 'Actualidad',
+          espectaculos: 'Espectáculos',
         }
 
         // Get section value from mapping, fall back to a default
