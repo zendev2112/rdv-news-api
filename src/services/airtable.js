@@ -177,6 +177,8 @@ async function insertRecords(records, sectionId = 'test') {
           tecnologia: 'Tecnología',
           actualidad: 'Actualidad',
           espectaculos: 'Espectáculos',
+          'cine-series': 'Cine y Series',
+          'historia-literatura': 'Historia y Literatura',
         }
 
         // Get section value from mapping, fall back to a default
