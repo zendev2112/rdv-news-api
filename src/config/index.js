@@ -102,6 +102,15 @@ const NEWS_SECTIONS = [
     icon: 'public',
     priority: 11,
   },
+  {
+    id: 'huanguelen',
+    name: 'Huanguelen',
+    tableName: 'Huanguelen',
+    rssUrl: 'https://rss.app/feeds/v1.1/_xGyzVPdpDPdZraou.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 12,
+  },
 ]
 
 const config = {
