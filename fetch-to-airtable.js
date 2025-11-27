@@ -1055,6 +1055,7 @@ async function processArticle(item, sectionId) {
       article: processedText,
       image: imageAttachments, // ✅ Array of attachment objects for Airtable
 
+      author: '',
       // ✅ MODIFIED: Set placeholder values that will be updated with Airtable URLs
       imgUrl: '', // Will be populated with Airtable URL after insertion
       'article-images': '', // Will be populated with Airtable URLs after insertion
@@ -1306,6 +1307,7 @@ async function processSection(section) {
             imgUrl: imageUrl || '',
             article: postText, // Store the full post text
             overline: metadata.volanta, // Use the AI-generated volanta/overline
+            author: '',
             status: 'draft',
             processingStatus: 'completed', // Mark as completed since we have the full text already
             postDate: item.date_published || '',

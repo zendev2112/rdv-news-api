@@ -197,6 +197,7 @@ async function publishArticle(airtableRecord) {
       article: airtableRecord.fields.article || '',
       url: airtableRecord.fields.url || '',
       source: airtableRecord.fields.source || '',
+      author: airtableRecord.fields.author || null,
       image:
         airtableRecord.fields.imagen || airtableRecord.fields.image
           ? JSON.stringify(
