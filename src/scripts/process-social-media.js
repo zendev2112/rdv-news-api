@@ -23,7 +23,7 @@ const airtableBase = new Airtable({
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey)
 const model = genAI.getGenerativeModel({ model: config.gemini.model })
-const visionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }) // Add vision model
+const visionModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }) // Add vision model
 
 // Helper function to create a delay
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -319,38 +319,51 @@ async function processRecord(record, tableName) {
 }
 
 /**
- * Extract text from an image using Gemini Vision
+ * Extract text from image using Gemini Vision
  */
 async function extractTextFromImage(imageUrl) {
   try {
     console.log(`Extracting text from image: ${imageUrl}`);
     
-    // Download the image
+    // Fetch the image
     const response = await axios.get(imageUrl, { 
       responseType: 'arraybuffer',
-      timeout: 10000 // 10 second timeout
+      timeout: 10000
     });
-    const imageData = Buffer.from(response.data).toString('base64');
     
-    // Use Vision model for image processing
-    const prompt = "Extrae todo el texto visible en esta imagen. Si la imagen contiene una publicación de redes sociales, incluye todo el texto del post. Devuelve solo el texto, sin explicaciones ni descripciones adicionales.";
+    const imageData = Buffer.from(response.data).toString("base64");
     
-    // Process the image
-    const result = await visionModel.generateContent([
-      prompt,
+    // Determine MIME type from URL
+    let mimeType = "image/jpeg";
+    if (imageUrl.includes('.png')) mimeType = "image/png";
+    if (imageUrl.includes('.webp')) mimeType = "image/webp";
+    if (imageUrl.includes('.gif')) mimeType = "image/gif";
+    
+    // Call Gemini with vision capabilities
+    const result = await model.generateContent([
       {
         inlineData: {
+          mimeType: mimeType,
           data: imageData,
-          mimeType: "image/jpeg" 
-        }
-      }
+        },
+      },
+      {
+        text: "Extrae TODO el texto visible en esta imagen. Devuelve solo el texto extraído sin explicaciones, comentarios ni código.",
+      },
     ]);
+
+    const textContent = await result.response.text();
     
-    const responseText = (await result.response).text();
-    return responseText.trim();
+    if (!textContent || textContent.length === 0) {
+      console.warn(`No text found in image`);
+      return null;
+    }
+    
+    console.log(`Successfully extracted ${textContent.length} characters from image`);
+    return textContent;
   } catch (error) {
     console.error(`Image text extraction failed: ${error.message}`);
-    throw new Error(`OCR failed: ${error.message}`);
+    return null;
   }
 }
 
