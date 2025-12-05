@@ -111,6 +111,15 @@ const NEWS_SECTIONS = [
     icon: 'public',
     priority: 12,
   },
+  {
+    id: 'pueblos-alemanes',
+    name: 'Pueblos Alemanes',
+    tableName: 'Pueblos Alemanes',
+    rssUrl: 'https://rss.app/feeds/v1.1/_RBEdj2G0UsWW5dLI.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 13,
+  },
 ]
 
 const config = {
