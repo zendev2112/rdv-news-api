@@ -80,18 +80,33 @@ app.use('/api/airtable-proxy', airtableProxyRoutes)
 
 
 
+// ...existing imports and middleware...
+
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  })
 })
 
-// For local development
+// ✅ UPDATED: Start server for both development AND production
+const PORT = process.env.PORT || 3001
+
 if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 3001
+  // Local development
   app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`)
+    console.log(`🚀 Development server running on port ${PORT}`)
+    console.log(`Health check: http://localhost:${PORT}/health`)
+  })
+} else {
+  // Production (Render)
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Production server running on port ${PORT}`)
+    console.log(`Environment: ${process.env.NODE_ENV}`)
   })
 }
 
-// Export for Vercel
+// Keep Vercel export for now (we'll remove this later)
 export default app
