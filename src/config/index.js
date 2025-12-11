@@ -120,6 +120,15 @@ const NEWS_SECTIONS = [
     icon: 'public',
     priority: 13,
   },
+  {
+    id: 'recetas',
+    name: 'Recetas',
+    tableName: 'Recetas',
+    rssUrl: 'https://rss.app/feeds/v1.1/_xM9tcMjxIuLN3OEk.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 14,
+  },
 ]
 
 const config = {
