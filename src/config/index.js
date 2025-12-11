@@ -124,7 +124,7 @@ const NEWS_SECTIONS = [
     id: 'recetas',
     name: 'Recetas',
     tableName: 'Recetas',
-    rssUrl: 'https://rss.app/feeds/v1.1/_xM9tcMjxIuLN3OEk.json',
+    rssUrl: 'https://rss.app/feeds/v1.1/_6egQJZ12p1NoH7Ws.json',
     color: '#9C27B0',
     icon: 'public',
     priority: 14,
