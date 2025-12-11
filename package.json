@@ -33,6 +33,8 @@
     "fetch:instituciones:limited": "node fetch-to-airtable.js instituciones --limit 5",
     "fetch:pueblos-alemanes": "node fetch-to-airtable.js pueblos-alemanes",
     "fetch:pueblos-alemanes:limited": "node fetch-to-airtable.js pueblos-alemanes --limit 5",
+    "fetch:recetas": "node fetch-to-airtable.js recetas",
+    "fetch:recetas:limited": "node fetch-to-airtable.js recetas --limit 5",
     "fetch:complete:limited": "node fetch-to-airtable.js --all --limit 10 && node fetch-to-airtable.js instituciones --limit 5",
     "process:social": "node src/scripts/process-social-media.js",
     "fetch:complete": "node fetch-to-airtable.js --all && node fetch-to-airtable.js instituciones",
