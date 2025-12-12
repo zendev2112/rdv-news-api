@@ -129,6 +129,15 @@ const NEWS_SECTIONS = [
     icon: 'public',
     priority: 14,
   },
+  {
+    id: 'lifestyle',
+    name: 'Lifestyle',
+    tableName: 'Lifestyle',
+    rssUrl: 'https://rss.app/feeds/v1.1/_cnOfvOavDTApWv9j.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 15,
+  },
 ]
 
 const config = {
