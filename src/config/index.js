@@ -138,6 +138,15 @@ const NEWS_SECTIONS = [
     icon: 'public',
     priority: 15,
   },
+  {
+    id: 'cine-series',
+    name: 'Cine y Series',
+    tableName: 'Cine y Series',
+    rssUrl: 'https://rss.app/feeds/v1.1/_1N3Q0N51cSPGFvzM.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 15,
+  },
 ]
 
 const config = {
