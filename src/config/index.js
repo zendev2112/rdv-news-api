@@ -145,7 +145,16 @@ const NEWS_SECTIONS = [
     rssUrl: 'https://rss.app/feeds/v1.1/_1N3Q0N51cSPGFvzM.json',
     color: '#9C27B0',
     icon: 'public',
-    priority: 15,
+    priority: 16,
+  },
+  {
+    id: 'cultura',
+    name: 'Cultura',
+    tableName: 'Cultura',
+    rssUrl: 'https://rss.app/feeds/v1.1/_MX7JNAQ5HSZ7dTpH.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 17,
   },
 ]
 
