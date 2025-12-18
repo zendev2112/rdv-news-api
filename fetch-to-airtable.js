@@ -1069,7 +1069,7 @@ async function processArticle(item, sectionId) {
       section: sectionValue,
       status: 'draft',
       tags: tags,
-      socialMediaText: socialMediaText,
+      /* socialMediaText: socialMediaText, */
       front: '',
       order: '',
     }
