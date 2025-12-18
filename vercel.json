@@ -29,8 +29,12 @@
       "dest": "/public/admin.html"
     },
     {
-      "src": "/api/fetch/(.*)",
-      "dest": "/api/fetch/$1"
+      "src": "/api/fetch/all",
+      "dest": "/api/fetch/all.js"
+    },
+    {
+      "src": "/api/fetch/section",
+      "dest": "/api/fetch/section.js"
     },
     {
       "src": "/(.*)",
