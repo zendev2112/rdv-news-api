@@ -7,12 +7,34 @@
       "config": {
         "includeFiles": ["src/templates/**", "src/assets/**"]
       }
+    },
+    {
+      "src": "api/**/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "public/**/*",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
+      "src": "/admin",
+      "dest": "/public/admin.html"
+    },
+    {
+      "src": "/api/fetch/(.*)",
+      "dest": "/api/fetch/$1"
+    },
+    {
       "src": "/(.*)",
       "dest": "src/server.js"
     }
-  ]
+  ],
+  "functions": {
+    "api/fetch/**/*.js": {
+      "maxDuration": 300,
+      "memory": 3008
+    }
+  }
 }
