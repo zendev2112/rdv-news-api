@@ -1,8 +1,16 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import  logger  from '../utils/logger.js'
+import logger from '../utils/logger.js'
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+
+// Track usage stats
+let usageStats = {
+  totalRequests: 0,
+  totalTokens: 0,
+  totalCost: 0,
+  errors: 0,
+}
 
 /**
  * Generate content using Gemini ONLY
@@ -15,6 +23,7 @@ export async function generateContent(prompt, options = {}) {
   } = options
 
   try {
+    usageStats.totalRequests++
     logger.info(`🤖 Using Gemini model: ${model}`)
 
     const geminiModel = genAI.getGenerativeModel({ model })
@@ -38,6 +47,7 @@ export async function generateContent(prompt, options = {}) {
       provider: 'gemini',
     }
   } catch (error) {
+    usageStats.errors++
     logger.error(`❌ Gemini generation failed: ${error.message}`)
     throw new Error(`Gemini API error: ${error.message}`)
   }
@@ -60,4 +70,36 @@ export async function batchGenerateContent(prompts, options = {}) {
   }
 
   return results
+}
+
+/**
+ * Print usage report
+ */
+export function printUsageReport() {
+  logger.info('\n📊 AI Usage Report:')
+  logger.info(`   Total Requests: ${usageStats.totalRequests}`)
+  logger.info(`   Errors: ${usageStats.errors}`)
+  logger.info(
+    `   Success Rate: ${
+      usageStats.totalRequests > 0
+        ? (
+            ((usageStats.totalRequests - usageStats.errors) /
+              usageStats.totalRequests) *
+            100
+          ).toFixed(2)
+        : 0
+    }%`
+  )
+}
+
+/**
+ * Reset usage stats
+ */
+export function resetUsageStats() {
+  usageStats = {
+    totalRequests: 0,
+    totalTokens: 0,
+    totalCost: 0,
+    errors: 0,
+  }
 }
