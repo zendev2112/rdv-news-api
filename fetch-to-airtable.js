@@ -1316,7 +1316,7 @@ async function processSection(section) {
             // Add this line to create proper image attachments:
             image: imageUrl ? [{ url: imageUrl }] : [],
           }
-
+/* 
           // Generate tags and social media text for social media content
           try {
             // For social media, use a simpler approach focused on the source and text
@@ -1351,7 +1351,7 @@ async function processSection(section) {
               /\s+/g,
               ''
             )}`
-          }
+          } */
 
           // Add social media specific fields based on source type
           if (socialMediaType) {
