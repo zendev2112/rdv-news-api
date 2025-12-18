@@ -1,9 +1,7 @@
-import { exec } from 'child_process'
-import { promisify } from 'util'
+import { spawn } from 'child_process'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-const execAsync = promisify(exec)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const projectRoot = path.resolve(__dirname, '../..')
@@ -33,40 +31,87 @@ export default async function handler(req, res) {
 
     console.log(`📥 Fetch ALL sections request: limit=${limit}`)
 
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+
     const scriptPath = path.join(projectRoot, 'fetch-to-airtable.js')
-    const command = `node "${scriptPath}" --all --limit ${limit}`
 
-    console.log(`Executing: ${command}`)
+    const childProcess = spawn(
+      'node',
+      [scriptPath, '--all', '--limit', limit.toString()],
+      {
+        cwd: projectRoot,
+        env: {
+          ...process.env,
+          NODE_ENV: 'production',
+          FORCE_COLOR: '0',
+        },
+      }
+    )
 
-    const { stdout, stderr } = await execAsync(command, {
-      cwd: projectRoot,
-      env: {
-        ...process.env,
-        NODE_ENV: 'production',
-      },
-      timeout: 300000, // 5 minutes
+    let hasError = false
+    let stdout = ''
+    let stderr = ''
+
+    childProcess.stdout.on('data', (data) => {
+      const lines = data.toString().split('\n')
+      lines.forEach((line) => {
+        if (line.trim()) {
+          stdout += line + '\n'
+          res.write(
+            `data: ${JSON.stringify({ type: 'log', message: line })}\n\n`
+          )
+        }
+      })
     })
 
-    console.log('✅ Fetch all completed')
+    childProcess.stderr.on('data', (data) => {
+      const lines = data.toString().split('\n')
+      lines.forEach((line) => {
+        if (line.trim()) {
+          stderr += line + '\n'
+          res.write(
+            `data: ${JSON.stringify({ type: 'error', message: line })}\n\n`
+          )
+        }
+      })
+      hasError = true
+    })
 
-    return res.status(200).json({
-      success: true,
-      sections: 'all',
-      limit,
-      output: stdout,
-      errors: stderr || null,
-      timestamp: new Date().toISOString(),
+    childProcess.on('close', (code) => {
+      console.log(`Process exited with code ${code}`)
+
+      const result = {
+        type: 'complete',
+        success: code === 0 && !hasError,
+        code,
+        sections: 'all',
+        limit,
+        timestamp: new Date().toISOString(),
+      }
+
+      res.write(`data: ${JSON.stringify(result)}\n\n`)
+      res.end()
+    })
+
+    childProcess.on('error', (error) => {
+      console.error('Process error:', error)
+      res.write(
+        `data: ${JSON.stringify({ type: 'error', message: error.message })}\n\n`
+      )
+      res.end()
     })
   } catch (error) {
-    console.error('❌ Fetch error:', error)
+    console.error('❌ Handler error:', error)
 
-    return res.status(500).json({
-      success: false,
-      error: error.message,
-      stderr: error.stderr,
-      stdout: error.stdout,
-      timestamp: new Date().toISOString(),
-    })
+    res.write(
+      `data: ${JSON.stringify({
+        type: 'error',
+        message: error.message,
+      })}\n\n`
+    )
+    res.end()
   }
 }
 

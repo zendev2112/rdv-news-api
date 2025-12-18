@@ -293,15 +293,18 @@
                     <option value="pueblos-alemanes">Pueblos Alemanes</option>
                     <option value="huanguelen">Huanguelén</option>
                     <option value="la-sexta">La Sexta</option>
+                    <option value="instituciones">Instituciones</option>
                     <option value="politica">Política</option>
                     <option value="economia">Economía</option>
                     <option value="agro">Agro</option>
-                    <option value="sociedad">Sociedad</option>
-                    <option value="deportes">Deportes</option>
+                    <option value="salud">Salud</option>
                     <option value="cultura">Cultura</option>
-                    <option value="lifestyle">Lifestyle</option>
+                    <option value="ciencia">Ciencia</option>
                     <option value="cine-series">Cine y Series</option>
+                    <option value="historia-literatura">Historia y Literatura</option>
+                    <option value="lifestyle">Lifestyle</option>
                     <option value="turismo">Turismo</option>
+                    <option value="recetaS">Recetas</option>
                 </select>
                 <input type="number" class="input" id="limit-section" value="10" min="1" max="50"
                     placeholder="Articles limit">
@@ -423,72 +426,6 @@
             return { message: line, type };
         }
 
-        async function fetchAll() {
-            if (!API_TOKEN) {
-                addLog('❌ Please enter API token first', 'error');
-                return;
-            }
-
-            const limit = document.getElementById('limit-all').value;
-            setStatus('status-all', 'running', 'Running');
-            showProgress('all', true);
-            showCancelButton('all', true);
-
-            addLog(`📥 Starting fetch for ALL sections (limit: ${limit} per section)...`, 'info');
-
-            currentController = new AbortController();
-
-            try {
-                const response = await fetch(`${API_BASE}/api/fetch/all`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${API_TOKEN}`
-                    },
-                    body: JSON.stringify({ limit: parseInt(limit) }),
-                    signal: currentController.signal
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    addLog('✅ Fetch completed successfully!', 'success');
-
-                    // Parse and display output line by line
-                    if (data.output) {
-                        const lines = data.output.split('\n');
-                        lines.forEach(line => {
-                            const parsed = parseLogLine(line);
-                            if (parsed) {
-                                addLog(parsed.message, parsed.type);
-                            }
-                        });
-                    }
-
-                    setStatus('status-all', 'success', 'Success');
-                } else {
-                    addLog(`❌ Error: ${data.error}`, 'error');
-                    if (data.stderr) {
-                        addLog(`STDERR: ${data.stderr}`, 'error');
-                    }
-                    setStatus('status-all', 'error', 'Error');
-                }
-            } catch (error) {
-                if (error.name === 'AbortError') {
-                    addLog(`⚠️ Fetch cancelled`, 'warning');
-                    setStatus('status-all', 'idle', 'Cancelled');
-                } else {
-                    addLog(`❌ Request failed: ${error.message}`, 'error');
-                    setStatus('status-all', 'error', 'Error');
-                }
-            } finally {
-                showProgress('all', false);
-                showCancelButton('all', false);
-                currentController = null;
-                setTimeout(() => setStatus('status-all', 'idle', 'Idle'), 3000);
-            }
-        }
-
         async function fetchSection() {
             if (!API_TOKEN) {
                 addLog('❌ Please enter API token first', 'error');
@@ -519,30 +456,44 @@
                     signal: currentController.signal
                 });
 
-                const data = await response.json();
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
 
-                if (data.success) {
-                    addLog(`✅ Fetch completed for ${section}!`, 'success');
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
 
-                    // Parse and display output line by line
-                    if (data.output) {
-                        const lines = data.output.split('\n');
-                        lines.forEach(line => {
-                            const parsed = parseLogLine(line);
-                            if (parsed) {
-                                addLog(parsed.message, parsed.type);
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6));
+
+                                if (data.type === 'log') {
+                                    const parsed = parseLogLine(data.message);
+                                    if (parsed) {
+                                        addLog(parsed.message, parsed.type);
+                                    }
+                                } else if (data.type === 'error') {
+                                    addLog(data.message, 'error');
+                                } else if (data.type === 'complete') {
+                                    if (data.success) {
+                                        addLog(`✅ Fetch completed for ${section}!`, 'success');
+                                        setStatus('status-section', 'success', 'Success');
+                                    } else {
+                                        addLog(`❌ Fetch failed with code ${data.code}`, 'error');
+                                        setStatus('status-section', 'error', 'Error');
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('Parse error:', e);
                             }
-                        });
+                        }
                     }
-
-                    setStatus('status-section', 'success', 'Success');
-                } else {
-                    addLog(`❌ Error: ${data.error}`, 'error');
-                    if (data.stderr) {
-                        addLog(`STDERR: ${data.stderr}`, 'error');
-                    }
-                    setStatus('status-section', 'error', 'Error');
                 }
+
             } catch (error) {
                 if (error.name === 'AbortError') {
                     addLog(`⚠️ Fetch cancelled`, 'warning');
@@ -556,6 +507,86 @@
                 showCancelButton('section', false);
                 currentController = null;
                 setTimeout(() => setStatus('status-section', 'idle', 'Idle'), 3000);
+            }
+        }
+
+        async function fetchAll() {
+            if (!API_TOKEN) {
+                addLog('❌ Please enter API token first', 'error');
+                return;
+            }
+
+            const limit = document.getElementById('limit-all').value;
+            setStatus('status-all', 'running', 'Running');
+            showProgress('all', true);
+            showCancelButton('all', true);
+
+            addLog(`📥 Starting fetch for ALL sections (limit: ${limit} per section)...`, 'info');
+
+            currentController = new AbortController();
+
+            try {
+                const response = await fetch(`${API_BASE}/api/fetch/all`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${API_TOKEN}`
+                    },
+                    body: JSON.stringify({ limit: parseInt(limit) }),
+                    signal: currentController.signal
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6));
+
+                                if (data.type === 'log') {
+                                    const parsed = parseLogLine(data.message);
+                                    if (parsed) {
+                                        addLog(parsed.message, parsed.type);
+                                    }
+                                } else if (data.type === 'error') {
+                                    addLog(data.message, 'error');
+                                } else if (data.type === 'complete') {
+                                    if (data.success) {
+                                        addLog(`✅ Fetch all completed successfully!`, 'success');
+                                        setStatus('status-all', 'success', 'Success');
+                                    } else {
+                                        addLog(`❌ Fetch failed with code ${data.code}`, 'error');
+                                        setStatus('status-all', 'error', 'Error');
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('Parse error:', e);
+                            }
+                        }
+                    }
+                }
+
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    addLog(`⚠️ Fetch cancelled`, 'warning');
+                    setStatus('status-all', 'idle', 'Cancelled');
+                } else {
+                    addLog(`❌ Request failed: ${error.message}`, 'error');
+                    setStatus('status-all', 'error', 'Error');
+                }
+            } finally {
+                showProgress('all', false);
+                showCancelButton('all', false);
+                currentController = null;
+                setTimeout(() => setStatus('status-all', 'idle', 'Idle'), 3000);
             }
         }
     </script>
