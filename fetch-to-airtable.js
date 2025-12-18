@@ -942,7 +942,7 @@ async function processArticle(item, sectionId) {
     }
 
     // Generate social media text
-    console.log(`Generating social media text for: ${item.url}`)
+/*     console.log(`Generating social media text for: ${item.url}`)
     let socialMediaText = ''
     try {
       socialMediaText = await generateSocialMediaText(
@@ -958,7 +958,7 @@ async function processArticle(item, sectionId) {
         `Error generating social media text: ${socialTextError.message}`
       )
       socialMediaText = generateFallbackSocialText(metadata, tags)
-    }
+    } */
 
     // Get section information
     const section = getSection(sectionId)
