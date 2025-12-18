@@ -20,7 +20,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
@@ -78,7 +78,7 @@
             color: white;
         }
 
-        .btn-primary:hover {
+        .btn-primary:hover:not(:disabled) {
             background: #5568d3;
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
@@ -89,14 +89,33 @@
             color: white;
         }
 
-        .btn-success:hover {
+        .btn-success:hover:not(:disabled) {
             background: #059669;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #dc2626;
         }
 
         .btn:disabled {
             background: #ccc;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn-group .btn {
+            margin-top: 0;
         }
 
         .input {
@@ -110,21 +129,52 @@
 
         .log {
             background: #1e293b;
-            color: #10b981;
+            color: #e2e8f0;
             padding: 20px;
             border-radius: 10px;
             font-family: 'Courier New', monospace;
-            font-size: 13px;
-            max-height: 400px;
+            font-size: 12px;
+            max-height: 600px;
             overflow-y: auto;
             white-space: pre-wrap;
             word-wrap: break-word;
+            line-height: 1.6;
         }
 
         .log-entry {
-            margin-bottom: 5px;
-            border-bottom: 1px solid #334155;
-            padding-bottom: 5px;
+            margin-bottom: 8px;
+            padding: 4px 0;
+        }
+
+        .log-success {
+            color: #10b981;
+        }
+
+        .log-error {
+            color: #ef4444;
+        }
+
+        .log-warning {
+            color: #f59e0b;
+        }
+
+        .log-info {
+            color: #3b82f6;
+        }
+
+        .log-debug {
+            color: #8b5cf6;
+        }
+
+        .log-timestamp {
+            color: #64748b;
+            margin-right: 8px;
+        }
+
+        .log-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
         }
 
         .loading {
@@ -171,6 +221,37 @@
             background: #fee2e2;
             color: #dc2626;
         }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #e5e7eb;
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: #667eea;
+            width: 0%;
+            transition: width 0.3s;
+            animation: progress 2s ease-in-out infinite;
+        }
+
+        @keyframes progress {
+            0% {
+                width: 0%;
+            }
+
+            50% {
+                width: 100%;
+            }
+
+            100% {
+                width: 0%;
+            }
+        }
     </style>
 </head>
 
@@ -178,7 +259,7 @@
     <div class="container">
         <div class="header">
             <h1>🗞️ RDV News Admin Panel</h1>
-            <p class="subtitle">Manual article fetching and processing</p>
+            <p class="subtitle">Manual article fetching and processing with Gemini AI</p>
         </div>
 
         <div class="card" style="margin-bottom: 20px;">
@@ -190,35 +271,61 @@
         <div class="grid">
             <div class="card">
                 <h3>📰 Fetch All Sections <span class="status status-idle" id="status-all">Idle</span></h3>
-                <input type="number" class="input" id="limit-all" value="10" min="1" max="50" placeholder="Limit">
-                <button class="btn btn-primary" onclick="fetchAll()">Fetch All Sections</button>
+                <input type="number" class="input" id="limit-all" value="10" min="1" max="50"
+                    placeholder="Articles per section">
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="btn-all" onclick="fetchAll()">Fetch All Sections</button>
+                    <button class="btn btn-danger" id="btn-cancel-all" onclick="cancelFetch('all')"
+                        style="display:none;">Cancel</button>
+                </div>
+                <div class="progress-bar" id="progress-all" style="display:none;">
+                    <div class="progress-bar-fill"></div>
+                </div>
             </div>
 
             <div class="card">
                 <h3>📋 Fetch Specific Section <span class="status status-idle" id="status-section">Idle</span></h3>
                 <select class="input" id="section-select">
                     <option value="primera-plana">Primera Plana</option>
-                    <option value="local">Local</option>
+                    <option value="coronel-suarez">Coronel Suárez</option>
+                    <option value="pueblos-alemanes">Pueblos Alemanes</option>
+                    <option value="huanguelen">Huanguelén</option>
                     <option value="la-sexta">La Sexta</option>
-                    <option value="instituciones">Instituciones</option>
-                    <option value="agro">Agro</option>
-                    <option value="deportes">Deportes</option>
-                    <option value="economia">Economía</option>
                     <option value="politica">Política</option>
-                    <option value="turismo">Turismo</option>
+                    <option value="economia">Economía</option>
+                    <option value="agro">Agro</option>
+                    <option value="sociedad">Sociedad</option>
+                    <option value="deportes">Deportes</option>
+                    <option value="cultura">Cultura</option>
                     <option value="lifestyle">Lifestyle</option>
                     <option value="cine-series">Cine y Series</option>
-                    <option value="cultura">Cultura</option>
+                    <option value="turismo">Turismo</option>
                 </select>
-                <input type="number" class="input" id="limit-section" value="10" min="1" max="50" placeholder="Limit">
-                <button class="btn btn-primary" onclick="fetchSection()">Fetch Section</button>
+                <input type="number" class="input" id="limit-section" value="10" min="1" max="50"
+                    placeholder="Articles limit">
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="btn-section" onclick="fetchSection()">Fetch Section</button>
+                    <button class="btn btn-danger" id="btn-cancel-section" onclick="cancelFetch('section')"
+                        style="display:none;">Cancel</button>
+                </div>
+                <div class="progress-bar" id="progress-section" style="display:none;">
+                    <div class="progress-bar-fill"></div>
+                </div>
             </div>
         </div>
 
         <div class="card">
-            <h3>📊 Console Logs</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="margin: 0;">📊 Live Console Logs</h3>
+                <div class="log-controls">
+                    <button class="btn btn-primary" style="width: auto; padding: 8px 16px; margin: 0;"
+                        onclick="clearLogs()">Clear Logs</button>
+                    <button class="btn btn-success" style="width: auto; padding: 8px 16px; margin: 0;"
+                        onclick="downloadLogs()">Download Logs</button>
+                </div>
+            </div>
             <div class="log" id="logs">
-                <div class="log-entry">🚀 Admin panel ready. Enter your API token to begin.</div>
+                <div class="log-entry log-info">🚀 Admin panel ready. Enter your API token to begin.</div>
             </div>
         </div>
     </div>
@@ -226,25 +333,53 @@
     <script>
         const API_BASE = window.location.origin;
         let API_TOKEN = localStorage.getItem('rdv_api_token') || '';
+        let currentController = null;
+        let allLogs = [];
 
         if (API_TOKEN) {
             document.getElementById('apiToken').value = API_TOKEN;
-            addLog('✅ API token loaded from storage');
+            addLog('✅ API token loaded from storage', 'success');
         }
 
         function saveToken() {
             API_TOKEN = document.getElementById('apiToken').value;
             localStorage.setItem('rdv_api_token', API_TOKEN);
-            addLog('✅ API token saved');
+            addLog('✅ API token saved', 'success');
         }
 
-        function addLog(message) {
+        function addLog(message, type = 'info') {
             const logs = document.getElementById('logs');
             const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            entry.className = `log-entry log-${type}`;
+
+            const timestamp = new Date().toLocaleTimeString();
+            const timestampSpan = document.createElement('span');
+            timestampSpan.className = 'log-timestamp';
+            timestampSpan.textContent = `[${timestamp}]`;
+
+            entry.appendChild(timestampSpan);
+            entry.appendChild(document.createTextNode(` ${message}`));
+
             logs.appendChild(entry);
             logs.scrollTop = logs.scrollHeight;
+
+            allLogs.push({ timestamp, message, type });
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '<div class="log-entry log-info">📋 Logs cleared</div>';
+            allLogs = [];
+        }
+
+        function downloadLogs() {
+            const logText = allLogs.map(log => `[${log.timestamp}] ${log.message}`).join('\n');
+            const blob = new Blob([logText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `rdv-logs-${new Date().toISOString().split('T')[0]}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
         }
 
         function setStatus(id, status, text) {
@@ -253,19 +388,53 @@
             el.textContent = text;
         }
 
+        function showProgress(id, show) {
+            document.getElementById(`progress-${id}`).style.display = show ? 'block' : 'none';
+        }
+
+        function showCancelButton(id, show) {
+            document.getElementById(`btn-cancel-${id}`).style.display = show ? 'block' : 'none';
+            document.getElementById(`btn-${id}`).style.display = show ? 'none' : 'block';
+        }
+
+        function cancelFetch(type) {
+            if (currentController) {
+                currentController.abort();
+                addLog(`⚠️ Fetch cancelled by user`, 'warning');
+                setStatus(`status-${type}`, 'idle', 'Cancelled');
+                showProgress(type, false);
+                showCancelButton(type, false);
+            }
+        }
+
+        function parseLogLine(line) {
+            line = line.trim();
+            if (!line) return null;
+
+            // Detect log type
+            let type = 'info';
+            if (line.includes('✅') || line.includes('SUCCESS')) type = 'success';
+            else if (line.includes('❌') || line.includes('ERROR')) type = 'error';
+            else if (line.includes('⚠️') || line.includes('WARN')) type = 'warning';
+            else if (line.includes('🔍') || line.includes('DEBUG')) type = 'debug';
+
+            return { message: line, type };
+        }
+
         async function fetchAll() {
             if (!API_TOKEN) {
-                addLog('❌ Please enter API token first');
+                addLog('❌ Please enter API token first', 'error');
                 return;
             }
 
             const limit = document.getElementById('limit-all').value;
-            const btn = event.target;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="loading"></span> Fetching...';
             setStatus('status-all', 'running', 'Running');
+            showProgress('all', true);
+            showCancelButton('all', true);
 
-            addLog(`📥 Starting fetch for ALL sections (limit: ${limit})...`);
+            addLog(`📥 Starting fetch for ALL sections (limit: ${limit} per section)...`, 'info');
+
+            currentController = new AbortController();
 
             try {
                 const response = await fetch(`${API_BASE}/api/fetch/all`, {
@@ -274,43 +443,65 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${API_TOKEN}`
                     },
-                    body: JSON.stringify({ limit: parseInt(limit) })
+                    body: JSON.stringify({ limit: parseInt(limit) }),
+                    signal: currentController.signal
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
-                    addLog('✅ Fetch completed successfully!');
-                    addLog(`📊 Output: ${data.output?.substring(0, 200)}...`);
+                    addLog('✅ Fetch completed successfully!', 'success');
+
+                    // Parse and display output line by line
+                    if (data.output) {
+                        const lines = data.output.split('\n');
+                        lines.forEach(line => {
+                            const parsed = parseLogLine(line);
+                            if (parsed) {
+                                addLog(parsed.message, parsed.type);
+                            }
+                        });
+                    }
+
                     setStatus('status-all', 'success', 'Success');
                 } else {
-                    addLog(`❌ Error: ${data.error}`);
+                    addLog(`❌ Error: ${data.error}`, 'error');
+                    if (data.stderr) {
+                        addLog(`STDERR: ${data.stderr}`, 'error');
+                    }
                     setStatus('status-all', 'error', 'Error');
                 }
             } catch (error) {
-                addLog(`❌ Request failed: ${error.message}`);
-                setStatus('status-all', 'error', 'Error');
+                if (error.name === 'AbortError') {
+                    addLog(`⚠️ Fetch cancelled`, 'warning');
+                    setStatus('status-all', 'idle', 'Cancelled');
+                } else {
+                    addLog(`❌ Request failed: ${error.message}`, 'error');
+                    setStatus('status-all', 'error', 'Error');
+                }
             } finally {
-                btn.disabled = false;
-                btn.textContent = 'Fetch All Sections';
+                showProgress('all', false);
+                showCancelButton('all', false);
+                currentController = null;
                 setTimeout(() => setStatus('status-all', 'idle', 'Idle'), 3000);
             }
         }
 
         async function fetchSection() {
             if (!API_TOKEN) {
-                addLog('❌ Please enter API token first');
+                addLog('❌ Please enter API token first', 'error');
                 return;
             }
 
             const section = document.getElementById('section-select').value;
             const limit = document.getElementById('limit-section').value;
-            const btn = event.target;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="loading"></span> Fetching...';
             setStatus('status-section', 'running', 'Running');
+            showProgress('section', true);
+            showCancelButton('section', true);
 
-            addLog(`📥 Starting fetch for section: ${section} (limit: ${limit})...`);
+            addLog(`📥 Starting fetch for section: ${section} (limit: ${limit})...`, 'info');
+
+            currentController = new AbortController();
 
             try {
                 const response = await fetch(`${API_BASE}/api/fetch/section`, {
@@ -322,25 +513,46 @@
                     body: JSON.stringify({
                         section,
                         limit: parseInt(limit)
-                    })
+                    }),
+                    signal: currentController.signal
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
-                    addLog(`✅ Fetch completed for ${section}!`);
-                    addLog(`📊 Output: ${data.output?.substring(0, 200)}...`);
+                    addLog(`✅ Fetch completed for ${section}!`, 'success');
+
+                    // Parse and display output line by line
+                    if (data.output) {
+                        const lines = data.output.split('\n');
+                        lines.forEach(line => {
+                            const parsed = parseLogLine(line);
+                            if (parsed) {
+                                addLog(parsed.message, parsed.type);
+                            }
+                        });
+                    }
+
                     setStatus('status-section', 'success', 'Success');
                 } else {
-                    addLog(`❌ Error: ${data.error}`);
+                    addLog(`❌ Error: ${data.error}`, 'error');
+                    if (data.stderr) {
+                        addLog(`STDERR: ${data.stderr}`, 'error');
+                    }
                     setStatus('status-section', 'error', 'Error');
                 }
             } catch (error) {
-                addLog(`❌ Request failed: ${error.message}`);
-                setStatus('status-section', 'error', 'Error');
+                if (error.name === 'AbortError') {
+                    addLog(`⚠️ Fetch cancelled`, 'warning');
+                    setStatus('status-section', 'idle', 'Cancelled');
+                } else {
+                    addLog(`❌ Request failed: ${error.message}`, 'error');
+                    setStatus('status-section', 'error', 'Error');
+                }
             } finally {
-                btn.disabled = false;
-                btn.textContent = 'Fetch Section';
+                showProgress('section', false);
+                showCancelButton('section', false);
+                currentController = null;
                 setTimeout(() => setStatus('status-section', 'idle', 'Idle'), 3000);
             }
         }
