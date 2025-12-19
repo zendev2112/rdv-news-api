@@ -156,6 +156,15 @@ const NEWS_SECTIONS = [
     icon: 'public',
     priority: 17,
   },
+  {
+    id: 'turismo',
+    name: 'Turismo',
+    tableName: 'Turismo',
+    rssUrl: 'https://rss.app/feeds/v1.1/_Fl3IYhnnTrOHPafk.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 18,
+  },
 ]
 
 const config = {
