@@ -165,6 +165,15 @@ const NEWS_SECTIONS = [
     icon: 'public',
     priority: 18,
   },
+  {
+    id: 'mundo',
+    name: 'Mundo',
+    tableName: 'Mundo',
+    rssUrl: 'https://rss.app/feeds/v1.1/_1YDNl2ClS4lmcxoB.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 18,
+  },
 ]
 
 const config = {
