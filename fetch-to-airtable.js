@@ -741,19 +741,17 @@ El JSON debe ser válido y parseable.
       {"title": "Generated Title", "bajada": "Generated 40-50 word summary", "volanta": "Generated overline"}
     `
 
-    // ✅ USE NEW AI SERVICE
     const result = await generateContent(prompt, {
       maxRetries: 3,
-      requireJson: false, // Don't validate yet, we'll extract manually
-      preferGroq: false, // Use Gemini for JSON
+      requireJson: false,
+      preferGroq: false,
     })
 
     if (!result.text) {
-      // AI failed, use fallback
       return generateFallbackMetadata(extractedText)
     }
 
-    // ✅ IMPROVED JSON EXTRACTION
+    // ✅ IMPROVED JSON EXTRACTION - Non-greedy and more robust
     let cleanedText = result.text.trim()
 
     // Remove markdown code blocks
@@ -762,8 +760,8 @@ El JSON debe ser válido y parseable.
       .replace(/```\s*/g, '')
       .trim()
 
-    // Try to find JSON object using regex
-    const jsonMatch = cleanedText.match(/\{[\s\S]*\}/)
+    // Try to find JSON object using non-greedy regex
+    const jsonMatch = cleanedText.match(/\{[\s\S]*?\}(?=\s*$)/)
 
     if (!jsonMatch) {
       console.warn(
@@ -773,7 +771,10 @@ El JSON debe ser válido y parseable.
       throw new Error('No valid JSON object found')
     }
 
-    const jsonStr = jsonMatch[0]
+    let jsonStr = jsonMatch[0].trim()
+
+    // Remove any trailing commas or invalid characters
+    jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1')
 
     // Try to parse
     let parsed
