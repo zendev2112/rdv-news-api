@@ -67,7 +67,7 @@ function getDefaultSection() {
 // Log config for debugging
 console.log(
   'Config sections available:',
-  config.sections ? config.sections.length : 0
+  config.sections ? config.sections.length : 0,
 )
 console.log('Config imported properly:', !!config)
 console.log('Config sections:', config.sections)
@@ -80,7 +80,7 @@ const ITEM_LIMIT = args.limit || Infinity // Default to no limit if not specifie
 console.log(
   `Fetch limit: ${
     ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT
-  } items per section`
+  } items per section`,
 )
 
 // Determine which section(s) to process
@@ -122,7 +122,7 @@ if (args.all) {
 console.log(
   `Starting fetch-to-airtable process for ${
     sectionsToProcess.length
-  } section(s): ${sectionsToProcess.map((s) => s.name).join(', ')}`
+  } section(s): ${sectionsToProcess.map((s) => s.name).join(', ')}`,
 )
 
 // Import services with proper error handling
@@ -137,7 +137,7 @@ try {
 } catch (error) {
   console.error('Error loading services:', error.message)
   console.error(
-    'Make sure you have created all the necessary files in src/services'
+    'Make sure you have created all the necessary files in src/services',
   )
   process.exit(1)
 }
@@ -147,7 +147,7 @@ const GEMINI_API_KEY =
   config?.gemini?.apiKey || process.env.GEMINI_API_KEY || ''
 console.log(
   'Using GEMINI_API_KEY:',
-  GEMINI_API_KEY ? 'API key found' : 'No API key'
+  GEMINI_API_KEY ? 'API key found' : 'No API key',
 )
 const GEMINI_MODEL =
   config?.gemini?.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash'
@@ -162,8 +162,6 @@ const STATE_DIR = path.join(__dirname, '.state')
 if (!fs.existsSync(STATE_DIR)) {
   fs.mkdirSync(STATE_DIR)
 }
-
-
 
 /**
  * Load the persisted state for a section
@@ -338,7 +336,7 @@ function extractImagesAsMarkdown(htmlContent) {
     })
 
     console.log(
-      `Extracted ${extractedImages.length} captioned images from HTML content`
+      `Extracted ${extractedImages.length} captioned images from HTML content`,
     )
 
     // Return both the raw URLs and the markdown representation
@@ -418,7 +416,7 @@ async function generateSimpleFormattedText(extractedText, imageMarkdown = '') {
   try {
     // Add a delay before API call
     console.log(
-      `Waiting ${API_DELAY / 1000} seconds before calling Gemini API...`
+      `Waiting ${API_DELAY / 1000} seconds before calling Gemini API...`,
     )
     await delay(API_DELAY)
 
@@ -483,7 +481,7 @@ function formatTextAsFallback(extractedText, imageMarkdown) {
     if (images.length > 0) {
       const paragraphsPerImage = Math.max(
         Math.floor(formattedParagraphs.length / (images.length + 1)),
-        1
+        1,
       )
 
       let pointsAdded = false
@@ -668,14 +666,77 @@ async function generateMetadata(extractedText, maxRetries = 3) {
     const prompt = `
       Extracted Text: "${extractedText.substring(0, 5000)}"
       
-      Basado en el texto anterior, genera lo siguiente:
-      1. Un título conciso y atractivo. **No uses mayúsculas en todas las palabras** (evita el title case). Solo usa mayúsculas al principio del título y en nombres propios. ESTO ES MUY IMPORTANTE Y HAY QUE RESPETARLO A RAJATABLA.
-      2. Un resumen (bajada) de 40 a 50 palabras que capture los puntos clave. **No uses mayúsculas en todas las palabras**. Solo usa mayúsculas al principio de cada oración y en nombres propios.
-      3. Una volanta corta que brinde contexto o destaque la importancia del artículo. **No uses mayúsculas en todas las palabras**. Solo usa mayúsculas al principio y en nombres propios.
-      
-      IMPORTANTE: Devuelve SOLO el objeto JSON sin ningún texto adicional antes o después.
-      NO incluyas explicaciones, comentarios, ni bloques de código markdown.
-      
+A partir del texto anterior, genera metadata periodística cumpliendo todas las siguientes reglas sin excepción.
+
+Salida requerida
+
+Devuelve exclusivamente un objeto JSON válido, en una sola línea, sin texto adicional antes ni después.
+
+Campos obligatorios del JSON
+
+title
+
+bajada
+
+volanta
+
+Reglas de contenido y estilo (OBLIGATORIAS)
+
+1. Title (título)
+
+Máximo 80 caracteres.
+
+Estilo oración (sentence case).
+
+NO uses title case.
+
+Usa mayúsculas solo:
+
+en la primera palabra del título
+
+en nombres propios (personas, lugares, instituciones)
+
+No uses signos de exclamación.
+
+No incluyas comillas.
+
+2. Bajada (resumen)
+
+Extensión exacta: entre 40 y 50 palabras.
+
+Debe resumir los hechos principales del texto, sin opinión ni adjetivos innecesarios.
+
+Estilo informativo, claro y directo.
+
+Usa mayúsculas solo:
+
+al inicio de cada oración
+
+en nombres propios
+
+No uses emojis, listas ni saltos de línea.
+
+3. Volanta
+
+Máximo 8 palabras.
+
+Función: contextualizar o indicar el tema general del artículo.
+
+Estilo oración, sin mayúsculas innecesarias.
+
+Usa mayúsculas solo en la primera palabra y en nombres propios.
+
+No repitas palabras del título salvo que sea imprescindible.
+
+Restricciones finales (CRÍTICAS)
+
+No incluyas explicaciones, aclaraciones ni texto auxiliar.
+
+No uses bloques de código markdown.
+
+No agregues campos extra al JSON.
+
+El JSON debe ser válido y parseable.
       Formato requerido:
       {"title": "Generated Title", "bajada": "Generated 40-50 word summary", "volanta": "Generated overline"}
     `
@@ -707,7 +768,7 @@ async function generateMetadata(extractedText, maxRetries = 3) {
     if (!jsonMatch) {
       console.warn(
         'No JSON object found in response:',
-        cleanedText.substring(0, 200)
+        cleanedText.substring(0, 200),
       )
       throw new Error('No valid JSON object found')
     }
@@ -744,7 +805,7 @@ async function generateMetadata(extractedText, maxRetries = 3) {
 async function reelaborateText(
   extractedText,
   imageMarkdown = '',
-  maxRetries = 3
+  maxRetries = 3,
 ) {
   try {
     // Add image markdown content if available
@@ -754,74 +815,97 @@ async function reelaborateText(
       : ''
 
     const prompt = `
-      Reelaborar la siguiente noticia siguiendo estas pautas:
+Reelaborar la siguiente noticia. Cumplir todas las reglas. Si alguna no se cumple, corregir antes de responder.
 
-      1. **Lenguaje**:
-         - Utilizar un **español rioplatense formal**, adecuado para un contexto periodístico o informativo.
-         - Emplear expresiones y giros propios del español rioplatense, pero mantener un tono profesional y respetuoso.
-      
-      2. **Objetividad**:
-         - Mantener un tono neutral y objetivo. No incluir juicios de valor, opiniones personales o lenguaje tendencioso.
-         - Limitarse a presentar los hechos de manera clara y precisa.
-      
-      3. **Claridad y Sencillez**:
-         - Usar un lenguaje sencillo y accesible, evitando tecnicismos innecesarios.
-         - Asegurarse de que la información sea fácil de entender para un público general.
-      
-      4. **Estructura**:
-         - OBLIGATORIO: Dividir el texto en secciones con subtítulos claros usando formato markdown (## Subtítulo).
-         - OBLIGATORIO: Utilizar al menos 2-3 subtítulos en formato H2 (##) para dividir el texto en secciones temáticas.
-         - Organizar la información en párrafos cortos y bien estructurados.
-         - Concluir sin añadir interpretaciones o valoraciones. Está prohibido usar títulos y expresiones explícitos como "en resumen", "conclusión", "en conclusión", "en resumen", "en síntesis" o similares.
-      
-      5. **Sintaxis y Visualidad**:
-         - OBLIGATORIO: Usar oraciones cortas y directas para facilitar la lectura.
-         - OBLIGATORIO: Incorporar elementos visuales como:
-           - OBLIGATORIO: INCLUIR AL MENOS UNA LISTA con viñetas para enumerar puntos clave. Usar este formato exacto:
-             - Primer punto clave
-             - Segundo punto clave 
-             - Tercer punto clave
-           - OBLIGATORIO: Usar **negritas** para resaltar información importante.
-           - OBLIGATORIO: Si hay citas textuales, usar el formato de cita: > Cita textual
-         - OBLIGATORIO: Si la noticia menciona una serie de pasos o elementos, formatearlos como lista numerada:
-           1. Primer elemento
-           2. Segundo elemento
-           3. Tercer elemento
-      
-      6. **Formato Markdown**: 
-         - ABSOLUTAMENTE OBLIGATORIO: Usar correctamente estos elementos de formato markdown:
-           - Subtítulos: ## Subtítulo (al menos 2 subtítulos)
-           - OBLIGATORIO: Incluir al menos una lista con viñetas usando este formato exacto:
-             - Primer elemento
-             - Segundo elemento
-             - Tercer elemento
-           - Negritas: **texto importante** (usar en al menos 3 lugares)
-           - Cursivas: *texto en cursiva* (usar al menos una vez)
-           - Citas: > Texto citado (si hay citas en el texto original)
-      
-      7. **Imágenes**: 
-         - Incluir las descripciones de imágenes proporcionadas en el texto.
-         - Simplemente insertar el texto de la imagen (que ya está formateado) en un lugar relevante.
-      
-      8. **Fuentes**:
-         - Si la noticia original incluye fuentes o referencias, asegurarse de citarlas correctamente.
-         - Si no hay fuentes, evitar especulaciones o suposiciones.
-      
-      9. **Formato de Salida**:
-         - Devolver la noticia reelaborada ÚNICAMENTE en formato Markdown.
-         - NO incluir backticks (\`\`\`) ni indicar que es un bloque de markdown.
-      
-      10. **Palabras Estrictamente Prohibidas**: Las siguiente palabras no deben aparecer en ninguna parte del texto: fusionar - fusionándose - reflejar - reflejándose - sumergir - sumergirse - en resumen - conclusión - en síntesis - markdown
+OBJETIVO: producir el cuerpo de una noticia informativa, neutral y estructurada para publicación digital. No generar título.
 
-      11. **Títulos**: No incluir un título principal (# Título) en el artículo bajo ninguna circunstancia. El título ya está generado en otro campo del registro de Airtable, por lo que no es necesario repetirlo en el contenido. IMPORTANTE: Comenzar directamente con el cuerpo del texto.
-      
-      12. **IMPORTANTE - VERIFICACIÓN FINAL**:
-         - Antes de enviar tu respuesta, verifica que:
-           1. Has incluido al menos 2 subtítulos (## Subtítulo)
-           2. Has incluido al menos 1 lista con viñetas (- Elemento)
-           3. Has usado negritas (**texto**) en al menos 3 lugares
-           4. No has usado símbolos extraños o caracteres que podrían verse mal
-         - Si falta alguno de estos elementos, agrégalo antes de enviar.
+IDIOMA Y REGISTRO: español rioplatense formal, uso periodístico argentino. Tono estrictamente informativo. Prohibido opinar, interpretar, evaluar, calificar hechos o sugerir consecuencias.
+
+CONTENIDO: reescribir solo con información presente en el texto original. No agregar contexto externo, antecedentes, hipótesis ni inferencias. No eliminar datos relevantes.
+
+SINTAXIS: oraciones simples y directas, preferentemente en voz activa. Longitud máxima recomendada: 20 palabras por oración. Párrafos de 1 a 3 oraciones.
+
+ESTRUCTURA GENERAL:
+
+No incluir título principal ni encabezado inicial.
+
+El texto debe comenzar directamente con el primer párrafo.
+
+Dividir el contenido en exactamente 2, 3 o 4 secciones.
+
+Cada sección debe comenzar con un subtítulo en una línea independiente usando exactamente el prefijo "## " seguido del texto del subtítulo.
+
+No incluir secciones de cierre ni frases conclusivas.
+
+Está prohibido usar expresiones de cierre o síntesis (por ejemplo: en resumen, en conclusión, en síntesis, para cerrar).
+
+FORMATO PERMITIDO:
+
+El resultado debe estar en Markdown plano.
+
+Usar exclusivamente:
+
+"## " para subtítulos
+
+"-" para listas con viñetas
+
+"**" para negritas
+
+"*" para cursivas
+
+">" para citas
+
+No usar backticks, bloques de código, tablas, emojis ni caracteres especiales.
+
+ELEMENTOS OBLIGATORIOS:
+
+Incluir al menos una lista con viñetas. Cada ítem debe comenzar con "- " (guion + espacio).
+
+Usar negritas exactamente para resaltar datos relevantes (fechas, cifras, nombres institucionales) al menos 3 veces.
+
+Usar cursivas al menos una vez, de manera contextual y no decorativa.
+
+Si el texto original contiene citas textuales, reproducirlas sin modificar su contenido usando el formato "> " al inicio de la línea.
+
+Si el texto menciona pasos, etapas o elementos secuenciales, convertirlos en una lista numerada usando "1. ", "2. ", "3. ".
+
+IMÁGENES:
+
+No incluir imágenes, descripciones de imágenes ni referencias visuales bajo ninguna circunstancia.
+
+FUENTES:
+
+Mantener menciones a fuentes solo si aparecen en el texto original.
+
+No agregar fuentes, referencias ni atribuciones nuevas.
+
+PALABRAS PROHIBIDAS (CONTROL ABSOLUTO):
+No pueden aparecer en ninguna forma ni tiempo verbal las siguientes palabras o expresiones:
+fusionar, fusionándose, reflejar, reflejándose, sumergir, sumergirse, en resumen, conclusión, en síntesis, markdown
+
+SALIDA:
+
+Devolver únicamente el texto final.
+
+No incluir explicaciones, advertencias, encabezados externos ni comentarios.
+
+VERIFICACIÓN FINAL ANTES DE RESPONDER:
+
+El texto contiene 2, 3 o 4 subtítulos con "## ".
+
+El texto contiene al menos una lista con viñetas.
+
+El texto contiene al menos 3 usos de "**".
+
+El texto contiene al menos 1 uso de "*".
+
+No aparece ninguna palabra prohibida.
+
+No hay título principal.
+
+No hay referencias a imágenes.
+
+El formato es consistente y parseable.
       
       ${imagesPrompt}
       
@@ -845,7 +929,7 @@ async function reelaborateText(
 
     if (!hasHeadings || !hasList) {
       console.warn(
-        'Generated text missing proper formatting, using fallback...'
+        'Generated text missing proper formatting, using fallback...',
       )
       return formatTextAsFallback(extractedText, imageMarkdown)
     }
@@ -942,7 +1026,7 @@ async function processArticle(item, sectionId) {
     }
 
     // Generate social media text
-/*     console.log(`Generating social media text for: ${item.url}`)
+    /*     console.log(`Generating social media text for: ${item.url}`)
     let socialMediaText = ''
     try {
       socialMediaText = await generateSocialMediaText(
@@ -1030,7 +1114,7 @@ async function processArticle(item, sectionId) {
       tecnologia: 'Tecnología',
       actualidad: 'Actualidad',
       'cine-series': 'Cine y Series',
-      'historia-literatura': 'Historia y Literatura'
+      'historia-literatura': 'Historia y Literatura',
     }
 
     // Replace the hardcoded section mapping with this more dynamic lookup
@@ -1075,7 +1159,7 @@ async function processArticle(item, sectionId) {
     }
 
     console.log(
-      `Successfully processed article: ${item.url} for section ${sectionId}`
+      `Successfully processed article: ${item.url} for section ${sectionId}`,
     )
 
     return {
@@ -1092,7 +1176,7 @@ async function processArticle(item, sectionId) {
  */
 async function processBatch(items, sectionId) {
   console.log(
-    `Processing batch of ${items.length} items for section ${sectionId}`
+    `Processing batch of ${items.length} items for section ${sectionId}`,
   )
 
   const results = []
@@ -1118,13 +1202,13 @@ async function processBatch(items, sectionId) {
 
     // Add a longer delay between processing individual items
     console.log(
-      `Waiting ${API_DELAY / 1000} seconds before processing next article...`
+      `Waiting ${API_DELAY / 1000} seconds before processing next article...`,
     )
     await delay(API_DELAY)
   }
 
   console.log(
-    `Successfully processed ${results.length} out of ${items.length} items for section ${sectionId}`
+    `Successfully processed ${results.length} out of ${items.length} items for section ${sectionId}`,
   )
   return results
 }
@@ -1160,7 +1244,7 @@ async function processSection(section) {
       }
 
       console.log(
-        `Fetched ${feedData.items.length} items from ${section.name} feed`
+        `Fetched ${feedData.items.length} items from ${section.name} feed`,
       )
       console.log(`Already processed ${processedUrls.size} items previously`)
 
@@ -1175,7 +1259,7 @@ async function processSection(section) {
         console.log(
           `No new items to process for ${section.name}${
             args.force ? ' (even with force flag)' : ''
-          }`
+          }`,
         )
         return
       }
@@ -1183,13 +1267,13 @@ async function processSection(section) {
       console.log(
         `Found ${newItems.length} ${
           args.force ? '' : 'new '
-        }items to process for ${section.name}`
+        }items to process for ${section.name}`,
       )
 
       // Apply the limit
       const limitedItems = newItems.slice(0, ITEM_LIMIT)
       console.log(
-        `Processing ${limitedItems.length} social media items (limit: ${ITEM_LIMIT})`
+        `Processing ${limitedItems.length} social media items (limit: ${ITEM_LIMIT})`,
       )
 
       // Process the limited items
@@ -1199,7 +1283,7 @@ async function processSection(section) {
           console.log(
             `Processing social media item: ${
               item.title || 'Untitled'
-            } (${itemUrl})`
+            } (${itemUrl})`,
           )
 
           // IMPROVED: Extract all content directly from the RSS feed item structure
@@ -1251,7 +1335,7 @@ async function processSection(section) {
             }
           } catch (e) {
             console.log(
-              `Error parsing URL: ${e.message}. Using default source name.`
+              `Error parsing URL: ${e.message}. Using default source name.`,
             )
             // URL parsing failed, check if we can extract from authors
             if (
@@ -1292,7 +1376,7 @@ async function processSection(section) {
             console.log(`Generated metadata for social media content`)
           } catch (metaError) {
             console.error(
-              `Error generating metadata for social media: ${metaError.message}`
+              `Error generating metadata for social media: ${metaError.message}`,
             )
             // Use fallback metadata
             metadata = generateFallbackMetadata(postText)
@@ -1316,7 +1400,7 @@ async function processSection(section) {
             // Add this line to create proper image attachments:
             image: imageUrl ? [{ url: imageUrl }] : [],
           }
-/* 
+          /* 
           // Generate tags and social media text for social media content
           try {
             // For social media, use a simpler approach focused on the source and text
@@ -1372,10 +1456,10 @@ async function processSection(section) {
           try {
             await airtableService.insertRecords(
               [{ fields: recordFields }],
-              section.id
+              section.id,
             )
             console.log(
-              `Added social media item to Airtable: ${recordFields.title}`
+              `Added social media item to Airtable: ${recordFields.title}`,
             )
 
             // Mark URL as processed
@@ -1388,7 +1472,7 @@ async function processSection(section) {
             })
           } catch (airtableError) {
             console.error(
-              `Error adding item to Airtable: ${airtableError.message}`
+              `Error adding item to Airtable: ${airtableError.message}`,
             )
           }
 
@@ -1396,7 +1480,7 @@ async function processSection(section) {
           await delay(API_DELAY)
         } catch (itemError) {
           console.error(
-            `Error processing social media item: ${itemError.message}`
+            `Error processing social media item: ${itemError.message}`,
           )
         }
       }
@@ -1428,7 +1512,7 @@ async function processSection(section) {
     }
 
     console.log(
-      `Fetched ${feedData.items.length} items from ${section.name} feed`
+      `Fetched ${feedData.items.length} items from ${section.name} feed`,
     )
     console.log(`Already processed ${processedUrls.size} items previously`)
 
@@ -1443,7 +1527,7 @@ async function processSection(section) {
       console.log(
         `No new items to process for ${section.name}${
           args.force ? ' (even with force flag)' : ''
-        }`
+        }`,
       )
       return
     }
@@ -1451,13 +1535,13 @@ async function processSection(section) {
     console.log(
       `Found ${newItems.length} ${
         args.force ? '' : 'new '
-      }items to process for ${section.name}`
+      }items to process for ${section.name}`,
     )
 
     // Apply the limit
     const limitedItems = newItems.slice(0, ITEM_LIMIT)
     console.log(
-      `Processing ${limitedItems.length} items (limit: ${ITEM_LIMIT})`
+      `Processing ${limitedItems.length} items (limit: ${ITEM_LIMIT})`,
     )
 
     // Process the limited items instead of all items
@@ -1468,7 +1552,7 @@ async function processSection(section) {
           Math.floor(i / BATCH_SIZE) + 1
         } of ${Math.ceil(limitedItems.length / BATCH_SIZE)} for ${
           section.name
-        } ===\n`
+        } ===\n`,
       )
 
       const processedBatch = await processBatch(batchItems, section.id)
@@ -1478,12 +1562,12 @@ async function processSection(section) {
         try {
           await airtableService.insertRecords(processedBatch, section.id)
           console.log(
-            `Inserted ${processedBatch.length} records into ${section.name} Airtable table`
+            `Inserted ${processedBatch.length} records into ${section.name} Airtable table`,
           )
         } catch (error) {
           console.error(
             `Error inserting records into ${section.name} Airtable:`,
-            error.message
+            error.message,
           )
         }
       }
@@ -1493,7 +1577,7 @@ async function processSection(section) {
         console.log(
           `Waiting ${
             BATCH_DELAY / 1000
-          } seconds before processing next batch...`
+          } seconds before processing next batch...`,
         )
         await delay(BATCH_DELAY)
       }
@@ -1514,7 +1598,7 @@ async function processAllRequestedSections() {
 
     // Sort sections by priority (lower number = higher priority)
     const sortedSections = [...sectionsToProcess].sort(
-      (a, b) => a.priority - b.priority
+      (a, b) => a.priority - b.priority,
     )
 
     // Process each section sequentially
@@ -1526,7 +1610,7 @@ async function processAllRequestedSections() {
         console.log(
           `\nWaiting ${
             SECTION_DELAY / 1000
-          } seconds before processing next section...\n`
+          } seconds before processing next section...\n`,
         )
         await delay(SECTION_DELAY)
       }
@@ -1546,7 +1630,7 @@ async function fetchFeed(feedUrl) {
   // After you have the items array, apply the limit
   const limitedItems = items.slice(0, ITEM_LIMIT)
   console.log(
-    `Fetched ${items.length} items, returning ${limitedItems.length} (limit: ${ITEM_LIMIT})`
+    `Fetched ${items.length} items, returning ${limitedItems.length} (limit: ${ITEM_LIMIT})`,
   )
 
   return limitedItems // Return limited items
@@ -1569,7 +1653,7 @@ async function fetchSourceItems(source, maxItems) {
 if (args.all) {
   console.log(
     'Processing all sections with limit:',
-    ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT
+    ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT,
   )
   const allSections = getSections()
   for (const section of allSections) {
@@ -1583,7 +1667,7 @@ const sectionName = args._[0]
 if (sectionName) {
   console.log(
     `Processing section: ${sectionName} with limit:`,
-    ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT
+    ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT,
   )
   const section = getSection(sectionName)
   if (section) {
@@ -1633,7 +1717,7 @@ function extractSourceName(url) {
     // Step 3: Strip common TLDs and country codes
     domain = domain.replace(
       /\.(com|co|net|org|info|ar|mx|es|cl|pe|br|uy|py|bo|ec|ve|us|io|tv|app|web|digital|news|online|press|media|blog|site)(\.[a-z]{2,3})?$/,
-      ''
+      '',
     )
 
     // Step 4: Split by dots and get the main part
@@ -1742,7 +1826,7 @@ async function generateTags(extractedText, metadata, maxRetries = 3) {
     if (!jsonMatch) {
       console.warn(
         'No JSON array found in response:',
-        cleanedText.substring(0, 200)
+        cleanedText.substring(0, 200),
       )
       throw new Error('No valid JSON array found')
     }
@@ -1767,7 +1851,7 @@ async function generateTags(extractedText, metadata, maxRetries = 3) {
       tag
         .split(' ')
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ')
+        .join(' '),
     )
 
     const tagsString = formattedTags.join(', ')
@@ -1784,44 +1868,62 @@ async function generateTags(extractedText, metadata, maxRetries = 3) {
  */
 function generateFallbackTags(extractedText, metadata) {
   try {
-    const text = `${metadata?.title || ''} ${metadata?.bajada || ''} ${extractedText}`.toLowerCase();
-    
+    const text = `${metadata?.title || ''} ${
+      metadata?.bajada || ''
+    } ${extractedText}`.toLowerCase()
+
     // Split into words and remove stopwords
-    const words = text.split(/\W+/).filter(word => 
-      word.length > 3 && 
-      !['para', 'como', 'esta', 'esto', 'estos', 'esta', 'estas', 'sobre', 'desde', 'entre', 'hasta', 'porque'].includes(word)
-    );
-    
+    const words = text
+      .split(/\W+/)
+      .filter(
+        (word) =>
+          word.length > 3 &&
+          ![
+            'para',
+            'como',
+            'esta',
+            'esto',
+            'estos',
+            'esta',
+            'estas',
+            'sobre',
+            'desde',
+            'entre',
+            'hasta',
+            'porque',
+          ].includes(word),
+      )
+
     // Count word frequency
-    const wordCount = {};
-    words.forEach(word => {
-      wordCount[word] = (wordCount[word] || 0) + 1;
-    });
-    
+    const wordCount = {}
+    words.forEach((word) => {
+      wordCount[word] = (wordCount[word] || 0) + 1
+    })
+
     // Sort by frequency
     const sortedWords = Object.entries(wordCount)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 20)
-      .map(entry => entry[0]);
-    
+      .map((entry) => entry[0])
+
     // Take top words and capitalize first letter
-    const tags = sortedWords.slice(0, 6).map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1)
-    );
-    
+    const tags = sortedWords
+      .slice(0, 6)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+
     // Add source as a tag if available
     if (metadata?.sourceName) {
-      tags.push(metadata.sourceName);
+      tags.push(metadata.sourceName)
     }
-    
+
     // Join with commas
-    const tagsString = tags.join(', ');
-    
-    console.log(`Generated fallback tags: ${tagsString}`);
-    return tagsString;
+    const tagsString = tags.join(', ')
+
+    console.log(`Generated fallback tags: ${tagsString}`)
+    return tagsString
   } catch (error) {
-    console.error('Error in fallback tag generation:', error.message);
-    return 'Noticias'; // Absolute minimum fallback
+    console.error('Error in fallback tag generation:', error.message)
+    return 'Noticias' // Absolute minimum fallback
   }
 }
 
@@ -1843,7 +1945,7 @@ async function generateSocialMediaText(
   extractedText,
   metadata,
   tags,
-  maxRetries = 3
+  maxRetries = 3,
 ) {
   try {
     const title = metadata?.title || ''
@@ -1900,43 +2002,69 @@ async function generateSocialMediaText(
  */
 function generateFallbackSocialText(metadata, tags) {
   try {
-    const title = metadata?.title || 'Nuevo artículo';
-    const bajada = metadata?.bajada || '';
-    
+    const title = metadata?.title || 'Nuevo artículo'
+    const bajada = metadata?.bajada || ''
+
     // Create emojis based on content
-    let emojis = '📰';
-    
+    let emojis = '📰'
+
     // Add topic-specific emojis
-    const lowerTitle = title.toLowerCase();
-    if (lowerTitle.includes('econom') || lowerTitle.includes('dólar') || lowerTitle.includes('inflac')) {
-      emojis += ' 💰';
-    } else if (lowerTitle.includes('polít') || lowerTitle.includes('gobiern') || lowerTitle.includes('presiden')) {
-      emojis += ' 🏛️';
-    } else if (lowerTitle.includes('depor') || lowerTitle.includes('fútbol') || lowerTitle.includes('campeón')) {
-      emojis += ' ⚽';
-    } else if (lowerTitle.includes('salud') || lowerTitle.includes('hospital') || lowerTitle.includes('médic')) {
-      emojis += ' 🏥';
-    } else if (lowerTitle.includes('tecno') || lowerTitle.includes('digital') || lowerTitle.includes('intel')) {
-      emojis += ' 💻';
+    const lowerTitle = title.toLowerCase()
+    if (
+      lowerTitle.includes('econom') ||
+      lowerTitle.includes('dólar') ||
+      lowerTitle.includes('inflac')
+    ) {
+      emojis += ' 💰'
+    } else if (
+      lowerTitle.includes('polít') ||
+      lowerTitle.includes('gobiern') ||
+      lowerTitle.includes('presiden')
+    ) {
+      emojis += ' 🏛️'
+    } else if (
+      lowerTitle.includes('depor') ||
+      lowerTitle.includes('fútbol') ||
+      lowerTitle.includes('campeón')
+    ) {
+      emojis += ' ⚽'
+    } else if (
+      lowerTitle.includes('salud') ||
+      lowerTitle.includes('hospital') ||
+      lowerTitle.includes('médic')
+    ) {
+      emojis += ' 🏥'
+    } else if (
+      lowerTitle.includes('tecno') ||
+      lowerTitle.includes('digital') ||
+      lowerTitle.includes('intel')
+    ) {
+      emojis += ' 💻'
     }
-    
+
     // Generate hashtags from tags
-    const tagsArray = tags.split(',').map(tag => tag.trim());
-    const hashtags = tagsArray.slice(0, 4).map(tag => '#' + tag.replace(/\s+/g, '')).join(' ');
-    
+    const tagsArray = tags.split(',').map((tag) => tag.trim())
+    const hashtags = tagsArray
+      .slice(0, 4)
+      .map((tag) => '#' + tag.replace(/\s+/g, ''))
+      .join(' ')
+
     // Create the text (ensure under 500 chars)
-    let summary = bajada.length > 100 ? bajada.substring(0, 100) + '...' : bajada;
+    let summary =
+      bajada.length > 100 ? bajada.substring(0, 100) + '...' : bajada
     if (!summary) {
-      summary = 'Conoce todos los detalles en nuestro artículo.';
+      summary = 'Conoce todos los detalles en nuestro artículo.'
     }
-    
-    const socialText = `${emojis} ${title}\n\n${summary}\n\n${hashtags}`;
-    
+
+    const socialText = `${emojis} ${title}\n\n${summary}\n\n${hashtags}`
+
     // Ensure under 500 chars
-    return socialText.length <= 500 ? socialText : socialText.substring(0, 497) + '...';
+    return socialText.length <= 500
+      ? socialText
+      : socialText.substring(0, 497) + '...'
   } catch (error) {
-    console.error('Error in fallback social text generation:', error.message);
-    return '📰 Nuevo artículo disponible en nuestro portal. ¡No te lo pierdas! #Noticias';
+    console.error('Error in fallback social text generation:', error.message)
+    return '📰 Nuevo artículo disponible en nuestro portal. ¡No te lo pierdas! #Noticias'
   }
 }
 
