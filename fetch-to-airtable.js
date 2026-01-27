@@ -826,6 +826,8 @@ CONTENIDO: reescribir solo con información presente en el texto original. No ag
 
 SINTAXIS: oraciones simples y directas, preferentemente en voz activa. Longitud máxima recomendada: 20 palabras por oración. Párrafos de 1 a 3 oraciones.
 
+IMPORTANTE: NO USAR EMOJIS BAJO NINGUN PUNTO DE VISTA. ESTAN PROHIBIDOS LOS EMOJIS. 
+
 ESTRUCTURA GENERAL:
 
 No incluir título principal ni encabezado inicial.
