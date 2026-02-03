@@ -410,49 +410,6 @@ function postProcessText(text) {
 }
 
 /**
- * Generate simple formatted text as fallback
- */
-async function generateSimpleFormattedText(extractedText, imageMarkdown = '') {
-  try {
-    // Add a delay before API call
-    console.log(
-      `Waiting ${API_DELAY / 1000} seconds before calling Gemini API...`,
-    )
-    await delay(API_DELAY)
-
-    const simplePrompt = `
-      Reescribe este texto en español rioplatense, con una estructura clara y buena organización.
-      IMPORTANTE: Usa estos elementos de formato markdown:
-      1. Incluye al menos dos subtítulos usando ## Subtítulo
-      2. OBLIGATORIO: Incluye al menos una lista de elementos con viñetas en este formato exacto:
-         - Primer elemento
-         - Segundo elemento
-         - Tercer elemento
-      3. Usa **negritas** para destacar información importante (al menos 3 veces)
-      4. Si hay citas textuales, formátealas como > Texto citado
-      
-      ${
-        imageMarkdown
-          ? 'Incluye estas descripciones de imágenes en el texto:\n\n' +
-            imageMarkdown
-          : ''
-      }
-      
-      Texto original: "${extractedText.substring(0, 3000)}"
-    `
-
-    const result = await model.generateContent(simplePrompt)
-    const text = result.response.text()
-
-    // Post-process to fix any remaining issues
-    return postProcessText(text)
-  } catch (error) {
-    console.error('Error in simple text formatting:', error)
-    return formatTextAsFallback(extractedText, imageMarkdown)
-  }
-}
-
-/**
  * Format text using basic rules as a fallback when AI is unavailable
  */
 function formatTextAsFallback(extractedText, imageMarkdown) {
@@ -663,83 +620,43 @@ function generateFallbackMetadata(extractedText) {
  */
 async function generateMetadata(extractedText, maxRetries = 3) {
   try {
-    const prompt = `
-      Extracted Text: "${extractedText.substring(0, 5000)}"
-      
-A partir del texto anterior, genera metadata periodística cumpliendo todas las siguientes reglas sin excepción.
+    const prompt = `Sos un editor de un medio de noticias argentino. Tu tarea es generar metadata periodística a partir del siguiente texto.
 
-Salida requerida
+TEXTO A ANALIZAR:
+"""
+${extractedText.substring(0, 4000)}
+"""
 
-Devuelve exclusivamente un objeto JSON válido, en una sola línea, sin texto adicional antes ni después.
+TAREA: Generar exactamente 3 campos en formato JSON.
 
-Campos obligatorios del JSON
+CAMPO 1 - title (título):
+- Máximo 80 caracteres
+- Primera letra en mayúscula, resto en minúscula excepto nombres propios
+- Sin signos de exclamación ni interrogación
+- Sin comillas
+- Debe capturar el hecho noticioso principal
+- Ejemplo correcto: "El gobierno anunció nuevas medidas económicas para el sector agrario"
+- Ejemplo incorrecto: "¡Increíbles Medidas Económicas Anunciadas Por El Gobierno!"
 
-title
+CAMPO 2 - bajada (copete/resumen):
+- Exactamente entre 40 y 50 palabras (contar palabras, no caracteres)
+- Debe ampliar la información del título sin repetirlo
+- Incluir: quién, qué, cuándo, dónde si están disponibles
+- Tono neutral e informativo
+- Sin opiniones ni adjetivos valorativos
+- Una sola oración o máximo dos oraciones
 
-bajada
+CAMPO 3 - volanta (cintillo superior):
+- Máximo 4 palabras
+- Indica el tema general o contexto
+- Primera palabra en mayúscula, resto en minúscula
+- No repetir palabras del título
+- Ejemplos: "Economía nacional", "Crisis energética", "Elecciones 2024"
 
-volanta
+FORMATO DE RESPUESTA:
+Responder ÚNICAMENTE con el JSON, sin explicaciones, sin bloques de código, sin texto adicional.
 
-Reglas de contenido y estilo (OBLIGATORIAS)
-
-1. Title (título)
-
-Máximo 80 caracteres.
-
-Estilo oración (sentence case).
-
-NO uses title case.
-
-Usa mayúsculas solo:
-
-en la primera palabra del título
-
-en nombres propios (personas, lugares, instituciones)
-
-No uses signos de exclamación.
-
-No incluyas comillas.
-
-2. Bajada (resumen)
-
-Extensión exacta: entre 40 y 50 palabras.
-
-Debe resumir los hechos principales del texto, sin opinión ni adjetivos innecesarios.
-
-Estilo informativo, claro y directo.
-
-Usa mayúsculas solo:
-
-al inicio de cada oración
-
-en nombres propios
-
-No uses emojis, listas ni saltos de línea.
-
-3. Volanta
-
-Máximo 8 palabras.
-
-Función: contextualizar o indicar el tema general del artículo.
-
-Estilo oración, sin mayúsculas innecesarias.
-
-Usa mayúsculas solo en la primera palabra y en nombres propios.
-
-No repitas palabras del título salvo que sea imprescindible.
-
-Restricciones finales (CRÍTICAS)
-
-No incluyas explicaciones, aclaraciones ni texto auxiliar.
-
-No uses bloques de código markdown.
-
-No agregues campos extra al JSON.
-
-El JSON debe ser válido y parseable.
-      Formato requerido:
-      {"title": "Generated Title", "bajada": "Generated 40-50 word summary", "volanta": "Generated overline"}
-    `
+{"title": "texto del título aquí", "bajada": "texto de la bajada aquí con 40-50 palabras exactas", "volanta": "texto corto"}`
 
     const result = await generateContent(prompt, {
       maxRetries: 3,
@@ -751,45 +668,57 @@ El JSON debe ser válido y parseable.
       return generateFallbackMetadata(extractedText)
     }
 
-    // ✅ IMPROVED JSON EXTRACTION - Non-greedy and more robust
+    // Clean and extract JSON
     let cleanedText = result.text.trim()
 
-    // Remove markdown code blocks
+    // Remove markdown code blocks if present
     cleanedText = cleanedText
-      .replace(/```json\s*/g, '')
+      .replace(/```json\s*/gi, '')
       .replace(/```\s*/g, '')
       .trim()
 
-    // Try to find JSON object using non-greedy regex
-    const jsonMatch = cleanedText.match(/\{[\s\S]*?\}(?=\s*$)/)
+    // Find the JSON object - look for opening brace to closing brace
+    const startIndex = cleanedText.indexOf('{')
+    const endIndex = cleanedText.lastIndexOf('}')
 
-    if (!jsonMatch) {
-      console.warn(
-        'No JSON object found in response:',
-        cleanedText.substring(0, 200),
-      )
+    if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+      console.warn('No valid JSON structure found in response')
       throw new Error('No valid JSON object found')
     }
 
-    let jsonStr = jsonMatch[0].trim()
+    let jsonStr = cleanedText.substring(startIndex, endIndex + 1)
 
-    // Remove any trailing commas or invalid characters
-    jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1')
+    // Clean up common JSON issues
+    jsonStr = jsonStr
+      .replace(/,\s*}/g, '}') // Remove trailing commas
+      .replace(/\n/g, ' ') // Remove newlines inside JSON
+      .replace(/\r/g, '') // Remove carriage returns
+      .replace(/\t/g, ' ') // Replace tabs with spaces
 
-    // Try to parse
     let parsed
     try {
       parsed = JSON.parse(jsonStr)
     } catch (parseError) {
       console.error('JSON parse error:', parseError.message)
-      console.error('Attempted to parse:', jsonStr.substring(0, 200))
+      console.error('Raw text:', cleanedText.substring(0, 300))
       throw new Error('Invalid JSON format')
     }
 
-    // Validate structure
+    // Validate required fields
     if (!parsed.title || !parsed.bajada || !parsed.volanta) {
-      console.warn('Missing required fields in metadata:', Object.keys(parsed))
+      console.warn('Missing required fields:', Object.keys(parsed))
       throw new Error('Incomplete metadata structure')
+    }
+
+    // Post-process: ensure title doesn't exceed 80 chars
+    if (parsed.title.length > 80) {
+      parsed.title = parsed.title.substring(0, 77) + '...'
+    }
+
+    // Post-process: ensure volanta doesn't exceed 4 words
+    const volantaWords = parsed.volanta.split(/\s+/)
+    if (volantaWords.length > 4) {
+      parsed.volanta = volantaWords.slice(0, 4).join(' ')
     }
 
     console.log('Successfully generated metadata')
@@ -809,133 +738,137 @@ async function reelaborateText(
   maxRetries = 3,
 ) {
   try {
-    // Add image markdown content if available
-    const imagesPrompt = imageMarkdown
-      ? 'Las siguientes descripciones de imágenes fueron extraídas del artículo original. Intégralas en el texto reelaborado en los lugares más apropiados según el contexto:\n\n' +
-        imageMarkdown
-      : ''
+    const prompt = `Sos un redactor profesional de un medio digital argentino. Tu tarea es reescribir completamente el siguiente artículo periodístico.
 
-    const prompt = `
-Reelaborar la siguiente noticia. Cumplir todas las reglas. Si alguna no se cumple, corregir antes de responder.
+TEXTO ORIGINAL:
+"""
+${extractedText.substring(0, 5000)}
+"""
 
-OBJETIVO: producir el cuerpo de una noticia informativa, neutral y estructurada para publicación digital. No generar título.
+REGLAS OBLIGATORIAS (SI NO SE CUMPLEN TODAS, RECHAZAR LA RESPUESTA):
 
-IDIOMA Y REGISTRO: español rioplatense formal, uso periodístico argentino. Tono estrictamente informativo. Prohibido opinar, interpretar, evaluar, calificar hechos o sugerir consecuencias.
+1. EXTENSIÓN: Entre 300 y 500 palabras exactas. Contar las palabras antes de responder.
 
-CONTENIDO: reescribir solo con información presente en el texto original. No agregar contexto externo, antecedentes, hipótesis ni inferencias. No eliminar datos relevantes.
+2. FORMATO: Solo párrafos de texto corrido. PROHIBIDO usar:
+   - Listas con viñetas (-, *, •)
+   - Listas numeradas (1., 2., 3.)
+   - Subtítulos (##, ###)
+   - Títulos principales
+   - Cualquier tipo de lista o enumeración
 
-SINTAXIS: oraciones simples y directas, preferentemente en voz activa. Longitud máxima recomendada: 20 palabras por oración. Párrafos de 1 a 3 oraciones.
+3. ESTRUCTURA:
+   - Dividir en 5 a 8 párrafos
+   - Cada párrafo: 2 a 4 oraciones
+   - Separar párrafos con doble salto de línea
+   - Primer párrafo: responde qué, quién, cuándo, dónde
+   - Párrafos intermedios: desarrolla contexto y detalles
+   - Último párrafo: información complementaria (NO conclusión)
 
-ESTRUCTURA GENERAL:
+4. SINTAXIS:
+   - Oraciones simples, máximo 20 palabras
+   - Voz activa preferentemente
+   - Conectores entre párrafos para fluidez
+   - Uso periodístico del español rioplatense
 
-No incluir título principal ni encabezado inicial.
+5. MARKDOWN PERMITIDO (ÚNICO):
+   - **texto** para negritas (usar 4-6 veces): cifras, fechas, nombres clave
+   - *texto* para cursivas (usar 2-3 veces): términos técnicos o énfasis
+   - > para citas textuales si existen en el original
 
-El texto debe comenzar directamente con el primer párrafo.
+6. INTEGRACIÓN DE DATOS:
+   - Si hay cifras, fechas o datos, integrarlos en oraciones completas
+   - Ejemplo CORRECTO: "La medida incluye un fondo de compensación de **500 millones de pesos**, la reducción de retenciones para pequeños productores y la extensión del plazo de pago para exportadores."
+   - Ejemplo INCORRECTO: "La medida incluye: - Fondo de 500 millones - Reducción de retenciones"
 
-Dividir el contenido en exactamente 2, 3 o 4 secciones.
+7. SEO Y CONTENIDO:
+   - Incluir palabras clave del tema naturalmente
+   - Repetir términos importantes 2-3 veces
+   - Primer párrafo debe captar atención
+   - No agregar información externa al original
+   - No incluir conclusiones tipo "en resumen" o "para finalizar"
 
-Cada sección debe comenzar con un subtítulo en una línea independiente usando exactamente el prefijo "## " seguido del texto del subtítulo.
+8. TONO: Informativo, objetivo, sin opiniones ni valoraciones.
 
-No incluir secciones de cierre ni frases conclusivas.
+9. PROHIBICIONES ABSOLUTAS:
+   - NO usar listas de ningún tipo
+   - NO usar subtítulos
+   - NO usar palabras: "puntos principales", "incluyen los siguientes", "a continuación", "destacan", "cabe mencionar"
+   - NO usar emojis, hashtags, tablas
+   - NO agregar frases de cierre o síntesis
 
-Está prohibido usar expresiones de cierre o síntesis (por ejemplo: en resumen, en conclusión, en síntesis, para cerrar).
+EJEMPLO DE ESTRUCTURA CORRECTA (300-350 palabras):
 
-FORMATO PERMITIDO:
+El gobierno nacional presentó un nuevo paquete de medidas económicas que impactará directamente en el sector agropecuario argentino. El anuncio fue realizado por el ministro **Juan Pérez** durante una conferencia de prensa en Casa Rosada, donde detalló los alcances de la normativa que entrará en vigencia el **próximo 15 de marzo**.
 
-El resultado debe estar en Markdown plano.
+La iniciativa contempla un fondo de compensación de **500 millones de pesos** destinado a pequeños y medianos productores rurales. Según explicó el funcionario, esta medida busca *estabilizar los precios internos* y proteger la capacidad productiva del sector. El fondo será administrado por el Ministerio de Agricultura en coordinación con las cámaras empresariales.
 
-Usar exclusivamente:
+Entre los cambios más significativos se encuentra la reducción de retenciones para productores de hasta 100 hectáreas. Esta modificación representa un alivio fiscal de aproximadamente **30 por ciento** respecto a los valores actuales. Además, el gobierno extendió el plazo de pago para exportadores de granos, permitiendo mayor flexibilidad en las operaciones comerciales internacionales.
 
-"## " para subtítulos
+El paquete incluye también incentivos fiscales para empresas que inviertan en tecnología aplicada a la producción local. Las compañías que demuestren inversiones en maquinaria agrícola o sistemas de riego podrán acceder a deducciones impositivas durante los próximos **tres años fiscales**. Esta política apunta a modernizar el sector y mejorar la competitividad argentina en mercados externos.
 
-"-" para listas con viñetas
+Los representantes del sector agropecuario manifestaron su *postura cautelosa* respecto a las nuevas disposiciones. La Sociedad Rural Argentina solicitó una reunión técnica con autoridades del Ministerio de Economía para analizar el impacto específico en diferentes cadenas productivas. Organizaciones de pequeños productores expresaron satisfacción por la reducción de retenciones.
 
-"**" para negritas
+La normativa será publicada en el Boletín Oficial durante las próximas 48 horas. El gobierno estableció una mesa de diálogo permanente con el sector para evaluar los resultados de implementación y realizar ajustes necesarios según la evolución del contexto económico nacional.
 
-"*" para cursivas
+RESPUESTA:
+Devolver ÚNICAMENTE el texto reelaborado. Sin explicaciones. Sin comentarios. Sin bloques de código.`
 
-">" para citas
-
-No usar backticks, bloques de código, tablas, emojis ni caracteres especiales.
-
-ELEMENTOS OBLIGATORIOS:
-
-Incluir al menos una lista con viñetas. Cada ítem debe comenzar con "- " (guion + espacio).
-
-Usar negritas exactamente para resaltar datos relevantes (fechas, cifras, nombres institucionales) al menos 3 veces.
-
-Usar cursivas al menos una vez, de manera contextual y no decorativa.
-
-Si el texto original contiene citas textuales, reproducirlas sin modificar su contenido usando el formato "> " al inicio de la línea.
-
-Si el texto menciona pasos, etapas o elementos secuenciales, convertirlos en una lista numerada usando "1. ", "2. ", "3. ".
-
-IMÁGENES:
-
-No incluir imágenes, descripciones de imágenes ni referencias visuales bajo ninguna circunstancia.
-
-FUENTES:
-
-Mantener menciones a fuentes solo si aparecen en el texto original.
-
-No agregar fuentes, referencias ni atribuciones nuevas.
-
-PALABRAS PROHIBIDAS (CONTROL ABSOLUTO):
-No pueden aparecer en ninguna forma ni tiempo verbal las siguientes palabras o expresiones:
-fusionar, fusionándose, reflejar, reflejándose, sumergir, sumergirse, en resumen, conclusión, en síntesis, markdown
-
-SALIDA:
-
-Devolver únicamente el texto final.
-
-No incluir explicaciones, advertencias, encabezados externos ni comentarios.
-
-VERIFICACIÓN FINAL ANTES DE RESPONDER:
-
-El texto contiene 2, 3 o 4 subtítulos con "## ".
-
-El texto contiene al menos una lista con viñetas.
-
-El texto contiene al menos 3 usos de "**".
-
-El texto contiene al menos 1 uso de "*".
-
-No aparece ninguna palabra prohibida.
-
-No hay título principal.
-
-No hay referencias a imágenes.
-
-El formato es consistente y parseable.
-      
-      ${imagesPrompt}
-      
-      Texto extraído: "${extractedText.substring(0, 5000)}"
-    `
-
-    // ✅ USE NEW AI SERVICE
     const result = await generateContent(prompt, {
       maxRetries: 3,
-      preferGroq: false, // Use Gemini for long-form
+      preferGroq: false,
     })
 
     if (!result.text) {
-      // AI failed, use fallback
       return formatTextAsFallback(extractedText, imageMarkdown)
     }
 
-    // Validate formatting
-    const hasHeadings = result.text.includes('## ')
-    const hasList = result.text.includes('- ')
+    let processedText = result.text.trim()
 
-    if (!hasHeadings || !hasList) {
+    // Remove markdown code blocks if present
+    processedText = processedText
+      .replace(/^```markdown\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim()
+
+    // VALIDATE: Check for bullet points or lists
+    const hasBullets = /^[\s]*[-*•]\s/m.test(processedText)
+    const hasNumberedList = /^[\s]*\d+\.\s/m.test(processedText)
+    const hasSubtitles = /^#{1,6}\s+/m.test(processedText)
+
+    if (hasBullets || hasNumberedList || hasSubtitles) {
       console.warn(
-        'Generated text missing proper formatting, using fallback...',
+        '❌ Generated text contains lists or subtitles, using fallback...',
       )
       return formatTextAsFallback(extractedText, imageMarkdown)
     }
 
-    return postProcessText(result.text)
+    // Count words
+    const wordCount = processedText
+      .split(/\s+/)
+      .filter((w) => w.length > 0).length
+    console.log(`✅ Generated text: ${wordCount} words`)
+
+    if (wordCount < 250 || wordCount > 600) {
+      console.warn(
+        `⚠️ Word count out of range: ${wordCount} words, using fallback...`,
+      )
+      return formatTextAsFallback(extractedText, imageMarkdown)
+    }
+
+    // Clean up forbidden phrases
+    processedText = processedText
+      .replace(
+        /\b(puntos principales|incluyen los siguientes|a continuación|destacan|cabe mencionar)\b/gi,
+        '',
+      )
+      .replace(
+        /\b(en resumen|en conclusión|para finalizar|para concluir)\b/gi,
+        '',
+      )
+      .trim()
+
+    return postProcessText(processedText)
   } catch (error) {
     console.error('Error reelaborating text:', error.message)
     return formatTextAsFallback(extractedText, imageMarkdown)
@@ -1942,61 +1875,6 @@ function generateFallbackTags(extractedText, metadata) {
  * @param {string} tags - The generated tags (comma-separated)
  * @returns {string} - Social media text with hashtags (< 500 chars)
  */
-async function generateSocialMediaText(
-  extractedText,
-  metadata,
-  tags,
-  maxRetries = 3,
-) {
-  try {
-    const title = metadata?.title || ''
-    const bajada = metadata?.bajada || ''
-
-    const prompt = `
-      Crea un texto atractivo para redes sociales de MENOS DE 500 CARACTERES (EXTREMADAMENTE IMPORTANTE) 
-      que promocione este artículo. Incluye hashtags y emojis relevantes.
-
-      TÍTULO: ${title}
-      BAJADA: ${bajada}
-      ETIQUETAS: ${tags}
-      CONTENIDO: "${extractedText.substring(0, 2000)}"
-      
-      INSTRUCCIONES:
-      1. El texto DEBE tener MENOS DE 500 CARACTERES en total (incluyendo hashtags y emojis).
-      2. Escribe en español rioplatense con tono conversacional.
-      3. Incluye 2-4 emojis estratégicamente ubicados para aumentar el impacto visual.
-      4. Termina con 3-5 hashtags relevantes al contenido.
-      5. Usa frases cortas y directas que generen interés.
-      6. NO incluyas enlaces ni menciones (@).
-      7. El contenido debe ser informativo pero intrigante para generar clics.
-      8. CRUCIAL: Verifica que el texto final tenga MENOS DE 500 CARACTERES.
-      
-      Devuelve SOLO el texto para redes sociales, sin ningún comentario adicional.
-    `
-
-    // ✅ USE NEW AI SERVICE - Groq is good for short creative tasks
-    const result = await generateContent(prompt, {
-      maxRetries: 3,
-      preferGroq: true, // ✅ Groq is faster for short content
-    })
-
-    if (!result.text) {
-      return generateFallbackSocialText(metadata, tags)
-    }
-
-    let socialText = result.text.replace(/^```[\s\S]*```$/gm, '').trim()
-
-    if (socialText.length > 500) {
-      socialText = socialText.substring(0, 497) + '...'
-    }
-
-    console.log(`Generated social media text: ${socialText.length} characters`)
-    return socialText
-  } catch (error) {
-    console.error('Error generating social media text:', error.message)
-    return generateFallbackSocialText(metadata, tags)
-  }
-}
 
 /**
  * Generate fallback social media text when AI fails
