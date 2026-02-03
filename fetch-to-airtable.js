@@ -777,7 +777,7 @@ REGLAS OBLIGATORIAS (SI NO SE CUMPLEN TODAS, RECHAZAR LA RESPUESTA):
 
 6. INTEGRACIÓN DE DATOS:
    - Si hay cifras, fechas o datos, integrarlos en oraciones completas
-   - Ejemplo CORRECTO: "La medida incluye un fondo de compensación de **500 millones de pesos**, la reducción de retenciones para pequeños productores y la extensión del plazo de pago para exportadores."
+   - Ejemplo CORRECTO: "La medida incluye un fondo de compensación de **500 millones de pesos**, la reducción de retenciones para pequeños productores rurales y la extensión del plazo de pago para exportadores."
    - Ejemplo INCORRECTO: "La medida incluye: - Fondo de 500 millones - Reducción de retenciones"
 
 7. SEO Y CONTENIDO:
@@ -822,10 +822,8 @@ Devolver ÚNICAMENTE el texto reelaborado. Sin explicaciones. Sin comentarios. S
       return formatTextAsFallback(extractedText, imageMarkdown)
     }
 
-    let processedText = result.text.trim()
-
-    // Remove markdown code blocks if present
-    processedText = processedText
+    let processedText = result.text
+      .trim()
       .replace(/^```markdown\s*/i, '')
       .replace(/^```\s*/i, '')
       .replace(/\s*```$/i, '')
@@ -876,69 +874,70 @@ Devolver ÚNICAMENTE el texto reelaborado. Sin explicaciones. Sin comentarios. S
 }
 
 /**
- * Reelaborates social media content into a detailed journalistic article
+ * Reelaborates social media content into a professional news article
  */
 async function reelaborateSocialMediaContent(postText, item, sourceName) {
   try {
-    const prompt = `Sos un redactor profesional de un medio digital argentino. Transforma esta publicación de ${sourceName} en un artículo periodístico detallado y completo.
+    const prompt = `Sos un redactor profesional de un medio digital argentino. Transforma esta publicación en un artículo periodístico.
 
-PUBLICACIÓN DE ${sourceName.toUpperCase()}:
+PUBLICACIÓN ORIGINAL:
 """
 ${postText.substring(0, 3000)}
 """
 
-CONTEXTO:
-- Fuente: ${sourceName}
-- Autor: ${item.authors?.[0]?.name || 'Usuario de ' + sourceName}
-- Fecha: ${item.date_published || 'N/A'}
-
-OBJETIVO: Crear un artículo de 350-450 palabras que DESARROLLE A FONDO el contenido del post.
+OBJETIVO: Crear un artículo periodístico de 350-450 palabras.
 
 REGLAS CRÍTICAS:
 
 1. EXTENSIÓN: 350-450 palabras.
 
-2. ESTRUCTURA: 4 a 6 párrafos DENSOS de información.
-   - Cada párrafo: 3 a 5 oraciones con DATOS CONCRETOS
-   - NO párrafos de relleno
+2. ESTRUCTURA: 4 a 6 párrafos densos.
+   - Cada párrafo: 3 a 5 oraciones con datos concretos
    - Separar con doble salto de línea
 
-3. DESARROLLO DETALLADO (OBLIGATORIO):
-   - Si menciona un DATO/CIFRA: explicar su contexto, significado, comparación con períodos anteriores
-   - Si menciona un EVENTO: desarrollar cuándo, dónde, quiénes participan, qué implica
-   - Si menciona una PERSONA: agregar quién es, su cargo, su relevancia en el tema
-   - Si menciona una MEDIDA/DECISIÓN: explicar alcances, a quiénes afecta, cuándo se implementa, por qué se tomó
-   - Si el post es BREVE: expandir con contexto periodístico relevante al tema
+3. DESARROLLO DETALLADO:
+   - Si menciona DATOS/CIFRAS: explicar contexto, significado
+   - Si menciona EVENTOS: desarrollar cuándo, dónde, quiénes
+   - Si menciona PERSONAS: agregar quién es, su cargo, relevancia
+   - Si menciona MEDIDAS: explicar alcances, afectados, implementación
+   - Si el post es breve: expandir con contexto periodístico
 
-4. INFORMACIÓN ESPECÍFICA:
-   - Usar números concretos cuando estén disponibles
-   - Mencionar fechas específicas si se conocen
-   - Nombrar instituciones, organizaciones involucradas
-   - Citar declaraciones textuales si las hay
-   - Agregar antecedentes del tema si es relevante
-
-5. FORMATO: SOLO párrafos. PROHIBIDO:
+4. FORMATO: SOLO párrafos. PROHIBIDO:
    - Listas (-, *, •)
    - Subtítulos
    - Enumeraciones
 
-6. MARKDOWN:
-   - **texto** para cifras, fechas, nombres importantes (6-8 veces)
-   - *texto* para términos técnicos o énfasis (2-3 veces)
-   - > para citas textuales del post original
+5. MARKDOWN:
+   - **texto** para cifras, fechas, nombres (6-8 veces)
+   - *texto* para términos técnicos (2-3 veces)
 
-7. TRANSFORMACIÓN:
-   - Eliminar: emojis, hashtags, menciones, URLs
-   - Mencionar ${sourceName} UNA SOLA VEZ en el segundo párrafo
+6. TRANSFORMACIÓN (OBLIGATORIO):
+   - Eliminar TODOS los emojis
+   - Eliminar hashtags
+   - Eliminar menciones (@usuario)
+   - Eliminar URLs
    - Convertir lenguaje casual a periodístico profesional
 
-8. TONO: Informativo, objetivo, detallado pero no repetitivo.
-
-9. PROHIBICIONES:
-   - NO usar frases genéricas de relleno
-   - NO repetir la misma información en diferentes párrafos
+7. PROHIBIDO ABSOLUTAMENTE:
+   - NO mencionar la red social (Facebook, Instagram, Twitter, etc.)
+   - NO decir "según publicó en", "compartió en", "posteó en"
+   - NO mencionar "redes sociales" o "plataforma"
+   - NO usar frases de relleno genéricas
+   - NO usar emojis en el texto generado
    - NO usar "en resumen", "para finalizar"
-   - NO listas de ningún tipo
+   - NO listas
+
+8. TONO: Informativo, directo, como si fuera una noticia normal de agencia.
+
+EJEMPLO CORRECTO:
+
+El Municipio de Coronel Suárez anunció la realización del evento "Las dos horas del Cantorcito" para este domingo en el teatro Samuel. La actividad cultural forma parte de la programación mensual de espectáculos que organiza la Secretaría de Cultura municipal.
+
+El evento contará con la participación de artistas locales y regionales. La entrada será libre y gratuita, con apertura de puertas programada para las **18 horas**. Las autoridades esperan una concurrencia numerosa dado el éxito de ediciones anteriores.
+
+La propuesta incluye presentaciones musicales de diversos géneros. Los organizadores destacaron que el teatro Samuel cuenta con capacidad para **300 espectadores** y cumple con todos los protocolos de seguridad vigentes.
+
+Las entradas podrán retirarse a partir del **viernes 7 de febrero** en la boletería del teatro, en horario de **9 a 13 horas**. También estará habilitada la reserva telefónica para facilitar el acceso del público interesado.
 
 RESPUESTA:
 Devolver ÚNICAMENTE el artículo. Sin explicaciones.`
@@ -952,26 +951,44 @@ Devolver ÚNICAMENTE el artículo. Sin explicaciones.`
       return formatSocialMediaAsFallback(postText, sourceName, item)
     }
 
-    let processedText = result.text.trim()
+    let processedText = result.text
+      .trim()
       .replace(/^```markdown\s*/i, '')
       .replace(/^```\s*/i, '')
       .replace(/\s*```$/i, '')
       .trim()
+
+    // VALIDATE: Remove any emojis that slipped through
+    processedText = processedText.replace(
+      /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+      '',
+    )
+
+    // VALIDATE: Remove references to social media
+    processedText = processedText.replace(
+      /\b(según publicó|compartió en|posteó en|difundió en|anunció en|publicó en)\s+(Facebook|Instagram|Twitter|YouTube|redes sociales|la plataforma|su cuenta)\b/gi,
+      '',
+    )
 
     const hasBullets = /^[\s]*[-*•]\s/m.test(processedText)
     const hasNumberedList = /^[\s]*\d+\.\s/m.test(processedText)
     const hasSubtitles = /^#{1,6}\s+/m.test(processedText)
 
     if (hasBullets || hasNumberedList || hasSubtitles) {
-      console.warn('❌ Social media text contains lists/subtitles, using fallback...')
+      console.warn(
+        '❌ Social media text contains lists/subtitles, using fallback...',
+      )
       return formatSocialMediaAsFallback(postText, sourceName, item)
     }
 
-    const wordCount = processedText.split(/\s+/).filter(w => w.length > 0).length
-    console.log(`✅ Generated social media article: ${wordCount} words`)
+    const wordCount = processedText
+      .split(/\s+/)
+      .filter((w) => w.length > 0).length
 
     if (wordCount < 300 || wordCount > 500) {
-      console.warn(`⚠️ Word count out of range: ${wordCount} words, using fallback...`)
+      console.warn(
+        `⚠️ Word count out of range: ${wordCount} words, using fallback...`,
+      )
       return formatSocialMediaAsFallback(postText, sourceName, item)
     }
 
@@ -983,113 +1000,101 @@ Devolver ÚNICAMENTE el artículo. Sin explicaciones.`
 }
 
 /**
- * Formats social media content as fallback when AI generation fails
+ * Fallback for social media content
  */
 function formatSocialMediaAsFallback(postText, sourceName, item) {
   try {
+    // AGGRESSIVE emoji and special char removal
     let cleanText = postText
+      .replace(
+        /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu,
+        '',
+      )
       .replace(/[#@]/g, '')
       .replace(/https?:\/\/[^\s]+/g, '')
-      .replace(/[🔥💰⚡️✨🎉👍❤️😊🙌💪🎊🌟]/g, '')
+      .replace(/[\uFE00-\uFE0F]/g, '') // Remove variation selectors
+      .replace(/[\u200D]/g, '') // Remove zero-width joiners
       .trim()
 
-    const author = item.authors?.[0]?.name || `un usuario de ${sourceName}`
-    const date = item.date_published 
-      ? new Date(item.date_published).toLocaleDateString('es-AR', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })
-      : 'recientemente'
+    const author = item.authors?.[0]?.name || sourceName
 
     let article = ''
-    const sentences = cleanText.split(/[.!?]+/).filter(s => s.trim().length > 15)
-    
+    const sentences = cleanText
+      .split(/[.!?]+/)
+      .filter((s) => s.trim().length > 15)
+
     if (sentences.length === 0) {
-      return `Una publicación realizada en **${sourceName}** generó atención durante ${date}. El contenido difundido por ${author} aborda temas de interés para la audiencia de la plataforma. La información compartida forma parte del flujo de contenidos que circulan a través de *${sourceName}* y otras redes sociales.`
+      return `Se informó sobre una actividad que generó interés en la comunidad. Los detalles de la convocatoria fueron dados a conocer por las autoridades correspondientes. La información se encuentra disponible para el público interesado.`
     }
 
+    // NEVER mention the source platform
     article += `${sentences[0].trim()}. `
     if (sentences.length > 1) {
       article += `${sentences[1].trim()}.\n\n`
     } else {
-      article += `La información generó interés entre los usuarios de la plataforma.\n\n`
+      article += `La información fue confirmada por las autoridades.\n\n`
     }
 
-    article += `La publicación fue realizada en **${sourceName}** por ${author} durante ${date}. El contenido difundido a través de la plataforma alcanzó difusión entre seguidores y usuarios interesados en la temática.\n\n`
+    // NO mentions of "publicó en Facebook" or similar
+    article += `Los detalles fueron confirmados durante la jornada. La convocatoria alcanzó difusión entre los interesados en la temática.\n\n`
 
     if (sentences.length > 2) {
-      article += `Según el mensaje compartido, ${sentences[2].trim().toLowerCase()}. `
+      article += `${sentences[2].trim()}. `
       if (sentences.length > 3) {
         article += `${sentences[3].trim()}.\n\n`
-      } else {
-        article += `Esta información se suma a otros contenidos relacionados que circulan en medios digitales.\n\n`
       }
     }
 
     if (sentences.length > 4) {
-      article += `El contenido también destacó que ${sentences[4].trim().toLowerCase()}. `
-      if (sentences.length > 5) {
-        article += `${sentences[5].trim()}.\n\n`
-      } else {
-        article += `Los usuarios de *${sourceName}* reaccionaron a la publicación.\n\n`
-      }
+      article += `${sentences[4].trim().replace(/^(según|se informó que|se indicó que)/i, 'Además,')}. `
     }
 
-    article += `Las publicaciones en plataformas como ${sourceName} forman parte del ecosistema de información digital actual. Los contenidos compartidos por usuarios y cuentas verificadas contribuyen a la circulación de noticias y datos de interés público.\n\n`
+    article += `La información está disponible para consultas del público interesado.`
 
-    article += `El mensaje original fue difundido a través de *${sourceName}* y forma parte del contenido publicado por ${author} en la plataforma. La información compartida alcanzó visibilidad entre seguidores y usuarios interesados en temas de actualidad.`
+    // Final emoji cleanup
+    article = article.replace(
+      /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu,
+      '',
+    )
 
     return article
   } catch (error) {
     console.error('Error in social media fallback formatting:', error.message)
-    return `Contenido compartido en ${sourceName} por ${item.authors?.[0]?.name || 'un usuario'}. La publicación aborda temas de actualidad e interés para la audiencia de la plataforma. ${postText.substring(0, 200)}...`
+    return `Se informó sobre una actividad programada. Los detalles fueron dados a conocer por las autoridades. La información está disponible para el público.`
   }
 }
 
 /**
- * Generates metadata for social media content
+ * Generate metadata for social media (NO source mentions)
  */
 async function generateSocialMediaMetadata(postText, sourceName, item) {
   try {
-    const prompt = `Sos un editor de un medio de noticias argentino. Genera metadata periodística para una publicación de redes sociales.
+    const prompt = `Genera metadata periodística para esta publicación.
 
-PUBLICACIÓN DE ${sourceName.toUpperCase()}:
+POST:
 """
 ${postText.substring(0, 2000)}
 """
 
-CONTEXTO:
-- Fuente: ${sourceName}
-- Autor: ${item.authors?.[0]?.name || 'Usuario'}
-- Fecha: ${item.date_published || 'N/A'}
+Generar JSON con 3 campos:
 
-TAREA: Generar 3 campos en formato JSON para convertir este post en noticia.
+1. title: Título periodístico (max 80 chars)
+   - NO mencionar red social
+   - NO usar emojis ni hashtags
+   - Convertir el post en título formal
 
-CAMPO 1 - title (título periodístico):
-- Máximo 80 caracteres
-- Convertir el mensaje del post en un título de noticia formal
-- Primera letra mayúscula, resto minúscula excepto nombres propios
-- NO mencionar la red social en el título
-- NO usar emojis ni hashtags
+2. bajada: Resumen 40-50 palabras
+   - Tono formal periodístico
+   - NO mencionar "según publicó en Facebook/Instagram/Twitter"
+   - NO usar emojis
 
-CAMPO 2 - bajada (resumen periodístico):
-- Entre 40 y 50 palabras
-- Ampliar el contenido del post de manera informativa
-- Incluir mención a la fuente: "Según publicó [autor/cuenta] en ${sourceName}"
-- Tono neutral y formal
-- NO usar emojis ni hashtags
+3. volanta: Categoría (max 4 palabras)
+   - Ejemplos: "Cultura y espectáculos", "Actividades municipales", "Convocatorias"
 
-CAMPO 3 - volanta (categoría/contexto):
-- Máximo 4 palabras
-- Categoría temática del contenido
-- NO mencionar la red social
-- Ejemplos: "Redes sociales", "Actualidad digital", "Virales", "Tendencias"
+PROHIBIDO mencionar: Facebook, Instagram, Twitter, YouTube, redes sociales
 
-FORMATO DE RESPUESTA:
-Responder ÚNICAMENTE con el JSON, sin explicaciones ni bloques de código.
-
-{"title": "título periodístico aquí", "bajada": "resumen de 40-50 palabras aquí", "volanta": "categoría"}`
+Responder SOLO con JSON:
+{"title": "...", "bajada": "...", "volanta": "..."}`
 
     const result = await generateContent(prompt, {
       maxRetries: 3,
@@ -1101,7 +1106,8 @@ Responder ÚNICAMENTE con el JSON, sin explicaciones ni bloques de código.
       return generateFallbackSocialMetadata(postText, sourceName, item)
     }
 
-    let cleanedText = result.text.trim()
+    let cleanedText = result.text
+      .trim()
       .replace(/```json\s*/gi, '')
       .replace(/```\s*/g, '')
       .trim()
@@ -1113,7 +1119,8 @@ Responder ÚNICAMENTE con el JSON, sin explicaciones ni bloques de código.
       throw new Error('No valid JSON found')
     }
 
-    let jsonStr = cleanedText.substring(startIndex, endIndex + 1)
+    let jsonStr = cleanedText
+      .substring(startIndex, endIndex + 1)
       .replace(/,\s*}/g, '}')
       .replace(/\n/g, ' ')
       .replace(/\r/g, '')
@@ -1124,6 +1131,26 @@ Responder ÚNICAMENTE con el JSON, sin explicaciones ni bloques de código.
     if (!parsed.title || !parsed.bajada || !parsed.volanta) {
       throw new Error('Missing required fields')
     }
+
+    // Remove emojis from all fields
+    parsed.title = parsed.title
+      .replace(
+        /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+        '',
+      )
+      .trim()
+    parsed.bajada = parsed.bajada
+      .replace(
+        /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+        '',
+      )
+      .trim()
+    parsed.volanta = parsed.volanta
+      .replace(
+        /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+        '',
+      )
+      .trim()
 
     if (parsed.title.length > 80) {
       parsed.title = parsed.title.substring(0, 77) + '...'
@@ -1143,19 +1170,24 @@ Responder ÚNICAMENTE con el JSON, sin explicaciones ni bloques de código.
 }
 
 /**
- * Generates fallback metadata for social media content
+ * Fallback metadata (NO source mentions)
  */
 function generateFallbackSocialMetadata(postText, sourceName, item) {
-  const cleanText = postText.replace(/[#@🔥💰⚡️✨🎉👍❤️😊🙌]/g, '').trim()
+  const cleanText = postText
+    .replace(
+      /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+      '',
+    )
+    .replace(/[#@]/g, '')
+    .trim()
   const firstSentence = cleanText.split(/[.!?]/)[0] || cleanText
   const title = firstSentence.substring(0, 80)
-  const author = item.authors?.[0]?.name || `un usuario de ${sourceName}`
-  const bajada = `Según publicó ${author} en ${sourceName}, ${cleanText.substring(0, 150)}`
+  const bajada = `Se informó sobre ${cleanText.substring(0, 150)}`
 
   return {
-    title: title || `Publicación de ${sourceName}`,
+    title: title || 'Información municipal',
     bajada: bajada.substring(0, 250),
-    volanta: 'Redes sociales'
+    volanta: 'Actividades locales',
   }
 }
 
@@ -1590,20 +1622,42 @@ async function processSection(section) {
           console.log(`Reelaborating social media content for: ${itemUrl}`)
           let reelaboratedArticle = null
           try {
-            reelaboratedArticle = await reelaborateSocialMediaContent(postText, item, sourceName)
+            reelaboratedArticle = await reelaborateSocialMediaContent(
+              postText,
+              item,
+              sourceName,
+            )
           } catch (textError) {
-            console.error(`Error reelaborating social media text: ${textError.message}`)
-            reelaboratedArticle = formatSocialMediaAsFallback(postText, sourceName, item)
+            console.error(
+              `Error reelaborating social media text: ${textError.message}`,
+            )
+            reelaboratedArticle = formatSocialMediaAsFallback(
+              postText,
+              sourceName,
+              item,
+            )
           }
 
           // Generate metadata for social media content
-          console.log(`Generating metadata for social media content: ${itemUrl}`)
+          console.log(
+            `Generating metadata for social media content: ${itemUrl}`,
+          )
           let metadata = null
           try {
-            metadata = await generateSocialMediaMetadata(postText, sourceName, item)
+            metadata = await generateSocialMediaMetadata(
+              postText,
+              sourceName,
+              item,
+            )
           } catch (metaError) {
-            console.error(`Error generating social media metadata: ${metaError.message}`)
-            metadata = generateFallbackSocialMetadata(postText, sourceName, item)
+            console.error(
+              `Error generating social media metadata: ${metaError.message}`,
+            )
+            metadata = generateFallbackSocialMetadata(
+              postText,
+              sourceName,
+              item,
+            )
           }
 
           // Create record fields using the generated metadata
