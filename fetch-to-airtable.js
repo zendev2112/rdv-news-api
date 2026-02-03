@@ -876,6 +876,290 @@ Devolver ÚNICAMENTE el texto reelaborado. Sin explicaciones. Sin comentarios. S
 }
 
 /**
+ * Reelaborates social media content into a detailed journalistic article
+ */
+async function reelaborateSocialMediaContent(postText, item, sourceName) {
+  try {
+    const prompt = `Sos un redactor profesional de un medio digital argentino. Transforma esta publicación de ${sourceName} en un artículo periodístico detallado y completo.
+
+PUBLICACIÓN DE ${sourceName.toUpperCase()}:
+"""
+${postText.substring(0, 3000)}
+"""
+
+CONTEXTO:
+- Fuente: ${sourceName}
+- Autor: ${item.authors?.[0]?.name || 'Usuario de ' + sourceName}
+- Fecha: ${item.date_published || 'N/A'}
+
+OBJETIVO: Crear un artículo de 350-450 palabras que DESARROLLE A FONDO el contenido del post.
+
+REGLAS CRÍTICAS:
+
+1. EXTENSIÓN: 350-450 palabras.
+
+2. ESTRUCTURA: 4 a 6 párrafos DENSOS de información.
+   - Cada párrafo: 3 a 5 oraciones con DATOS CONCRETOS
+   - NO párrafos de relleno
+   - Separar con doble salto de línea
+
+3. DESARROLLO DETALLADO (OBLIGATORIO):
+   - Si menciona un DATO/CIFRA: explicar su contexto, significado, comparación con períodos anteriores
+   - Si menciona un EVENTO: desarrollar cuándo, dónde, quiénes participan, qué implica
+   - Si menciona una PERSONA: agregar quién es, su cargo, su relevancia en el tema
+   - Si menciona una MEDIDA/DECISIÓN: explicar alcances, a quiénes afecta, cuándo se implementa, por qué se tomó
+   - Si el post es BREVE: expandir con contexto periodístico relevante al tema
+
+4. INFORMACIÓN ESPECÍFICA:
+   - Usar números concretos cuando estén disponibles
+   - Mencionar fechas específicas si se conocen
+   - Nombrar instituciones, organizaciones involucradas
+   - Citar declaraciones textuales si las hay
+   - Agregar antecedentes del tema si es relevante
+
+5. FORMATO: SOLO párrafos. PROHIBIDO:
+   - Listas (-, *, •)
+   - Subtítulos
+   - Enumeraciones
+
+6. MARKDOWN:
+   - **texto** para cifras, fechas, nombres importantes (6-8 veces)
+   - *texto* para términos técnicos o énfasis (2-3 veces)
+   - > para citas textuales del post original
+
+7. TRANSFORMACIÓN:
+   - Eliminar: emojis, hashtags, menciones, URLs
+   - Mencionar ${sourceName} UNA SOLA VEZ en el segundo párrafo
+   - Convertir lenguaje casual a periodístico profesional
+
+8. TONO: Informativo, objetivo, detallado pero no repetitivo.
+
+9. PROHIBICIONES:
+   - NO usar frases genéricas de relleno
+   - NO repetir la misma información en diferentes párrafos
+   - NO usar "en resumen", "para finalizar"
+   - NO listas de ningún tipo
+
+RESPUESTA:
+Devolver ÚNICAMENTE el artículo. Sin explicaciones.`
+
+    const result = await generateContent(prompt, {
+      maxRetries: 3,
+      preferGroq: false,
+    })
+
+    if (!result.text) {
+      return formatSocialMediaAsFallback(postText, sourceName, item)
+    }
+
+    let processedText = result.text.trim()
+      .replace(/^```markdown\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim()
+
+    const hasBullets = /^[\s]*[-*•]\s/m.test(processedText)
+    const hasNumberedList = /^[\s]*\d+\.\s/m.test(processedText)
+    const hasSubtitles = /^#{1,6}\s+/m.test(processedText)
+
+    if (hasBullets || hasNumberedList || hasSubtitles) {
+      console.warn('❌ Social media text contains lists/subtitles, using fallback...')
+      return formatSocialMediaAsFallback(postText, sourceName, item)
+    }
+
+    const wordCount = processedText.split(/\s+/).filter(w => w.length > 0).length
+    console.log(`✅ Generated social media article: ${wordCount} words`)
+
+    if (wordCount < 300 || wordCount > 500) {
+      console.warn(`⚠️ Word count out of range: ${wordCount} words, using fallback...`)
+      return formatSocialMediaAsFallback(postText, sourceName, item)
+    }
+
+    return postProcessText(processedText)
+  } catch (error) {
+    console.error('Error reelaborating social media:', error.message)
+    return formatSocialMediaAsFallback(postText, sourceName, item)
+  }
+}
+
+/**
+ * Formats social media content as fallback when AI generation fails
+ */
+function formatSocialMediaAsFallback(postText, sourceName, item) {
+  try {
+    let cleanText = postText
+      .replace(/[#@]/g, '')
+      .replace(/https?:\/\/[^\s]+/g, '')
+      .replace(/[🔥💰⚡️✨🎉👍❤️😊🙌💪🎊🌟]/g, '')
+      .trim()
+
+    const author = item.authors?.[0]?.name || `un usuario de ${sourceName}`
+    const date = item.date_published 
+      ? new Date(item.date_published).toLocaleDateString('es-AR', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      : 'recientemente'
+
+    let article = ''
+    const sentences = cleanText.split(/[.!?]+/).filter(s => s.trim().length > 15)
+    
+    if (sentences.length === 0) {
+      return `Una publicación realizada en **${sourceName}** generó atención durante ${date}. El contenido difundido por ${author} aborda temas de interés para la audiencia de la plataforma. La información compartida forma parte del flujo de contenidos que circulan a través de *${sourceName}* y otras redes sociales.`
+    }
+
+    article += `${sentences[0].trim()}. `
+    if (sentences.length > 1) {
+      article += `${sentences[1].trim()}.\n\n`
+    } else {
+      article += `La información generó interés entre los usuarios de la plataforma.\n\n`
+    }
+
+    article += `La publicación fue realizada en **${sourceName}** por ${author} durante ${date}. El contenido difundido a través de la plataforma alcanzó difusión entre seguidores y usuarios interesados en la temática.\n\n`
+
+    if (sentences.length > 2) {
+      article += `Según el mensaje compartido, ${sentences[2].trim().toLowerCase()}. `
+      if (sentences.length > 3) {
+        article += `${sentences[3].trim()}.\n\n`
+      } else {
+        article += `Esta información se suma a otros contenidos relacionados que circulan en medios digitales.\n\n`
+      }
+    }
+
+    if (sentences.length > 4) {
+      article += `El contenido también destacó que ${sentences[4].trim().toLowerCase()}. `
+      if (sentences.length > 5) {
+        article += `${sentences[5].trim()}.\n\n`
+      } else {
+        article += `Los usuarios de *${sourceName}* reaccionaron a la publicación.\n\n`
+      }
+    }
+
+    article += `Las publicaciones en plataformas como ${sourceName} forman parte del ecosistema de información digital actual. Los contenidos compartidos por usuarios y cuentas verificadas contribuyen a la circulación de noticias y datos de interés público.\n\n`
+
+    article += `El mensaje original fue difundido a través de *${sourceName}* y forma parte del contenido publicado por ${author} en la plataforma. La información compartida alcanzó visibilidad entre seguidores y usuarios interesados en temas de actualidad.`
+
+    return article
+  } catch (error) {
+    console.error('Error in social media fallback formatting:', error.message)
+    return `Contenido compartido en ${sourceName} por ${item.authors?.[0]?.name || 'un usuario'}. La publicación aborda temas de actualidad e interés para la audiencia de la plataforma. ${postText.substring(0, 200)}...`
+  }
+}
+
+/**
+ * Generates metadata for social media content
+ */
+async function generateSocialMediaMetadata(postText, sourceName, item) {
+  try {
+    const prompt = `Sos un editor de un medio de noticias argentino. Genera metadata periodística para una publicación de redes sociales.
+
+PUBLICACIÓN DE ${sourceName.toUpperCase()}:
+"""
+${postText.substring(0, 2000)}
+"""
+
+CONTEXTO:
+- Fuente: ${sourceName}
+- Autor: ${item.authors?.[0]?.name || 'Usuario'}
+- Fecha: ${item.date_published || 'N/A'}
+
+TAREA: Generar 3 campos en formato JSON para convertir este post en noticia.
+
+CAMPO 1 - title (título periodístico):
+- Máximo 80 caracteres
+- Convertir el mensaje del post en un título de noticia formal
+- Primera letra mayúscula, resto minúscula excepto nombres propios
+- NO mencionar la red social en el título
+- NO usar emojis ni hashtags
+
+CAMPO 2 - bajada (resumen periodístico):
+- Entre 40 y 50 palabras
+- Ampliar el contenido del post de manera informativa
+- Incluir mención a la fuente: "Según publicó [autor/cuenta] en ${sourceName}"
+- Tono neutral y formal
+- NO usar emojis ni hashtags
+
+CAMPO 3 - volanta (categoría/contexto):
+- Máximo 4 palabras
+- Categoría temática del contenido
+- NO mencionar la red social
+- Ejemplos: "Redes sociales", "Actualidad digital", "Virales", "Tendencias"
+
+FORMATO DE RESPUESTA:
+Responder ÚNICAMENTE con el JSON, sin explicaciones ni bloques de código.
+
+{"title": "título periodístico aquí", "bajada": "resumen de 40-50 palabras aquí", "volanta": "categoría"}`
+
+    const result = await generateContent(prompt, {
+      maxRetries: 3,
+      requireJson: false,
+      preferGroq: false,
+    })
+
+    if (!result.text) {
+      return generateFallbackSocialMetadata(postText, sourceName, item)
+    }
+
+    let cleanedText = result.text.trim()
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/g, '')
+      .trim()
+
+    const startIndex = cleanedText.indexOf('{')
+    const endIndex = cleanedText.lastIndexOf('}')
+
+    if (startIndex === -1 || endIndex === -1) {
+      throw new Error('No valid JSON found')
+    }
+
+    let jsonStr = cleanedText.substring(startIndex, endIndex + 1)
+      .replace(/,\s*}/g, '}')
+      .replace(/\n/g, ' ')
+      .replace(/\r/g, '')
+      .replace(/\t/g, ' ')
+
+    const parsed = JSON.parse(jsonStr)
+
+    if (!parsed.title || !parsed.bajada || !parsed.volanta) {
+      throw new Error('Missing required fields')
+    }
+
+    if (parsed.title.length > 80) {
+      parsed.title = parsed.title.substring(0, 77) + '...'
+    }
+
+    const volantaWords = parsed.volanta.split(/\s+/)
+    if (volantaWords.length > 4) {
+      parsed.volanta = volantaWords.slice(0, 4).join(' ')
+    }
+
+    console.log('Successfully generated social media metadata')
+    return parsed
+  } catch (error) {
+    console.error('Error generating social media metadata:', error.message)
+    return generateFallbackSocialMetadata(postText, sourceName, item)
+  }
+}
+
+/**
+ * Generates fallback metadata for social media content
+ */
+function generateFallbackSocialMetadata(postText, sourceName, item) {
+  const cleanText = postText.replace(/[#@🔥💰⚡️✨🎉👍❤️😊🙌]/g, '').trim()
+  const firstSentence = cleanText.split(/[.!?]/)[0] || cleanText
+  const title = firstSentence.substring(0, 80)
+  const author = item.authors?.[0]?.name || `un usuario de ${sourceName}`
+  const bajada = `Según publicó ${author} en ${sourceName}, ${cleanText.substring(0, 150)}`
+
+  return {
+    title: title || `Publicación de ${sourceName}`,
+    bajada: bajada.substring(0, 250),
+    volanta: 'Redes sociales'
+  }
+}
+
+/**
  * Processes a single article
  */
 async function processArticle(item, sectionId) {
@@ -1302,31 +1586,36 @@ async function processSection(section) {
             console.log(`Error formatting date: ${e.message}`)
           }
 
-          // Before creating record fields, generate metadata as you do for regular articles
+          // Reelaborate social media content into article
+          console.log(`Reelaborating social media content for: ${itemUrl}`)
+          let reelaboratedArticle = null
+          try {
+            reelaboratedArticle = await reelaborateSocialMediaContent(postText, item, sourceName)
+          } catch (textError) {
+            console.error(`Error reelaborating social media text: ${textError.message}`)
+            reelaboratedArticle = formatSocialMediaAsFallback(postText, sourceName, item)
+          }
+
+          // Generate metadata for social media content
+          console.log(`Generating metadata for social media content: ${itemUrl}`)
           let metadata = null
           try {
-            // Use the same metadata generation function used for regular articles
-            metadata = await generateMetadata(postText)
-            console.log(`Generated metadata for social media content`)
+            metadata = await generateSocialMediaMetadata(postText, sourceName, item)
           } catch (metaError) {
-            console.error(
-              `Error generating metadata for social media: ${metaError.message}`,
-            )
-            // Use fallback metadata
-            metadata = generateFallbackMetadata(postText)
+            console.error(`Error generating social media metadata: ${metaError.message}`)
+            metadata = generateFallbackSocialMetadata(postText, sourceName, item)
           }
 
           // Create record fields using the generated metadata
           const recordFields = {
-            title:
-              metadata.title || item.title || `Publicación de ${sourceName}`,
+            title: metadata.title,
             url: itemUrl,
-            excerpt: metadata.bajada || postText.substring(0, 200), // Use generated bajada
+            excerpt: metadata.bajada,
             source: sourceName,
             imgUrl: imageUrl || '',
-            article: postText, // Store the full post text
-            overline: metadata.volanta, // Use the AI-generated volanta/overline
-            author: '',
+            article: reelaboratedArticle, // Use reelaborated article
+            overline: metadata.volanta,
+            author: item.authors?.[0]?.name || '',
             status: 'draft',
             processingStatus: 'completed', // Mark as completed since we have the full text already
             postDate: item.date_published || '',
