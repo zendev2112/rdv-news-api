@@ -385,184 +385,54 @@ function extractText(htmlContent) {
 }
 
 /**
- * Post-process text to fix formatting issues
+ * Post-process text to fix formatting issues and normalize whitespace
  */
 function postProcessText(text) {
-  // Fix lists that might have wrong spacing
-  let fixed = text.replace(/^\s*-\s+/gm, '- ')
+  if (!text) return ''
 
-  // Fix numbered lists
+  // ✅ STEP 1: Remove ALL inconsistent indentation and spacing
+  let fixed = text
+    // Remove any leading/trailing spaces on each line
+    .split('\n')
+    .map((line) => line.trim())
+    .join('\n')
+
+  // ✅ STEP 2: Normalize paragraph breaks (ensure double newlines between paragraphs)
+  fixed = fixed
+    .replace(/\n{3,}/g, '\n\n') // Replace 3+ newlines with 2
+    .replace(/\n\s+\n/g, '\n\n') // Remove space-only lines
+
+  // ✅ STEP 3: Fix lists that might have wrong spacing
+  fixed = fixed.replace(/^\s*-\s+/gm, '- ')
+
+  // ✅ STEP 4: Fix numbered lists
   fixed = fixed.replace(/^\s*(\d+)\.\s+/gm, '$1. ')
 
-  // Fix headings that might have wrong spacing
+  // ✅ STEP 5: Fix headings that might have wrong spacing
   fixed = fixed.replace(/^#+\s+/gm, '## ')
 
-  // Fix bolding that might be incorrect
+  // ✅ STEP 6: Fix bolding that might be incorrect
   fixed = fixed.replace(/\*\*([^*]+)\*\*/g, '**$1**')
 
-  // Remove any remaining markdown image syntax
+  // ✅ STEP 7: Remove any remaining markdown image syntax
   fixed = fixed.replace(/!\[[^\]]*\]\([^)]*\)/g, '')
 
-  // Fix italic that might be incorrect
+  // ✅ STEP 8: Fix italic that might be incorrect
   fixed = fixed.replace(/\*([^*]+)\*/g, '*$1*')
 
+  // ✅ STEP 9: Remove any tabs (replace with spaces)
+  fixed = fixed.replace(/\t/g, ' ')
+
+  // ✅ STEP 10: Remove excessive spaces within lines
+  fixed = fixed.replace(/ {2,}/g, ' ')
+
+  // ✅ STEP 11: Ensure text starts and ends cleanly
+  fixed = fixed.trim()
+
+  // ✅ STEP 12: Normalize quotes
+  fixed = fixed.replace(/[""]/g, '"').replace(/['']/g, "'")
+
   return fixed
-}
-
-/**
- * Format text using basic rules as a fallback when AI is unavailable
- */
-function formatTextAsFallback(extractedText, imageMarkdown) {
-  try {
-    // Basic cleanup
-    let text = extractedText.trim()
-
-    // Break into paragraphs
-    const paragraphs = text.split(/\n\s*\n/)
-
-    // Format each paragraph
-    const formattedParagraphs = paragraphs
-      .filter((p) => p.trim().length > 0)
-      .map((p) => p.trim())
-
-    // Insert images at reasonable intervals if available
-    let result = ''
-    const images = imageMarkdown
-      .split('\n\n')
-      .filter((img) => img.trim().length > 0)
-
-    // Add a basic heading
-    result += '## Detalles principales\n\n'
-
-    // If we have images, distribute them through the text
-    if (images.length > 0) {
-      const paragraphsPerImage = Math.max(
-        Math.floor(formattedParagraphs.length / (images.length + 1)),
-        1,
-      )
-
-      let pointsAdded = false
-
-      formattedParagraphs.forEach((paragraph, index) => {
-        // Add a second heading midway through
-        if (index === Math.floor(formattedParagraphs.length / 2)) {
-          result += '## Información adicional\n\n'
-        }
-
-        // At 1/3 of the way through, add a bullet list if we haven't added one already
-        if (
-          !pointsAdded &&
-          index === Math.floor(formattedParagraphs.length / 3)
-        ) {
-          // Extract some key points as bullets
-          const sentences = paragraph
-            .split(/[.!?]+/)
-            .filter((s) => s.trim().length > 5)
-            .slice(0, 3)
-          if (sentences.length > 1) {
-            result += 'Puntos destacados:\n\n'
-            sentences.forEach((sentence) => {
-              result += `- ${sentence.trim()}\n`
-            })
-            result += '\n'
-            pointsAdded = true
-          } else {
-            // If we can't extract sentences, create a simple list from the paragraph
-            result += 'Puntos destacados:\n\n'
-            result +=
-              '- **Punto importante:** ' +
-              paragraph.substring(0, 80).trim() +
-              '\n'
-            result +=
-              '- **Información adicional:** Datos relevantes sobre el tema\n'
-            result +=
-              '- **Contexto:** Elementos adicionales para comprender la noticia\n\n'
-            pointsAdded = true
-          }
-        } else {
-          result += paragraph + '\n\n'
-        }
-
-        // Insert an image description after certain paragraphs
-        if (images.length > 0 && (index + 1) % paragraphsPerImage === 0) {
-          result += images.shift() + '\n\n'
-        }
-      })
-
-      // Add any remaining images at the end
-      if (images.length > 0) {
-        result += images.join('\n\n')
-      }
-    } else {
-      // No images, add headings and bullet points
-      const firstThird = Math.floor(formattedParagraphs.length / 3)
-      const secondThird = Math.floor((formattedParagraphs.length * 2) / 3)
-
-      // Ensure we always have a list somewhere
-      let listAdded = false
-
-      formattedParagraphs.forEach((paragraph, index) => {
-        if (index === firstThird) {
-          result += '## Detalles relevantes\n\n'
-
-          // Extract some key points as bullets
-          const sentences = paragraph
-            .split(/[.!?]+/)
-            .filter((s) => s.trim().length > 5)
-            .slice(0, 3)
-          if (sentences.length > 1) {
-            result += 'Puntos destacados:\n\n'
-            sentences.forEach((sentence) => {
-              result += `- ${sentence.trim()}\n`
-            })
-            result += '\n'
-            listAdded = true
-          } else {
-            result += paragraph + '\n\n'
-          }
-        } else if (index === secondThird) {
-          result += '## Información adicional\n\n'
-
-          // If we haven't added a list yet, add one here
-          if (!listAdded) {
-            result += 'Aspectos clave:\n\n'
-            result +=
-              '- **Información principal:** ' +
-              paragraph.substring(0, 80).trim() +
-              '\n'
-            result +=
-              '- **Dato relevante:** Información adicional sobre el tema\n'
-            result +=
-              '- **Contexto importante:** Elementos para comprender mejor la noticia\n\n'
-            listAdded = true
-          } else {
-            result += paragraph + '\n\n'
-          }
-        } else {
-          result += paragraph + '\n\n'
-        }
-      })
-
-      // If we still haven't added a list, add one at the end
-      if (!listAdded) {
-        result += '## Resumen de puntos clave\n\n'
-        result +=
-          '- **Tema principal:** La noticia trata sobre ' +
-          formattedParagraphs[0].substring(0, 60).trim() +
-          '\n'
-        result +=
-          '- **Información destacada:** Elementos relevantes del artículo\n'
-        result +=
-          '- **Contexto:** Datos complementarios para entender la situación\n\n'
-      }
-    }
-
-    return result
-  } catch (error) {
-    console.error('Error in fallback text formatting:', error.message)
-    // Return a minimal version if even the fallback fails
-    return extractedText
-  }
 }
 
 /**
@@ -570,48 +440,159 @@ function formatTextAsFallback(extractedText, imageMarkdown) {
  */
 function generateFallbackMetadata(extractedText) {
   try {
-    // Simple rule-based title extraction
     const paragraphs = extractedText
       .split(/\n+/)
-      .filter((p) => p.trim().length > 0)
+      .filter((p) => p.trim().length > 30)
 
-    // Get first paragraph that's at least 20 chars
-    const firstPara =
-      paragraphs.find((p) => p.trim().length >= 20) || paragraphs[0] || ''
+    const firstPara = paragraphs[0] || ''
+    const secondPara = paragraphs[1] || ''
+    const thirdPara = paragraphs[2] || ''
 
-    // Use first sentence as title (up to 80 chars)
-    const firstSentence =
-      firstPara.split(/[.!?]/).filter((s) => s.trim().length > 0)[0] || ''
+    const firstSentence = firstPara.split(/[.!?]/)[0] || ''
     const title = firstSentence.trim().substring(0, 80)
 
-    // Use second paragraph as bajada (up to 200 chars)
-    const secondPara = paragraphs[1] || paragraphs[0] || ''
-    const bajada = secondPara.trim().substring(0, 200)
+    let bajada = ''
+    const meaningfulPara = [secondPara, thirdPara, firstPara].find(
+      (p) =>
+        p.length > 100 &&
+        !p.match(/^(Se informó|Se anunció|Según|De acuerdo)/i),
+    )
 
-    // Simple volanta based on content
-    let volanta = ''
+    if (meaningfulPara) {
+      const sentences = meaningfulPara
+        .split(/[.!?]+/)
+        .filter((s) => s.trim().length > 20)
+      bajada = sentences.slice(0, 2).join('. ').trim()
 
-    // Try to detect a category from the text
-    if (extractedText.match(/deport[eias]/i)) volanta = 'Deportes'
-    else if (extractedText.match(/econom[íia]/i)) volanta = 'Economía'
-    else if (extractedText.match(/politic[ao]/i)) volanta = 'Política'
-    else if (extractedText.match(/entreten|espectácul|celebr|artista/i))
+      const words = bajada.split(/\s+/)
+      if (words.length > 50) {
+        bajada = words.slice(0, 50).join(' ')
+      } else if (words.length < 40 && sentences.length > 2) {
+        bajada = sentences.slice(0, 3).join('. ').trim()
+      }
+    } else {
+      bajada = firstPara
+        .replace(/^(Se informó|Se anunció|Según|De acuerdo)[^.]*\.\s*/i, '')
+        .trim()
+    }
+
+    if (bajada.length > 250) {
+      bajada = bajada.substring(0, 247) + '...'
+    }
+
+    // ✅ NORMALIZE WHITESPACE IN METADATA
+    const cleanTitle = title.trim().replace(/\s+/g, ' ')
+    const cleanBajada = bajada.trim().replace(/\s+/g, ' ')
+
+    let volanta = 'Actualidad'
+    const lowerText = extractedText.toLowerCase()
+
+    if (
+      lowerText.match(
+        /\b(fútbol|deport|equipo|jugador|campeón|partido|liga)\b/i,
+      )
+    ) {
+      volanta = 'Deportes'
+    } else if (
+      lowerText.match(
+        /\b(econom[íi]a|dólar|inflaci[oó]n|mercado|precio|peso)\b/i,
+      )
+    ) {
+      volanta = 'Economía'
+    } else if (
+      lowerText.match(
+        /\b(pol[íi]tic|gobierno|presiden|minister|ley|diputad)\b/i,
+      )
+    ) {
+      volanta = 'Política'
+    } else if (
+      lowerText.match(/\b(cine|m[úu]sica|artista|show|festival|pel[íi]cula)\b/i)
+    ) {
       volanta = 'Espectáculos'
-    else if (extractedText.match(/tecnolog[íia]/i)) volanta = 'Tecnología'
-    else volanta = 'Noticias'
+    } else if (
+      lowerText.match(/\b(tecnolog[íi]a|digital|internet|software|celular)\b/i)
+    ) {
+      volanta = 'Tecnología'
+    } else if (
+      lowerText.match(/\b(salud|hospital|m[ée]dic|tratamiento|paciente)\b/i)
+    ) {
+      volanta = 'Salud'
+    } else if (
+      lowerText.match(/\b(campo|agro|producci[oó]n|cosecha|ganado)\b/i)
+    ) {
+      volanta = 'Agro'
+    } else if (
+      lowerText.match(/\b(cultura|libro|arte|museo|exposici[oó]n)\b/i)
+    ) {
+      volanta = 'Cultura'
+    }
 
     return {
-      title: title || 'Artículo sin título',
-      bajada: bajada || 'Sin descripción disponible',
+      title: cleanTitle || 'Artículo sin título',
+      bajada: cleanBajada || 'Contenido no disponible',
       volanta: volanta,
     }
   } catch (error) {
     console.error('Error in fallback metadata generation:', error.message)
     return {
       title: 'Artículo sin título',
-      bajada: 'Sin descripción disponible',
+      bajada: 'Resumen no disponible',
       volanta: 'Noticias',
     }
+  }
+}
+
+/**
+ * Fallback metadata (NO source mentions) - IMPROVED
+ */
+function generateFallbackSocialMetadata(postText, sourceName, item) {
+  const cleanText = postText
+    .replace(
+      /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+      '',
+    )
+    .replace(/[#@]/g, '')
+    .trim()
+
+  // Extract meaningful sentences
+  const sentences = cleanText
+    .split(/[.!?]+/)
+    .filter((s) => s.trim().length > 20)
+
+  // Create title from first meaningful sentence
+  const title = sentences[0]?.substring(0, 80) || 'Actividad municipal'
+
+  // Create bajada from subsequent sentences
+  let bajada = ''
+  if (sentences.length > 1) {
+    bajada = sentences.slice(1, 3).join('. ').trim()
+  } else {
+    bajada = cleanText.substring(0, 200)
+  }
+
+  // Ensure bajada doesn't start with generic phrases
+  bajada = bajada
+    .replace(/^(Se informó|Se anunció|Según|De acuerdo)[^.]*\.\s*/i, '')
+    .trim()
+
+  // Determine volanta from content
+  let volanta = 'Actividades'
+  const lowerText = cleanText.toLowerCase()
+
+  if (lowerText.match(/\b(evento|festival|show|espectáculo|presentación)\b/)) {
+    volanta = 'Eventos locales'
+  } else if (lowerText.match(/\b(taller|curso|capacitación|inscripción)\b/)) {
+    volanta = 'Educación'
+  } else if (lowerText.match(/\b(deporte|torneo|campeón|competencia)\b/)) {
+    volanta = 'Deportes'
+  } else if (lowerText.match(/\b(cultura|arte|museo|biblioteca)\b/)) {
+    volanta = 'Cultura'
+  }
+
+  return {
+    title: title,
+    bajada: bajada.substring(0, 250),
+    volanta: volanta,
   }
 }
 
@@ -878,69 +859,96 @@ Devolver ÚNICAMENTE el texto reelaborado. Sin explicaciones. Sin comentarios. S
  */
 async function reelaborateSocialMediaContent(postText, item, sourceName) {
   try {
-    const prompt = `Sos un redactor profesional de un medio digital argentino. Transforma esta publicación en un artículo periodístico.
+    const prompt = `Sos un redactor profesional de un medio digital argentino. Tu tarea es transformar esta publicación corta de redes sociales en un artículo periodístico COMPLETO Y EXTENSO.
 
-PUBLICACIÓN ORIGINAL:
+PUBLICACIÓN ORIGINAL (CORTA):
 """
 ${postText.substring(0, 3000)}
 """
 
-OBJETIVO: Crear un artículo periodístico de 350-450 palabras.
+CONTEXTO ADICIONAL:
+- Autor/Fuente: ${item.authors?.[0]?.name || 'Institución local'}
+- Fecha: ${item.date_published || 'Reciente'}
 
-REGLAS CRÍTICAS:
+OBJETIVO CRÍTICO: Crear un artículo periodístico de 350-500 palabras a partir de esta publicación corta.
 
-1. EXTENSIÓN: 350-450 palabras.
+⚠️ IMPORTANTE: La publicación original es BREVE, pero vos tenés que EXPANDIRLA en un artículo COMPLETO.
 
-2. ESTRUCTURA: 4 a 6 párrafos densos.
-   - Cada párrafo: 3 a 5 oraciones con datos concretos
-   - Separar con doble salto de línea
+CÓMO EXPANDIR EL CONTENIDO:
 
-3. DESARROLLO DETALLADO:
-   - Si menciona DATOS/CIFRAS: explicar contexto, significado
-   - Si menciona EVENTOS: desarrollar cuándo, dónde, quiénes
-   - Si menciona PERSONAS: agregar quién es, su cargo, relevancia
-   - Si menciona MEDIDAS: explicar alcances, afectados, implementación
-   - Si el post es breve: expandir con contexto periodístico
+1. Si menciona un EVENTO:
+   - Desarrollar en qué consiste
+   - Explicar dónde y cuándo se realizará
+   - Detallar horarios, requisitos, condiciones
+   - Mencionar organizadores y participantes
+   - Explicar el contexto o antecedentes
+   - Describir el impacto esperado o la importancia
 
-4. FORMATO: SOLO párrafos. PROHIBIDO:
-   - Listas (-, *, •)
-   - Subtítulos
-   - Enumeraciones
+2. Si menciona una ACTIVIDAD/SERVICIO:
+   - Explicar en detalle de qué se trata
+   - Detallar cómo funciona, cómo acceder
+   - Mencionar beneficiarios o público objetivo
+   - Explicar requisitos o pasos a seguir
+   - Contextualizar por qué es relevante
+   - Agregar información sobre la institución organizadora
 
-5. MARKDOWN:
-   - **texto** para cifras, fechas, nombres (6-8 veces)
-   - *texto* para términos técnicos (2-3 veces)
+3. Si menciona un ANUNCIO/COMUNICADO:
+   - Desarrollar qué implica exactamente
+   - Explicar a quiénes afecta o beneficia
+   - Detallar plazos, fechas, condiciones
+   - Contextualizar la decisión o medida
+   - Explicar antecedentes si corresponde
+   - Mencionar próximos pasos
 
-6. TRANSFORMACIÓN (OBLIGATORIO):
-   - Eliminar TODOS los emojis
-   - Eliminar hashtags
-   - Eliminar menciones (@usuario)
-   - Eliminar URLs
-   - Convertir lenguaje casual a periodístico profesional
+4. SIEMPRE AGREGAR:
+   - Información sobre la institución/organismo que publica
+   - Contexto local relevante
+   - Datos concretos (fechas, horarios, lugares, números)
+   - Información de contacto o consulta si está disponible
 
-7. PROHIBIDO ABSOLUTAMENTE:
-   - NO mencionar la red social (Facebook, Instagram, Twitter, etc.)
-   - NO decir "según publicó en", "compartió en", "posteó en"
-   - NO mencionar "redes sociales" o "plataforma"
-   - NO usar frases de relleno genéricas
-   - NO usar emojis en el texto generado
-   - NO usar "en resumen", "para finalizar"
-   - NO listas
+ESTRUCTURA OBLIGATORIA (4-6 PÁRRAFOS):
 
-8. TONO: Informativo, directo, como si fuera una noticia normal de agencia.
+Párrafo 1: Presentar el hecho principal de forma periodística
+Párrafo 2: Desarrollar detalles específicos (qué, cuándo, dónde, cómo)
+Párrafo 3: Explicar contexto, antecedentes o relevancia
+Párrafo 4: Agregar información complementaria (organizadores, requisitos, condiciones)
+Párrafo 5 (opcional): Datos de contacto, inscripción o información adicional
+Párrafo 6 (opcional): Impacto esperado o cierre informativo
 
-EJEMPLO CORRECTO:
+REGLAS DE FORMATO:
 
-El Municipio de Coronel Suárez anunció la realización del evento "Las dos horas del Cantorcito" para este domingo en el teatro Samuel. La actividad cultural forma parte de la programación mensual de espectáculos que organiza la Secretaría de Cultura municipal.
+- SOLO párrafos de texto corrido
+- PROHIBIDO: listas (-, *, •), subtítulos, enumeraciones
+- Usar **negritas** para fechas, horarios, nombres importantes (6-8 veces)
+- Usar *cursivas* para énfasis (2-3 veces)
+- Eliminar TODOS los emojis
+- Eliminar hashtags y menciones
+- NO mencionar "Facebook", "Instagram", "redes sociales"
+- NO decir "según publicó", "compartió en", etc.
 
-El evento contará con la participación de artistas locales y regionales. La entrada será libre y gratuita, con apertura de puertas programada para las **18 horas**. Las autoridades esperan una concurrencia numerosa dado el éxito de ediciones anteriores.
+EXTENSIÓN: Entre 350 y 500 palabras. NO MENOS.
 
-La propuesta incluye presentaciones musicales de diversos géneros. Los organizadores destacaron que el teatro Samuel cuenta con capacidad para **300 espectadores** y cumple con todos los protocolos de seguridad vigentes.
+EJEMPLO DE EXPANSIÓN:
 
-Las entradas podrán retirarse a partir del **viernes 7 de febrero** en la boletería del teatro, en horario de **9 a 13 horas**. También estará habilitada la reserva telefónica para facilitar el acceso del público interesado.
+POST ORIGINAL (30 palabras):
+"Este domingo 'Las dos horas del Cantorcito' en el teatro Samuel. 18hs. Entrada libre y gratuita! 🎵"
+
+ARTÍCULO GENERADO (420 palabras):
+
+El Municipio de Coronel Suárez anunció la realización del evento cultural "Las dos horas del Cantorcito" para este domingo en el teatro Samuel. La actividad musical forma parte de la programación mensual de espectáculos que organiza la Secretaría de Cultura municipal y contará con entrada libre y gratuita para todo el público.
+
+El evento está programado para las **18 horas** con apertura de puertas desde las **17:30**. Los organizadores recomiendan llegar con anticipación dado que el teatro Samuel tiene capacidad para **300 espectadores** y se espera una concurrencia numerosa. Las puertas se abrirán por orden de llegada hasta completar el aforo disponible.
+
+La propuesta incluye presentaciones de artistas locales y regionales que interpretarán un variado repertorio de música tradicional argentina. "Las dos horas del Cantorcito" es un formato que se viene desarrollando mensualmente en el teatro y ha logrado consolidarse como uno de los espectáculos más convocantes de la agenda cultural local. En ediciones anteriores, el evento reunió a más de *250 personas* y recibió elogios tanto del público como de los artistas participantes.
+
+El teatro Samuel se encuentra ubicado en **calle Rivadavia 250** del centro de Coronel Suárez. El edificio cuenta con accesibilidad para personas con movilidad reducida y dispone de estacionamiento en las inmediaciones. Las autoridades municipales destacaron que el espacio cumple con todos los protocolos de seguridad vigentes y dispone de las habilitaciones correspondientes.
+
+Para aquellos interesados en asegurar su lugar, el municipio habilitó un sistema de reserva anticipada. Las entradas pueden retirarse a partir del **viernes 7 de febrero** en la boletería del teatro, en horario de **9 a 13 horas**. También está disponible la opción de reserva telefónica comunicándose al número **02926-420100** en el mismo horario. Cada persona podrá retirar hasta dos entradas por presentación de DNI.
+
+La Secretaría de Cultura informó que este evento forma parte de una serie de actividades culturales gratuitas que se desarrollarán durante todo el mes. El objetivo es acercar propuestas artísticas de calidad a la comunidad y promover el acceso a la cultura en todas sus expresiones. Próximamente se darán a conocer las fechas de nuevas presentaciones.
 
 RESPUESTA:
-Devolver ÚNICAMENTE el artículo. Sin explicaciones.`
+Devolver ÚNICAMENTE el artículo expandido. Sin explicaciones.`
 
     const result = await generateContent(prompt, {
       maxRetries: 3,
@@ -960,7 +968,7 @@ Devolver ÚNICAMENTE el artículo. Sin explicaciones.`
 
     // VALIDATE: Remove any emojis that slipped through
     processedText = processedText.replace(
-      /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+      /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu,
       '',
     )
 
@@ -984,12 +992,23 @@ Devolver ÚNICAMENTE el artículo. Sin explicaciones.`
     const wordCount = processedText
       .split(/\s+/)
       .filter((w) => w.length > 0).length
+    console.log(`✅ Generated social media article: ${wordCount} words`)
 
-    if (wordCount < 300 || wordCount > 500) {
+    // ✅ ADJUSTED VALIDATION: Lower minimum for social media (250 words instead of 300)
+    if (wordCount < 250) {
       console.warn(
-        `⚠️ Word count out of range: ${wordCount} words, using fallback...`,
+        `⚠️ Social media article too short: ${wordCount} words, using fallback...`,
       )
       return formatSocialMediaAsFallback(postText, sourceName, item)
+    }
+
+    if (wordCount > 600) {
+      console.warn(
+        `⚠️ Social media article too long: ${wordCount} words, trimming...`,
+      )
+      // Trim to approximately 500 words
+      const words = processedText.split(/\s+/)
+      processedText = words.slice(0, 500).join(' ')
     }
 
     return postProcessText(processedText)
@@ -1000,7 +1019,7 @@ Devolver ÚNICAMENTE el artículo. Sin explicaciones.`
 }
 
 /**
- * Fallback for social media content
+ * Fallback for social media content - IMPROVED to generate longer articles
  */
 function formatSocialMediaAsFallback(postText, sourceName, item) {
   try {
@@ -1012,44 +1031,70 @@ function formatSocialMediaAsFallback(postText, sourceName, item) {
       )
       .replace(/[#@]/g, '')
       .replace(/https?:\/\/[^\s]+/g, '')
-      .replace(/[\uFE00-\uFE0F]/g, '') // Remove variation selectors
-      .replace(/[\u200D]/g, '') // Remove zero-width joiners
+      .replace(/[\uFE00-\uFE0F]/g, '')
+      .replace(/[\u200D]/g, '')
       .trim()
 
-    const author = item.authors?.[0]?.name || sourceName
+    const author = item.authors?.[0]?.name || 'la institución local'
+    const date = item.date_published
+      ? new Date(item.date_published).toLocaleDateString('es-AR', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      : 'próximamente'
 
     let article = ''
     const sentences = cleanText
       .split(/[.!?]+/)
-      .filter((s) => s.trim().length > 15)
+      .filter((s) => s.trim().length > 10)
 
     if (sentences.length === 0) {
-      return `Se informó sobre una actividad que generó interés en la comunidad. Los detalles de la convocatoria fueron dados a conocer por las autoridades correspondientes. La información se encuentra disponible para el público interesado.`
+      // Generic fallback when no content
+      return `Se informó sobre una nueva actividad programada por ${author}. La convocatoria está dirigida al público en general y se realizará durante ${date}. Los interesados podrán obtener más información a través de los canales oficiales de comunicación. La actividad forma parte de las iniciativas que se desarrollan regularmente en la comunidad. Se espera una importante participación del público local. Los organizadores destacaron la relevancia de la propuesta para la comunidad.`
     }
 
-    // NEVER mention the source platform
+    // ✅ IMPROVED: Create a more substantial article from limited content
+
+    // Paragraph 1: Main announcement
+    article += `Se anunció la realización de una nueva actividad organizada por ${author}. `
     article += `${sentences[0].trim()}. `
     if (sentences.length > 1) {
       article += `${sentences[1].trim()}.\n\n`
     } else {
-      article += `La información fue confirmada por las autoridades.\n\n`
+      article += `La información fue confirmada durante la jornada del ${date}.\n\n`
     }
 
-    // NO mentions of "publicó en Facebook" or similar
-    article += `Los detalles fueron confirmados durante la jornada. La convocatoria alcanzó difusión entre los interesados en la temática.\n\n`
-
+    // Paragraph 2: Details and context
+    article += `La convocatoria está dirigida al público en general e incluye detalles específicos sobre la actividad programada. `
     if (sentences.length > 2) {
       article += `${sentences[2].trim()}. `
-      if (sentences.length > 3) {
-        article += `${sentences[3].trim()}.\n\n`
-      }
     }
+    article += `Los organizadores destacaron la importancia de esta iniciativa para la comunidad local. `
+    article += `La propuesta forma parte de las actividades regulares que se desarrollan en el ámbito municipal.\n\n`
 
+    // Paragraph 3: Additional information
+    if (sentences.length > 3) {
+      article += `${sentences[3].trim()}. `
+    }
+    article += `Las autoridades informaron que se esperan detalles adicionales en los próximos días. `
+    article += `La actividad cuenta con el apoyo de distintas áreas del municipio y organizaciones locales. `
     if (sentences.length > 4) {
-      article += `${sentences[4].trim().replace(/^(según|se informó que|se indicó que)/i, 'Además,')}. `
+      article += `${sentences[4].trim()}.\n\n`
+    } else {
+      article += `Los interesados pueden consultar por más información a través de los canales oficiales.\n\n`
     }
 
-    article += `La información está disponible para consultas del público interesado.`
+    // Paragraph 4: Participation and access
+    article += `El acceso a la actividad estará disponible para todos los vecinos de la localidad. `
+    article += `Se recomienda consultar los horarios y requisitos específicos con anticipación. `
+    article += `Los organizadores indicaron que se brindarán facilidades para garantizar la participación del mayor número posible de personas.\n\n`
+
+    // Paragraph 5: Context and importance
+    article += `Este tipo de iniciativas buscan promover la participación ciudadana y fortalecer los vínculos comunitarios. `
+    article += `Las autoridades destacaron el compromiso con la realización de actividades que beneficien a la población. `
+    article += `La información completa está disponible para consultas del público interesado en los canales oficiales de comunicación.`
 
     // Final emoji cleanup
     article = article.replace(
@@ -1060,7 +1105,7 @@ function formatSocialMediaAsFallback(postText, sourceName, item) {
     return article
   } catch (error) {
     console.error('Error in social media fallback formatting:', error.message)
-    return `Se informó sobre una actividad programada. Los detalles fueron dados a conocer por las autoridades. La información está disponible para el público.`
+    return `Se informó sobre una actividad programada por la institución local. Los detalles fueron dados a conocer durante la jornada. La convocatoria está dirigida al público en general. Los interesados pueden consultar por más información a través de los canales oficiales. La actividad forma parte de las iniciativas regulares que se desarrollan en la comunidad. Se espera una importante participación del público. Los organizadores destacaron la relevancia de la propuesta.`
   }
 }
 
@@ -1079,6 +1124,9 @@ ${postText.substring(0, 2000)}
 Generar JSON con 3 campos:
 
 1. title: Título periodístico (max 80 chars)
+   - **SENTENCE CASE**: Solo primera letra en mayúscula, resto en minúscula (excepto nombres propios)
+   - Ejemplo correcto: "El municipio anunció nuevas actividades culturales"
+   - Ejemplo INCORRECTO: "El Municipio Anunció Nuevas Actividades Culturales"
    - NO mencionar red social
    - NO usar emojis ni hashtags
    - Convertir el post en título formal
@@ -1089,6 +1137,7 @@ Generar JSON con 3 campos:
    - NO usar emojis
 
 3. volanta: Categoría (max 4 palabras)
+   - **SENTENCE CASE**: Solo primera letra en mayúscula
    - Ejemplos: "Cultura y espectáculos", "Actividades municipales", "Convocatorias"
 
 PROHIBIDO mencionar: Facebook, Instagram, Twitter, YouTube, redes sociales
@@ -1132,25 +1181,31 @@ Responder SOLO con JSON:
       throw new Error('Missing required fields')
     }
 
-    // Remove emojis from all fields
-    parsed.title = parsed.title
-      .replace(
-        /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
-        '',
-      )
-      .trim()
+    // ✅ FORCE SENTENCE CASE - Remove all emojis and fix capitalization
+    parsed.title = toSentenceCase(
+      parsed.title
+        .replace(
+          /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+          '',
+        )
+        .trim(),
+    )
+
     parsed.bajada = parsed.bajada
       .replace(
         /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
         '',
       )
       .trim()
-    parsed.volanta = parsed.volanta
-      .replace(
-        /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
-        '',
-      )
-      .trim()
+
+    parsed.volanta = toSentenceCase(
+      parsed.volanta
+        .replace(
+          /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+          '',
+        )
+        .trim(),
+    )
 
     if (parsed.title.length > 80) {
       parsed.title = parsed.title.substring(0, 77) + '...'
@@ -1170,7 +1225,7 @@ Responder SOLO con JSON:
 }
 
 /**
- * Fallback metadata (NO source mentions)
+ * Fallback metadata (NO source mentions) - SENTENCE CASE
  */
 function generateFallbackSocialMetadata(postText, sourceName, item) {
   const cleanText = postText
@@ -1180,14 +1235,43 @@ function generateFallbackSocialMetadata(postText, sourceName, item) {
     )
     .replace(/[#@]/g, '')
     .trim()
-  const firstSentence = cleanText.split(/[.!?]/)[0] || cleanText
-  const title = firstSentence.substring(0, 80)
-  const bajada = `Se informó sobre ${cleanText.substring(0, 150)}`
+
+  const sentences = cleanText
+    .split(/[.!?]+/)
+    .filter((s) => s.trim().length > 20)
+
+  // ✅ APPLY SENTENCE CASE
+  const rawTitle = sentences[0]?.substring(0, 80) || 'Actividad municipal'
+  const title = toSentenceCase(rawTitle)
+
+  let bajada = ''
+  if (sentences.length > 1) {
+    bajada = sentences.slice(1, 3).join('. ').trim()
+  } else {
+    bajada = cleanText.substring(0, 200)
+  }
+
+  bajada = bajada
+    .replace(/^(Se informó|Se anunció|Según|De acuerdo)[^.]*\.\s*/i, '')
+    .trim()
+
+  let volanta = 'Actividades'
+  const lowerText = cleanText.toLowerCase()
+
+  if (lowerText.match(/\b(evento|festival|show|espectáculo|presentación)\b/)) {
+    volanta = 'Eventos locales'
+  } else if (lowerText.match(/\b(taller|curso|capacitación|inscripción)\b/)) {
+    volanta = 'Educación'
+  } else if (lowerText.match(/\b(deporte|torneo|campeón|competencia)\b/)) {
+    volanta = 'Deportes'
+  } else if (lowerText.match(/\b(cultura|arte|museo|biblioteca)\b/)) {
+    volanta = 'Cultura'
+  }
 
   return {
-    title: title || 'Información municipal',
+    title: title,
     bajada: bajada.substring(0, 250),
-    volanta: 'Actividades locales',
+    volanta: volanta,
   }
 }
 
@@ -2240,7 +2324,7 @@ function generateFallbackSocialText(metadata, tags) {
       emojis += ' 💰'
     } else if (
       lowerTitle.includes('polít') ||
-      lowerTitle.includes('gobiern') ||
+      lowerTitle.includes('gobierno') ||
       lowerTitle.includes('presiden')
     ) {
       emojis += ' 🏛️'
