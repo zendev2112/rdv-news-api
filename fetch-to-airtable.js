@@ -543,6 +543,53 @@ function generateFallbackMetadata(extractedText) {
 }
 
 /**
+ * Convert text to sentence case (first letter uppercase, rest lowercase except proper nouns)
+ */
+function toSentenceCase(text) {
+  if (!text) return ''
+
+  const properNouns = [
+    'Argentina',
+    'Buenos Aires',
+    'Coronel Suárez',
+    'Huanguelén',
+    'Facebook',
+    'Instagram',
+    'Twitter',
+    'YouTube',
+    'COVID',
+    'AFA',
+    'FIFA',
+    'NBA',
+    'ATP',
+    'WTA',
+  ]
+
+  const words = text.trim().split(/\s+/)
+
+  const result = words.map((word, index) => {
+    const isProperNoun = properNouns.some(
+      (noun) => word.toLowerCase() === noun.toLowerCase(),
+    )
+
+    if (isProperNoun) {
+      return (
+        properNouns.find((noun) => word.toLowerCase() === noun.toLowerCase()) ||
+        word
+      )
+    }
+
+    if (index === 0) {
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    }
+
+    return word.toLowerCase()
+  })
+
+  return result.join(' ')
+}
+
+/**
  * Fallback metadata (NO source mentions) - IMPROVED
  */
 function generateFallbackSocialMetadata(postText, sourceName, item) {
@@ -1221,57 +1268,6 @@ Responder SOLO con JSON:
   } catch (error) {
     console.error('Error generating social media metadata:', error.message)
     return generateFallbackSocialMetadata(postText, sourceName, item)
-  }
-}
-
-/**
- * Fallback metadata (NO source mentions) - SENTENCE CASE
- */
-function generateFallbackSocialMetadata(postText, sourceName, item) {
-  const cleanText = postText
-    .replace(
-      /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
-      '',
-    )
-    .replace(/[#@]/g, '')
-    .trim()
-
-  const sentences = cleanText
-    .split(/[.!?]+/)
-    .filter((s) => s.trim().length > 20)
-
-  // ✅ APPLY SENTENCE CASE
-  const rawTitle = sentences[0]?.substring(0, 80) || 'Actividad municipal'
-  const title = toSentenceCase(rawTitle)
-
-  let bajada = ''
-  if (sentences.length > 1) {
-    bajada = sentences.slice(1, 3).join('. ').trim()
-  } else {
-    bajada = cleanText.substring(0, 200)
-  }
-
-  bajada = bajada
-    .replace(/^(Se informó|Se anunció|Según|De acuerdo)[^.]*\.\s*/i, '')
-    .trim()
-
-  let volanta = 'Actividades'
-  const lowerText = cleanText.toLowerCase()
-
-  if (lowerText.match(/\b(evento|festival|show|espectáculo|presentación)\b/)) {
-    volanta = 'Eventos locales'
-  } else if (lowerText.match(/\b(taller|curso|capacitación|inscripción)\b/)) {
-    volanta = 'Educación'
-  } else if (lowerText.match(/\b(deporte|torneo|campeón|competencia)\b/)) {
-    volanta = 'Deportes'
-  } else if (lowerText.match(/\b(cultura|arte|museo|biblioteca)\b/)) {
-    volanta = 'Cultura'
-  }
-
-  return {
-    title: title,
-    bajada: bajada.substring(0, 250),
-    volanta: volanta,
   }
 }
 
