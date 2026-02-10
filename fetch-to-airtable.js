@@ -758,6 +758,51 @@ Responder ÚNICAMENTE con el JSON, sin explicaciones, sin bloques de código, si
 }
 
 /**
+ * Format text as fallback when AI generation fails
+ */
+function formatTextAsFallback(text, imageMarkdown = '') {
+  if (!text) return ''
+
+  // Clean and normalize the text
+  let formatted = text
+    .trim()
+    // Remove excessive whitespace
+    .replace(/\s+/g, ' ')
+    // Fix paragraph breaks
+    .replace(/\. /g, '.\n\n')
+    // Remove any markdown that might have slipped through
+    .replace(/[#*_`]/g, '')
+    // Remove image syntax
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    // Normalize quotes
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
+
+  // Split into paragraphs
+  const paragraphs = formatted
+    .split(/\n+/)
+    .filter((p) => p.trim().length > 20)
+    .map((p) => p.trim())
+
+  // Ensure each paragraph ends with proper punctuation
+  const cleanParagraphs = paragraphs.map((p) => {
+    if (!/[.!?]$/.test(p)) {
+      return p + '.'
+    }
+    return p
+  })
+
+  // Add image markdown if provided
+  let finalText = cleanParagraphs.join('\n\n')
+
+  if (imageMarkdown) {
+    finalText = imageMarkdown + '\n\n' + finalText
+  }
+
+  return finalText
+}
+
+/**
  * Reelaborates article text using AI with fallback mechanism
  */
 async function reelaborateText(
