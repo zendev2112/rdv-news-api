@@ -1599,7 +1599,8 @@ async function processSection(section) {
     section.id === 'instituciones' ||
     section.id === 'local-facebook' ||
     section.id === 'huanguelen' ||
-    section.id === 'pueblos-alemanes'
+    section.id === 'pueblos-alemanes' ||
+    section.id === 'la-sexta'
   ) {
     console.log(`Processing ${section.name} as social media content...`)
 
