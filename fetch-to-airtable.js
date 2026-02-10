@@ -151,11 +151,11 @@ console.log(
 )
 const GEMINI_MODEL =
   config?.gemini?.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash'
-const BATCH_SIZE = 2 // Reduced from 3 to 2
-const FEED_SIZE = 50 // Original feed size
-const API_DELAY = 3000 // 3 seconds delay between API calls
-const BATCH_DELAY = 15000 // 15 seconds delay between batches
-const SECTION_DELAY = 30000 // 30 seconds delay between sections
+const BATCH_SIZE = 1 // ✅ REDUCED from 2 to 1 - process ONE at a time
+const FEED_SIZE = 50
+const API_DELAY = 6000 // ✅ INCREASED from 3000 to 5000ms
+const BATCH_DELAY = 20000 // ✅ INCREASED from 15000 to 20000ms
+const SECTION_DELAY = 30000
 
 // State directory to manage processing between runs
 const STATE_DIR = path.join(__dirname, '.state')
