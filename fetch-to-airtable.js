@@ -1747,52 +1747,30 @@ async function processSection(section) {
             excerpt: metadata.bajada,
             source: sourceName,
             imgUrl: imageUrl || '',
-            article: reelaboratedArticle, // Use reelaborated article
+            article: reelaboratedArticle,
             overline: metadata.volanta,
             author: item.authors?.[0]?.name || '',
             status: 'draft',
-            processingStatus: 'completed', // Mark as completed since we have the full text already
+            processingStatus: 'completed',
             postDate: item.date_published || '',
             postDateFormatted: pubDate,
-            // Add this line to create proper image attachments:
             image: imageUrl ? [{ url: imageUrl }] : [],
           }
-          /* 
-          // Generate tags and social media text for social media content
+
+          // ✅ ADD TAG GENERATION FOR SOCIAL MEDIA
           try {
-            // For social media, use a simpler approach focused on the source and text
-            const socialText = `${item.title || ''} ${postText}`
-            const socialMetadata = {
-              title: item.title || `Publicación de ${sourceName}`,
-              bajada: postText.substring(0, 200),
-              sourceName: sourceName,
-            }
-
-            // Generate tags
-            const tags = await generateTags(socialText, socialMetadata)
-            console.log(`Generated tags for social media item`)
+            console.log(`Generating tags for social media item: ${itemUrl}`)
+            const socialText = `${metadata.title} ${metadata.bajada} ${reelaboratedArticle}`
+            const tags = await generateTags(socialText, metadata)
+            console.log(`Generated tags: ${tags}`)
             recordFields.tags = tags
-
-            // Generate social media text
-            const socialMediaText = await generateSocialMediaText(
-              socialText,
-              socialMetadata,
-              tags
-            )
-            console.log(
-              `Generated social media text: ${socialMediaText.length} chars`
-            )
-            recordFields.socialMediaText = socialMediaText
           } catch (genError) {
-            console.error(
-              `Error generating tags/social text: ${genError.message}`
+            console.error(`Error generating tags: ${genError.message}`)
+            recordFields.tags = generateFallbackTags(
+              reelaboratedArticle,
+              metadata,
             )
-            recordFields.tags = sourceName
-            recordFields.socialMediaText = `📱 Nueva publicación de ${sourceName} #${sourceName.replace(
-              /\s+/g,
-              ''
-            )}`
-          } */
+          }
 
           // Add social media specific fields based on source type
           if (socialMediaType) {
