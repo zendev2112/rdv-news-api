@@ -1866,13 +1866,11 @@ async function processSection(section) {
       }
 
       console.log(`Completed processing ${section.name} content`)
-      return // Skip the regular article processing
     } catch (error) {
       console.error(`Error processing section ${section.name}:`, error.message)
     }
 
     // If we reach here, something went wrong with Instituciones processing
-    return
   }
 
   // Load state for this section
