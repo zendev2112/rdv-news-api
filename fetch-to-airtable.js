@@ -920,12 +920,12 @@ Devolver ÚNICAMENTE el texto reelaborado. Sin explicaciones. Sin comentarios. S
       .filter((w) => w.length > 0).length
     console.log(`✅ Generated text: ${wordCount} words`)
 
-    if (wordCount < 250 || wordCount > 600) {
+    /*     if (wordCount < 250 || wordCount > 600) {
       console.warn(
         `⚠️ Word count out of range: ${wordCount} words, using fallback...`,
       )
       return formatTextAsFallback(extractedText, imageMarkdown)
-    }
+    } */
 
     // Clean up forbidden phrases
     processedText = processedText
@@ -1087,12 +1087,12 @@ Devolver ÚNICAMENTE el artículo expandido. Sin explicaciones.`
     console.log(`✅ Generated social media article: ${wordCount} words`)
 
     // ✅ ADJUSTED VALIDATION: Lower minimum for social media (250 words instead of 300)
-    if (wordCount < 250) {
+    /*     if (wordCount < 250) {
       console.warn(
         `⚠️ Social media article too short: ${wordCount} words, using fallback...`,
       )
       return formatSocialMediaAsFallback(postText, sourceName, item)
-    }
+    } */
 
     if (wordCount > 600) {
       console.warn(
