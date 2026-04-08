@@ -543,35 +543,22 @@ async function generateMetadata(extractedText, maxRetries = 3) {
       throw new Error('Incomplete metadata structure')
     }
 
-    // Post-process: title — allow up to 90 chars, never truncate with "..."
-    // The AI targets 50-70 but we give headroom so nothing gets cropped
-    if (parsed.title.length > 90) {
-      const lastSpace = parsed.title.substring(0, 90).lastIndexOf(' ')
-      parsed.title =
-        lastSpace > 40
-          ? parsed.title.substring(0, lastSpace)
-          : parsed.title.substring(0, 90)
-    }
+    // Post-process: strip any markdown from plain-text fields
+    const stripMarkdown = (str) =>
+      str
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/__([^_]+)__/g, '$1')
+        .replace(/_([^_]+)_/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/^#+\s*/gm, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/ {2,}/g, ' ')
+        .trim()
 
-    // Post-process: ensure volanta doesn't exceed 4 words
-    const volantaWords = parsed.volanta.split(/\s+/)
-    if (volantaWords.length > 4) {
-      parsed.volanta = volantaWords.slice(0, 4).join(' ')
-    }
-
-    // Post-process: bajada — allow up to 200 chars, never truncate with "..."
-    if (parsed.bajada.length > 200) {
-      const lastPeriod = parsed.bajada.substring(0, 200).lastIndexOf('.')
-      if (lastPeriod > 100) {
-        parsed.bajada = parsed.bajada.substring(0, lastPeriod + 1)
-      } else {
-        const lastSpace = parsed.bajada.substring(0, 200).lastIndexOf(' ')
-        parsed.bajada =
-          lastSpace > 100
-            ? parsed.bajada.substring(0, lastSpace)
-            : parsed.bajada.substring(0, 200)
-      }
-    }
+    parsed.title = stripMarkdown(parsed.title)
+    parsed.bajada = stripMarkdown(parsed.bajada)
+    parsed.volanta = stripMarkdown(parsed.volanta)
 
     console.log('Successfully generated metadata')
     return parsed

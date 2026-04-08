@@ -463,9 +463,20 @@ async function generateAllContentElements(content, source) {
         .replace(/\s*```$/i, '')
         .trim()
       const parsed = JSON.parse(cleanJson)
-      if (parsed.title) title = parsed.title
-      if (parsed.volanta) overline = parsed.volanta
-      if (parsed.bajada) excerpt = parsed.bajada
+      const stripMarkdown = (str) =>
+        str
+          .replace(/\*\*([^*]+)\*\*/g, '$1')
+          .replace(/\*([^*]+)\*/g, '$1')
+          .replace(/__([^_]+)__/g, '$1')
+          .replace(/_([^_]+)_/g, '$1')
+          .replace(/`([^`]+)`/g, '$1')
+          .replace(/^#+\s*/gm, '')
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+          .replace(/ {2,}/g, ' ')
+          .trim()
+      if (parsed.title) title = stripMarkdown(parsed.title)
+      if (parsed.volanta) overline = stripMarkdown(parsed.volanta)
+      if (parsed.bajada) excerpt = stripMarkdown(parsed.bajada)
       console.log(`Generated metadata: "${title}" | "${overline}"`)
     } catch (parseError) {
       console.warn(

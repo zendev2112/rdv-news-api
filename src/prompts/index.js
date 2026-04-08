@@ -73,7 +73,7 @@ export function reelaborateSocialMedia(postText, item, sourceName) {
   const author = item.authors?.[0]?.name || sourceName || 'Institución local'
   const date = item.date_published || 'Reciente'
 
-  return `Sos un redactor SEO de un medio digital argentino llamado Radio del Volga. Transformá esta publicación de redes sociales en un artículo periodístico optimizado para buscadores.
+  return `Sos un redactor SEO de un medio digital argentino llamado Radio del Volga. Reescribí esta publicación como artículo periodístico. Tu única fuente es el texto a continuación — no agregues ni inventes nada.
 
 PUBLICACIÓN ORIGINAL:
 """
@@ -83,40 +83,33 @@ ${postText.substring(0, 3000)}
 FUENTE: ${author}
 FECHA: ${date}
 
-OBJETIVO: Convertir este post en un artículo periodístico SEO-friendly. NO inflés el contenido. Si el post tiene poca información, el artículo debe ser proporcionalmente breve.
+REGLA FUNDAMENTAL: El artículo solo puede contener información que esté explícitamente en la publicación original. Si la publicación tiene 3 datos, el artículo tiene 3 datos. Prohibido agregar contexto, antecedentes, proyecciones ni información externa.
 
-EXTENSIÓN ADAPTATIVA:
-- Post corto (anuncio simple, un dato): 150 a 200 palabras
-- Post con varios datos (evento, detalles, horarios): 200 a 350 palabras
-- Post extenso con mucha información: 350 a 450 palabras
-- REGLA: Cada oración debe aportar información nueva. CERO relleno.
+EXTENSIÓN:
+- Contá los datos concretos que tiene la publicación (fecha, lugar, quién, qué, requisitos, contacto, etc.)
+- Escribí exactamente esos datos, sin repetirlos ni expandirlos
+- Máximo 200 palabras salvo que la publicación original tenga mucho contenido
+- Mínimo: lo que haya. Si hay poco, el artículo es corto. No hay mínimo obligatorio.
 
-ESTRUCTURA SEO:
-- Párrafo 1 (LEAD SEO — máximo 2 oraciones): Qué se anunció/informó, quién, cuándo, dónde. Debe funcionar como snippet de Google.
-- EVENTOS Y FECHAS: Si el post menciona fechas, horarios, lugares o plazos, resaltá esa información con **negritas** en un párrafo dedicado cerca del inicio.
-- Párrafos centrales: Desarrollá los detalles disponibles. Un párrafo por aspecto. NO inventes información.
-- Párrafo final: Datos de contacto o consulta SOLO si aparecen en el post original. Si no hay, no cierres.
+ESTRUCTURA:
+- Párrafo 1: quién informó qué, cuándo y dónde (máximo 2 oraciones, debe funcionar como snippet de Google)
+- Si hay fechas, horarios o lugares: resaltarlos con **negritas** en un párrafo propio
+- Si hay requisitos, pasos o ítems: usar lista con viñetas (- item)
+- Si hay datos de contacto o inscripción en el original: incluirlos al final
+- Si no hay más datos: terminar. No agregar párrafo de cierre genérico.
 
-FORMATO Y ESTRUCTURA VISUAL:
-- Usá subtítulos (##) para separar secciones cuando el artículo tiene más de 200 palabras
-- Usá listas con viñetas (- item) para enumeraciones de datos concretos: requisitos, horarios, participantes, etc.
-- Párrafos de 2-3 oraciones
-- Oraciones de máximo 20 palabras
+FORMATO:
+- Subtítulos (##) solo si el artículo supera 200 palabras y tiene secciones claramente diferenciadas
+- **Negritas** en fechas, horarios, nombres propios y lugares clave
 - PROHIBIDO: tablas, emojis, hashtags
-- **Negritas** en fechas, horarios, lugares, nombres propios clave (4-6 veces)
-- *Cursivas* solo para énfasis puntual (1-2 veces)
-
-REGLAS:
-- NO mencionar "Facebook", "Instagram", "Twitter", "redes sociales"
-- NO usar frases como "según publicó en", "compartió en su cuenta"
-- NO usar frases vacías ni de cierre genérico
-- NUNCA inventar cifras, teléfonos, direcciones o datos que no estén en el post
 
 ESTILO:
-- Informativo, directo, español rioplatense formal, en tercera persona
-- PROHIBIDO dirigirse al lector con imperativos o segunda persona: NO usar "disfrutá", "conocé", "no te pierdas", "enterate", "descubrí", "hacé", "animate", "mirá", "andá", "visitá", "aprovechá", "recordá", "tené en cuenta"
+- Español rioplatense formal, tercera persona, voz activa
+- NO mencionar Facebook, Instagram, Twitter, redes sociales, ni frases como "según publicó"
+- NO usar frases vacías: "cabe destacar", "en este contexto", "es importante mencionar", "en resumen"
+- PROHIBIDO segunda persona o imperativos: "disfrutá", "conocé", "no te pierdas", "enterate", "mirá", "aprovechá"
 
-RESPUESTA: Devolver ÚNICAMENTE el artículo. Sin explicaciones, sin bloques de código.`
+RESPUESTA: Solo el artículo. Sin explicaciones, sin bloques de código.`
 }
 
 /**
