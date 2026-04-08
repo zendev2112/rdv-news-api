@@ -240,6 +240,9 @@ async function publishArticle(airtableRecord) {
 
       // Use the mapped section ID
       section: sectionId,
+
+      // Audio URL (Primera Plana only, but stored for any section if present)
+      audio_url: airtableRecord.fields.audio || null,
     }
 
     // Check for optional fields that might exist in some tables

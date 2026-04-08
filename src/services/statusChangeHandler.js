@@ -5,7 +5,7 @@ import config from '../config/index.js'
 
 /**
  * Generate an SEO slug from the article title + current date.
- * Example: "Coronel Suárez lanza nuevo plan de obras" → "coronel-suarez-lanza-nuevo-plan-de-obras-2026-04-08"
+ * Example: "Coronel Suárez lanza nuevo plan de obras" → "coronel-suarez-lanza-nuevo-plan-de-obras-08-04-2026"
  */
 function generateSeoSlug(title) {
   if (!title || typeof title !== 'string') {
@@ -29,9 +29,9 @@ function generateSeoSlug(title) {
     slug = slug.substring(0, cut > 40 ? cut : 80)
   }
 
-  // Append current date YYYY-MM-DD
+  // Append current date DD-MM-YYYY (Latam format)
   const now = new Date()
-  const dateSuffix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const dateSuffix = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`
 
   return `${slug || 'articulo'}-${dateSuffix}`
 }

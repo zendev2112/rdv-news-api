@@ -1238,6 +1238,11 @@ async function processArticle(item, sectionId) {
       tags: tags,
     }
 
+    // Primera Plana: include audio field (single line text URL, filled manually in Airtable)
+    if (sectionId === 'primera-plana') {
+      recordFields.audio = ''
+    }
+
     // Social media items: set the specific social type field to the URL
     if (socialMediaType && itemUrl) {
       recordFields[socialMediaType] = itemUrl
