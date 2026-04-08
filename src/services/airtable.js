@@ -185,9 +185,11 @@ async function insertRecords(records, sectionId = 'test') {
 
         console.log(`Setting section to "${sectionValue}" for article`)
         record.fields.section = sectionValue
-      } else if (!record.fields.section && !shouldAddSectionField(sectionId)) {
+      } else if (!shouldAddSectionField(sectionId)) {
+        // This table doesn't support a section field — remove it if present
+        delete record.fields.section
         console.log(
-          `Skipping section field for ${sectionId} table as it doesn't need one`,
+          `Removing section field for ${sectionId} table as it doesn't need one`,
         )
       }
 
