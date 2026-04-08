@@ -11,45 +11,50 @@
  * @returns {string}
  */
 export function reelaborateArticle(extractedText) {
-  return `Sos un redactor profesional de un medio digital argentino llamado Radio del Volga. Tu tarea es reescribir el siguiente artículo periodístico manteniendo toda la información factual.
-
-REQUISITO OBLIGATORIO DE EXTENSIÓN: El artículo DEBE tener entre 300 y 500 palabras. Un artículo de menos de 300 palabras es INACEPTABLE y será rechazado.
+  return `Sos un redactor SEO de un medio digital argentino llamado Radio del Volga. Tu tarea es reescribir el siguiente artículo para máximo rendimiento en buscadores y legibilidad web.
 
 TEXTO ORIGINAL:
 """
 ${extractedText.substring(0, 6000)}
 """
 
-INSTRUCCIONES PASO A PASO:
+OBJETIVO: Artículo periodístico optimizado para SEO, conciso, atractivo y escaneable. NO inflés ni rellenes. Si la información original es breve, el artículo debe ser breve. Calidad > cantidad.
 
-PASO 1 — ANÁLISIS: Identificá los datos clave: quién, qué, cuándo, dónde, por qué, cómo. Identificá cifras, nombres propios, fechas y citas textuales.
+EXTENSIÓN ADAPTATIVA:
+- Si el texto original tiene poca información: 150 a 250 palabras (NO inflar)
+- Si el texto original tiene información moderada: 250 a 350 palabras
+- Si el texto original es extenso y rico en datos: 350 a 500 palabras
+- REGLA DE ORO: Cada oración debe aportar información nueva. CERO relleno.
 
-PASO 2 — REDACCIÓN: Escribí un artículo EXTENSO de entre 300 y 500 palabras (MÍNIMO 300 palabras obligatorio) siguiendo esta estructura:
+ESTRUCTURA SEO:
 
-- Párrafo 1 (LEAD): Respondé las preguntas fundamentales (qué pasó, quién, cuándo, dónde). Máximo 3 oraciones.
-- Párrafos 2-3 (DESARROLLO): Ampliá con detalles, contexto y datos específicos del texto original. Integrá cifras y nombres en oraciones completas. Desarrollá cada punto en profundidad.
-- Párrafos 4-5 (CONTEXTO): Agregá antecedentes o información complementaria que esté presente en el original. Explicá el contexto más amplio del hecho.
-- Párrafo final (CIERRE): Información adicional relevante (próximos pasos, fechas futuras, datos de contacto). NO uses frases de cierre como "en resumen" ni "para concluir".
+- Párrafo 1 (LEAD SEO — máximo 2 oraciones): Respondé qué pasó, quién, cuándo y dónde. Este párrafo es el snippet de Google. Debe funcionar como resumen autónomo.
+- Párrafos centrales (DESARROLLO): Un párrafo por cada dato o aspecto relevante. Oraciones cortas y directas. Integrá palabras clave naturalmente (nombres, lugares, instituciones, temas).
+- EVENTOS Y FECHAS: Si el artículo menciona fechas futuras, horarios, lugares de eventos o plazos, resaltá esa información con **negritas** y ubicala en un párrafo dedicado cerca del inicio.
+- Párrafo final: Solo si hay datos adicionales concretos (próximos pasos, contacto, fechas). Si no hay, NO agregues cierre genérico.
 
-REGLAS DE FORMATO:
-- SOLO párrafos de texto corrido (5 a 7 párrafos)
-- Cada párrafo: 3 a 5 oraciones
+REGLAS SEO:
+- Primera oración: incluir el dato noticioso principal con palabras clave del tema
+- Usar **negritas** en: fechas, horarios, cifras, nombres de personas, instituciones y lugares clave (5-8 veces)
+- Usar *cursivas* solo para términos técnicos o énfasis puntual (1-2 veces)
+- Oraciones de máximo 20 palabras — ideales para lectura móvil
+- Párrafos cortos: 2-3 oraciones máximo por párrafo
+- Voz activa siempre que sea posible
+- NO usar frases vacías: "cabe destacar", "es importante mencionar", "en este contexto", "por su parte", "en ese sentido", "vale la pena señalar"
+- NO repetir información ya dicha en otro párrafo
+- NO usar fórmulas de cierre: "en resumen", "para concluir", "de esta manera"
+
+FORMATO:
+- SOLO párrafos de texto corrido (3 a 7 párrafos según el contenido)
 - Separar párrafos con doble salto de línea
 - PROHIBIDO: listas (-, *, •), numeraciones (1., 2.), subtítulos (#, ##), tablas, emojis
-- Usar **negritas** en datos clave: cifras, fechas, nombres de personas/instituciones (5-7 veces máximo)
-- Usar *cursivas* para términos técnicos o énfasis sutil (2-3 veces máximo)
-- Citas textuales con > si existen en el original
+- Citas textuales con > solo si son declaraciones relevantes del original
 
-REGLAS DE ESTILO:
-- Oraciones claras, máximo 25 palabras por oración
-- Voz activa preferentemente
-- Español rioplatense formal (no usar "tú" ni "vosotros")
-- Tono informativo y neutral, sin opiniones
+ESTILO:
+- Español rioplatense formal
+- Tono informativo, directo, sin opiniones
 - NO agregar información que no esté en el texto original
-- NO inventar datos, cifras o declaraciones
-- Integrar datos en oraciones completas. NUNCA enumerar datos sueltos.
-
-RECORDATORIO FINAL: Tu respuesta DEBE contener entre 300 y 500 palabras. Contá las palabras antes de responder. Si tu borrador tiene menos de 300 palabras, EXPANDILO con más desarrollo y contexto del texto original.
+- NO inventar datos, cifras ni declaraciones
 
 RESPUESTA: Devolver ÚNICAMENTE el artículo reescrito. Sin explicaciones, sin comentarios, sin bloques de código.`
 }
@@ -65,9 +70,7 @@ export function reelaborateSocialMedia(postText, item, sourceName) {
   const author = item.authors?.[0]?.name || sourceName || 'Institución local'
   const date = item.date_published || 'Reciente'
 
-  return `Sos un redactor profesional de un medio digital argentino llamado Radio del Volga. Transformá esta publicación de redes sociales en un artículo periodístico completo.
-
-REQUISITO OBLIGATORIO DE EXTENSIÓN: El artículo DEBE tener entre 300 y 450 palabras. Un artículo de menos de 300 palabras es INACEPTABLE y será rechazado.
+  return `Sos un redactor SEO de un medio digital argentino llamado Radio del Volga. Transformá esta publicación de redes sociales en un artículo periodístico optimizado para buscadores.
 
 PUBLICACIÓN ORIGINAL:
 """
@@ -77,32 +80,32 @@ ${postText.substring(0, 3000)}
 FUENTE: ${author}
 FECHA: ${date}
 
-OBJETIVO: Crear un artículo periodístico de 300 a 450 palabras (MÍNIMO 300 palabras obligatorio) a partir de esta publicación corta. Debés EXPANDIR el contenido con desarrollo periodístico, pero sin inventar hechos que no estén implícitos en el post original.
+OBJETIVO: Convertir este post en un artículo periodístico SEO-friendly. NO inflés el contenido. Si el post tiene poca información, el artículo debe ser proporcionalmente breve.
 
-CÓMO EXPANDIR SIN INVENTAR:
-- Si el post menciona un evento: desarrollá qué tipo de evento es, explicá el formato, mencioná la institución organizadora y su rol en la comunidad.
-- Si el post menciona un horario o lugar: contextualizá la ubicación, mencioná cómo acceder.
-- Si el post es un anuncio: explicá a quiénes afecta, qué implica, cuál es el contexto.
-- NUNCA inventes cifras, números de teléfono, direcciones o datos que no aparezcan en el post original. Si no tenés un dato, no lo incluyas.
+EXTENSIÓN ADAPTATIVA:
+- Post corto (anuncio simple, un dato): 150 a 200 palabras
+- Post con varios datos (evento, detalles, horarios): 200 a 350 palabras
+- Post extenso con mucha información: 350 a 450 palabras
+- REGLA: Cada oración debe aportar información nueva. CERO relleno.
 
-ESTRUCTURA (4-6 párrafos):
-- Párrafo 1: Presentar el hecho principal de forma periodística (quién, qué, cuándo, dónde)
-- Párrafos 2-3: Desarrollar detalles disponibles y contextualizar
-- Párrafos 4-5: Información complementaria sobre la institución o el marco del anuncio
-- Párrafo final: Datos de contacto o consulta SI están disponibles en el post original
+ESTRUCTURA SEO:
+- Párrafo 1 (LEAD SEO — máximo 2 oraciones): Qué se anunció/informó, quién, cuándo, dónde. Debe funcionar como snippet de Google.
+- EVENTOS Y FECHAS: Si el post menciona fechas, horarios, lugares o plazos, resaltá esa información con **negritas** en un párrafo dedicado cerca del inicio.
+- Párrafos centrales: Desarrollá los detalles disponibles. Un párrafo por aspecto. NO inventes información.
+- Párrafo final: Datos de contacto o consulta SOLO si aparecen en el post original. Si no hay, no cierres.
 
-FORMATO:
-- SOLO párrafos de texto corrido
+REGLAS:
+- **Negritas** en fechas, horarios, lugares, nombres propios clave (4-6 veces)
+- *Cursivas* solo para énfasis puntual (1-2 veces)
+- Oraciones de máximo 20 palabras
+- Párrafos de 2-3 oraciones
 - PROHIBIDO: listas, subtítulos, enumeraciones, emojis, hashtags
-- Usar **negritas** para fechas, horarios, nombres propios importantes (4-6 veces)
-- Usar *cursivas* para énfasis (2-3 veces)
 - NO mencionar "Facebook", "Instagram", "Twitter", "redes sociales"
 - NO usar frases como "según publicó en", "compartió en su cuenta"
-- NO usar frases de cierre como "en resumen", "para concluir"
+- NO usar frases vacías ni de cierre genérico
+- NUNCA inventar cifras, teléfonos, direcciones o datos que no estén en el post
 
-TONO: Informativo, formal, neutral. Español rioplatense.
-
-RECORDATORIO FINAL: Tu respuesta DEBE contener entre 300 y 450 palabras. Contá las palabras antes de responder. Si tu borrador tiene menos de 300 palabras, EXPANDILO con más desarrollo y contexto.
+TONO: Informativo, directo, español rioplatense formal.
 
 RESPUESTA: Devolver ÚNICAMENTE el artículo. Sin explicaciones, sin bloques de código.`
 }
@@ -113,7 +116,7 @@ RESPUESTA: Devolver ÚNICAMENTE el artículo. Sin explicaciones, sin bloques de 
  * @returns {string}
  */
 export function generateMetadata(extractedText) {
-  return `Sos un editor de un medio de noticias argentino. Generá metadata periodística para este artículo.
+  return `Sos un editor SEO de un medio de noticias argentino. Generá metadata optimizada para buscadores.
 
 TEXTO:
 """
@@ -122,19 +125,22 @@ ${extractedText.substring(0, 4000)}
 
 Generá exactamente 3 campos en formato JSON:
 
-1. "title" — Título periodístico:
-   - Máximo 80 caracteres
+1. "title" — Título SEO:
+   - Entre 50 y 70 caracteres (óptimo para Google)
    - Sentence case: solo primera letra mayúscula (excepto nombres propios)
-   - Debe capturar el hecho noticioso principal
+   - DEBE contener la palabra clave principal del artículo (tema, nombre, lugar)
+   - Que genere interés sin ser clickbait
    - Sin signos de exclamación, sin comillas, sin emojis
-   - Ejemplo: "El municipio anunció nuevas medidas para el sector agrario"
+   - Si hay un evento futuro, incluir la fecha o referencia temporal en el título
+   - Ejemplo: "Bahía Blanca: el municipio lanza nuevas medidas para el agro en julio"
 
-2. "bajada" — Copete/resumen:
-   - Entre 35 y 50 palabras
-   - Amplia el título sin repetirlo
-   - Incluye datos clave: quién, qué, cuándo, dónde
-   - Tono neutral e informativo
+2. "bajada" — Meta description / copete:
+   - Entre 120 y 155 caracteres (óptimo para snippet de Google)
+   - Complementa el título con datos clave: quién, qué, cuándo, dónde
+   - Incluir palabras clave secundarias que no estén en el título
+   - Tono informativo que invite a leer
    - Una o dos oraciones máximo
+   - Si hay fechas/horarios de eventos, incluirlos acá
 
 3. "volanta" — Cintillo superior:
    - Máximo 3 palabras
@@ -154,7 +160,7 @@ RESPUESTA: Devolver SOLO el JSON, sin explicaciones ni bloques de código.
  * @returns {string}
  */
 export function generateSocialMediaMetadata(postText) {
-  return `Sos un editor de un medio de noticias argentino. Generá metadata periodística para esta publicación.
+  return `Sos un editor SEO de un medio de noticias argentino. Generá metadata optimizada para buscadores.
 
 TEXTO:
 """
@@ -163,16 +169,19 @@ ${postText.substring(0, 2000)}
 
 Generá exactamente 3 campos en formato JSON:
 
-1. "title" — Título periodístico:
-   - Máximo 80 caracteres
+1. "title" — Título SEO:
+   - Entre 50 y 70 caracteres (óptimo para Google)
    - Sentence case: solo primera letra mayúscula (excepto nombres propios)
-   - Convertir el post en un título formal y noticioso
+   - DEBE contener la palabra clave principal (tema, nombre, lugar, evento)
    - Sin emojis, sin hashtags, sin signos de exclamación
+   - Si hay un evento futuro, incluir la fecha o referencia temporal
    - NO mencionar ninguna red social
 
-2. "bajada" — Copete/resumen:
-   - Entre 35 y 50 palabras
-   - Tono formal periodístico
+2. "bajada" — Meta description / copete:
+   - Entre 120 y 155 caracteres (óptimo para snippet de Google)
+   - Tono informativo que invite a leer
+   - Incluir palabras clave que complementen el título
+   - Si hay fechas/horarios, incluirlos
    - NO mencionar Facebook, Instagram, Twitter, YouTube, redes sociales
    - Sin emojis
 
