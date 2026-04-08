@@ -176,6 +176,7 @@ const socialSections = [
   'local-facebook',
   'huanguelen',
   'pueblos-alemanes',
+  'la-sexta',
 ]
 for (const sid of socialSections) {
   test(
