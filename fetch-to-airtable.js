@@ -1279,8 +1279,24 @@ async function processSection(section) {
           // IMPROVED: Extract all content directly from the RSS feed item structure
           // This matches the expected format you provided
 
-          // Extract post text content from content_text field (primary source)
-          const postText = item.content_text || ''
+          // Extract post text content — prefer content_text, fall back to content_html
+          let postText = item.content_text || ''
+
+          // If content_text is short/empty but content_html exists, extract text from HTML
+          if ((!postText || postText.length < 100) && item.content_html) {
+            const htmlText = scraper.extractFromContentHtml(item.content_html)
+            if (htmlText && htmlText.length > postText.length) {
+              console.log(
+                `📝 Using content_html (${htmlText.length} chars) over content_text (${postText.length} chars)`,
+              )
+              postText = htmlText
+            }
+          }
+
+          // Last resort: try the summary or title fields
+          if (!postText || postText.length < 50) {
+            postText = item.summary || item.title || postText
+          }
 
           // Get image URL (primary source is the image field)
           let imageUrl = item.image || null

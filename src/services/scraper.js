@@ -6,7 +6,10 @@
  * - Retries with backoff
  * - Pre-cleaning HTML before Readability (remove ads, navs, sidebars)
  * - Targeted extraction for known Argentine news sites
- * - Fallback chain: Readability → targeted selectors → raw text
+ * - JSON-LD / structured data extraction (bypasses paywalls)
+ * - __NEXT_DATA__ extraction for Next.js sites (Infobae, etc.)
+ * - Google referrer to bypass metered paywalls
+ * - Fallback chain: JSON-LD → __NEXT_DATA__ → Readability → selectors → raw text
  */
 
 import axios from 'axios'
@@ -19,6 +22,13 @@ const USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
 ]
+
+/**
+ * Known paywall / JS-heavy sites that need special handling
+ */
+const PAYWALL_DOMAINS = ['clarin.com', 'lanacion.com.ar', 'pagina12.com.ar']
+
+const NEXTJS_DOMAINS = ['infobae.com']
 
 /**
  * Selectors to REMOVE before extraction — these pollute Readability results
@@ -78,6 +88,22 @@ const NOISE_SELECTORS = [
  * Selectors to try for main content extraction (in priority order)
  */
 const CONTENT_SELECTORS = [
+  // Infobae-specific
+  '.article-body-content',
+  '.article-story-content',
+  '[data-component="article-body"]',
+  // Clarin-specific
+  '.body-nota .content-nota',
+  '.body-nota',
+  '#nota-body-text',
+  '.nota-txt',
+  // La Nacion-specific
+  '#cuerpo',
+  '.com-nota .cuerpo',
+  // Pagina12-specific
+  '.article-main-content',
+  '.article-text',
+  // Generic news
   '[itemprop="articleBody"]',
   'article .entry-content',
   'article .post-content',
@@ -99,7 +125,8 @@ const CONTENT_SELECTORS = [
 ]
 
 /**
- * Fetch HTML content with retries and better headers
+ * Fetch HTML content with retries and better headers.
+ * Uses Google referrer for paywall sites.
  * @param {string} url - URL to fetch
  * @param {Object} options - { timeout, maxRetries }
  * @returns {Promise<string|null>}
@@ -107,6 +134,9 @@ const CONTENT_SELECTORS = [
 export async function fetchContent(url, options = {}) {
   const { timeout = 15000, maxRetries = 2 } = options
   const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
+
+  // Detect if this is a paywall site
+  const isPaywallSite = PAYWALL_DOMAINS.some((d) => url.includes(d))
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -121,6 +151,12 @@ export async function fetchContent(url, options = {}) {
           'Accept-Encoding': 'gzip, deflate',
           Connection: 'keep-alive',
           'Cache-Control': 'no-cache',
+          // Google referrer helps bypass metered paywalls
+          Referer: 'https://www.google.com/',
+          ...(isPaywallSite && {
+            'X-Forwarded-For': '66.249.66.1',
+            Via: '1.1 google',
+          }),
         },
         // Handle encoding properly
         responseType: 'text',
@@ -155,6 +191,310 @@ export async function fetchContent(url, options = {}) {
   }
 
   return null
+}
+
+/**
+ * Extract article content from JSON-LD structured data.
+ * Many news sites embed the full article body in <script type="application/ld+json">
+ * for SEO/Google News. This often bypasses paywalls entirely.
+ * @param {string} html - Raw HTML
+ * @returns {{ text: string, title: string, excerpt: string } | null}
+ */
+export function extractFromJsonLd(html) {
+  try {
+    const $ = cheerio.load(html)
+    const jsonLdScripts = $('script[type="application/ld+json"]')
+
+    for (let i = 0; i < jsonLdScripts.length; i++) {
+      try {
+        const raw = $(jsonLdScripts[i]).html()
+        if (!raw) continue
+
+        const data = JSON.parse(raw)
+        // Handle arrays of schemas (common pattern)
+        const schemas = Array.isArray(data) ? data : [data]
+
+        for (const schema of schemas) {
+          // Look for NewsArticle, Article, ReportageNewsArticle, etc.
+          const schemaType = schema['@type'] || ''
+          const isArticle =
+            typeof schemaType === 'string'
+              ? schemaType.toLowerCase().includes('article')
+              : Array.isArray(schemaType) &&
+                schemaType.some((t) => t.toLowerCase().includes('article'))
+
+          if (!isArticle) continue
+
+          // articleBody is the jackpot — full content
+          let body = schema.articleBody || ''
+
+          // Some sites use text instead
+          if (!body) body = schema.text || ''
+
+          // Clean up body: remove HTML tags if present
+          if (body.includes('<')) {
+            const bodyDom = cheerio.load(body)
+            body = bodyDom.text()
+          }
+
+          if (body && body.length > 200) {
+            console.log(
+              `✅ Extracted ${body.length} chars from JSON-LD articleBody`,
+            )
+            return {
+              text: body.trim(),
+              title: schema.headline || schema.name || '',
+              excerpt: schema.description || '',
+            }
+          }
+        }
+      } catch {
+        // Invalid JSON in this script tag, try the next one
+      }
+    }
+  } catch (error) {
+    console.warn(`⚠️ JSON-LD extraction failed: ${error.message}`)
+  }
+
+  return null
+}
+
+/**
+ * Extract article content from __NEXT_DATA__ (for Next.js sites like Infobae).
+ * Next.js embeds the full server-rendered data in a JSON blob.
+ * @param {string} html - Raw HTML
+ * @returns {{ text: string, title: string, excerpt: string } | null}
+ */
+export function extractFromNextData(html) {
+  try {
+    const $ = cheerio.load(html)
+    const nextDataScript = $('script#__NEXT_DATA__')
+
+    if (nextDataScript.length === 0) return null
+
+    const raw = nextDataScript.html()
+    if (!raw) return null
+
+    const data = JSON.parse(raw)
+    const props = data?.props?.pageProps
+
+    if (!props) return null
+
+    // Navigate common Next.js article data structures
+    // Infobae uses different paths depending on article type
+    const article =
+      props.article ||
+      props.data?.article ||
+      props.content ||
+      props.post ||
+      props
+
+    if (!article) return null
+
+    // Try to extract body/content from the article object
+    let bodyText = ''
+    let title = ''
+    let excerpt = ''
+
+    // Try various field names used by different Next.js sites
+    const bodyFields = [
+      'body',
+      'content',
+      'text',
+      'articleBody',
+      'plainText',
+      'rawContent',
+    ]
+    const titleFields = ['title', 'headline', 'name']
+    const excerptFields = [
+      'summary',
+      'description',
+      'excerpt',
+      'subheadline',
+      'bajada',
+    ]
+
+    for (const field of titleFields) {
+      if (article[field] && typeof article[field] === 'string') {
+        title = article[field]
+        break
+      }
+    }
+
+    for (const field of excerptFields) {
+      if (article[field] && typeof article[field] === 'string') {
+        excerpt = article[field]
+        break
+      }
+    }
+
+    for (const field of bodyFields) {
+      const val = article[field]
+      if (!val) continue
+
+      if (typeof val === 'string' && val.length > 200) {
+        bodyText = val
+        break
+      }
+
+      // Some sites store body as array of content blocks
+      if (Array.isArray(val)) {
+        const texts = val
+          .map((block) => {
+            if (typeof block === 'string') return block
+            if (block.text) return block.text
+            if (block.content) return block.content
+            if (block.value) return block.value
+            // Infobae content blocks have type + value
+            if (block.type === 'text' || block.type === 'paragraph') {
+              return block.value || block.text || ''
+            }
+            return ''
+          })
+          .filter((t) => t.length > 0)
+
+        if (texts.length > 0) {
+          bodyText = texts.join('\n\n')
+          break
+        }
+      }
+    }
+
+    // Deep search: walk the props tree for any large text blob
+    if (!bodyText || bodyText.length < 200) {
+      bodyText = deepSearchForContent(props) || bodyText
+    }
+
+    // Clean HTML tags from body if present
+    if (bodyText && bodyText.includes('<')) {
+      const bodyDom = cheerio.load(bodyText)
+      bodyText = bodyDom.text()
+    }
+
+    if (bodyText && bodyText.length > 200) {
+      console.log(`✅ Extracted ${bodyText.length} chars from __NEXT_DATA__`)
+      return { text: bodyText.trim(), title, excerpt }
+    }
+  } catch (error) {
+    console.warn(`⚠️ __NEXT_DATA__ extraction failed: ${error.message}`)
+  }
+
+  return null
+}
+
+/**
+ * Recursively search a JSON object for the longest text string
+ * that looks like article content. Used as last resort for __NEXT_DATA__.
+ */
+function deepSearchForContent(obj, depth = 0) {
+  if (depth > 8 || !obj) return ''
+
+  let best = ''
+
+  if (typeof obj === 'string') {
+    // Only consider strings that look like article paragraphs
+    if (obj.length > 300 && !obj.startsWith('http') && !obj.startsWith('{')) {
+      return obj
+    }
+    return ''
+  }
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const found = deepSearchForContent(item, depth + 1)
+      if (found.length > best.length) best = found
+    }
+    return best
+  }
+
+  if (typeof obj === 'object') {
+    for (const key of Object.keys(obj)) {
+      // Skip keys that are clearly not content
+      if (
+        [
+          '_id',
+          'id',
+          'url',
+          'href',
+          'src',
+          'image',
+          'photo',
+          'video',
+          'ads',
+          'tracking',
+          'analytics',
+          'config',
+          'seo',
+          'meta',
+        ].includes(key)
+      )
+        continue
+
+      const found = deepSearchForContent(obj[key], depth + 1)
+      if (found.length > best.length) best = found
+    }
+  }
+
+  return best
+}
+
+/**
+ * Extract content from RSS feed's content_html field.
+ * Useful for social media where content_text may be truncated but content_html has more.
+ * @param {string} contentHtml - HTML content from RSS feed item
+ * @returns {string}
+ */
+export function extractFromContentHtml(contentHtml) {
+  if (!contentHtml || contentHtml.length < 10) return ''
+
+  try {
+    const $ = cheerio.load(contentHtml)
+
+    // Remove common noise from RSS HTML
+    $('script, style, img, video, iframe').remove()
+
+    // Get text from paragraphs
+    const paragraphs = []
+    $('p, div, span, li').each(function () {
+      const text = $(this).text().trim()
+      if (text.length > 20) {
+        paragraphs.push(text)
+      }
+    })
+
+    if (paragraphs.length > 0) {
+      // Deduplicate (nested elements can repeat text)
+      const seen = new Set()
+      const unique = paragraphs.filter((p) => {
+        if (seen.has(p)) return false
+        // Also skip if this text is contained in a longer paragraph we already have
+        for (const existing of seen) {
+          if (existing.includes(p) || p.includes(existing)) {
+            // Keep the longer one
+            if (p.length > existing.length) {
+              seen.delete(existing)
+              seen.add(p)
+            }
+            return false
+          }
+        }
+        seen.add(p)
+        return true
+      })
+
+      return unique.join('\n\n')
+    }
+
+    // Fallback: just get all text
+    const allText = $('body').text().trim() || $.text().trim()
+    return allText
+  } catch {
+    // If HTML parsing fails, strip tags manually
+    return contentHtml
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
 }
 
 /**
@@ -277,7 +617,9 @@ export function extractWithSelectors(html) {
 }
 
 /**
- * Main extraction pipeline — tries multiple strategies in order
+ * Main extraction pipeline — tries multiple strategies in order.
+ * Prioritizes structured data (JSON-LD, __NEXT_DATA__) which bypass paywalls,
+ * then falls back to DOM-based extraction.
  * @param {string} html - Raw HTML content
  * @returns {{ text: string, title: string, excerpt: string, method: string }}
  */
@@ -286,7 +628,25 @@ export function extractText(html) {
     return { text: '', title: '', excerpt: '', method: 'none' }
   }
 
-  // Strategy 1: Readability with pre-cleaned HTML
+  // Strategy 1: JSON-LD structured data (bypasses paywalls, highest quality)
+  const jsonLdResult = extractFromJsonLd(html)
+  if (jsonLdResult && jsonLdResult.text.length > 200) {
+    console.log(
+      `✅ Text extracted via JSON-LD (${jsonLdResult.text.length} chars)`,
+    )
+    return { ...jsonLdResult, method: 'json-ld' }
+  }
+
+  // Strategy 2: __NEXT_DATA__ for Next.js sites (Infobae, etc.)
+  const nextDataResult = extractFromNextData(html)
+  if (nextDataResult && nextDataResult.text.length > 200) {
+    console.log(
+      `✅ Text extracted via __NEXT_DATA__ (${nextDataResult.text.length} chars)`,
+    )
+    return { ...nextDataResult, method: 'next-data' }
+  }
+
+  // Strategy 3: Readability with pre-cleaned HTML
   const readabilityResult = extractWithReadability(html)
   if (readabilityResult && readabilityResult.text.length > 200) {
     console.log(
@@ -295,7 +655,7 @@ export function extractText(html) {
     return { ...readabilityResult, method: 'readability' }
   }
 
-  // Strategy 2: Targeted CSS selectors
+  // Strategy 4: Targeted CSS selectors
   const selectorText = extractWithSelectors(html)
   if (selectorText && selectorText.length > 200) {
     console.log(
@@ -304,7 +664,7 @@ export function extractText(html) {
     return { text: selectorText, title: '', excerpt: '', method: 'selectors' }
   }
 
-  // Strategy 3: Raw Readability without pre-cleaning (some sites break with cheerio)
+  // Strategy 5: Raw Readability without pre-cleaning (some sites break with cheerio)
   try {
     const dom = new JSDOM(html, { url: 'https://example.com' })
     const reader = new Readability(dom.window.document)
@@ -328,7 +688,7 @@ export function extractText(html) {
     // Continue to next strategy
   }
 
-  // Strategy 4: Last resort — extract all <p> tags from body
+  // Strategy 6: Last resort — extract all <p> tags from body
   try {
     const $ = cheerio.load(html)
     const paragraphs = []

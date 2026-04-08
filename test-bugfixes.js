@@ -319,6 +319,53 @@ test(
     scraperSource.includes('cuerpo-nota'),
 )
 
+// New anti-cropping features
+test(
+  'scraper has JSON-LD extraction',
+  scraperSource.includes('export function extractFromJsonLd('),
+)
+test(
+  'scraper has __NEXT_DATA__ extraction',
+  scraperSource.includes('export function extractFromNextData('),
+)
+test(
+  'scraper has content_html extraction',
+  scraperSource.includes('export function extractFromContentHtml('),
+)
+test(
+  'scraper uses Google referrer for paywalls',
+  scraperSource.includes("Referer: 'https://www.google.com/'"),
+)
+test(
+  'scraper has paywall domain list',
+  scraperSource.includes('PAYWALL_DOMAINS') &&
+    scraperSource.includes('clarin.com'),
+)
+test(
+  'extractText tries JSON-LD first',
+  scraperSource.includes("method: 'json-ld'"),
+)
+test(
+  'extractText tries __NEXT_DATA__ second',
+  scraperSource.includes("method: 'next-data'"),
+)
+test(
+  'scraper has Infobae-specific selectors',
+  scraperSource.includes('article-body-content') ||
+    scraperSource.includes('article-story-content'),
+)
+test(
+  'scraper has Clarin-specific selectors',
+  scraperSource.includes('#nota-body-text') ||
+    scraperSource.includes('.nota-txt'),
+)
+
+// Social media content_html fallback
+test(
+  'social media uses content_html fallback',
+  source.includes('extractFromContentHtml') && source.includes('content_html'),
+)
+
 // Verify old inline functions are replaced with scraper delegates
 test(
   'fetchContent delegates to scraper',
