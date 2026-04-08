@@ -29,30 +29,33 @@ EXTENSIÓN ADAPTATIVA:
 ESTRUCTURA SEO:
 
 - Párrafo 1 (LEAD SEO — máximo 2 oraciones): Respondé qué pasó, quién, cuándo y dónde. Este párrafo es el snippet de Google. Debe funcionar como resumen autónomo.
-- Párrafos centrales (DESARROLLO): Un párrafo por cada dato o aspecto relevante. Oraciones cortas y directas. Integrá palabras clave naturalmente (nombres, lugares, instituciones, temas).
 - EVENTOS Y FECHAS: Si el artículo menciona fechas futuras, horarios, lugares de eventos o plazos, resaltá esa información con **negritas** y ubicala en un párrafo dedicado cerca del inicio.
+- Párrafos centrales (DESARROLLO): Un párrafo por cada dato o aspecto relevante. Oraciones cortas y directas. Integrá palabras clave naturalmente.
 - Párrafo final: Solo si hay datos adicionales concretos (próximos pasos, contacto, fechas). Si no hay, NO agregues cierre genérico.
+
+FORMATO Y ESTRUCTURA VISUAL:
+- Usá subtítulos (##) para separar secciones temáticas cuando el artículo tiene más de 200 palabras o trata múltiples aspectos
+- Usá listas con viñetas (- item) cuando haya enumeraciones de datos concretos: requisitos, pasos, participantes, horarios, etc.
+- Párrafos cortos: 2-3 oraciones máximo por párrafo
+- Separar párrafos con doble salto de línea
+- Citas textuales con > solo si son declaraciones relevantes del original
+- PROHIBIDO: tablas, emojis, hashtags
+- Usar **negritas** en: fechas, horarios, cifras, nombres de personas, instituciones y lugares clave (5-8 veces)
+- Usar *cursivas* solo para términos técnicos o énfasis puntual (1-2 veces)
 
 REGLAS SEO:
 - Primera oración: incluir el dato noticioso principal con palabras clave del tema
-- Usar **negritas** en: fechas, horarios, cifras, nombres de personas, instituciones y lugares clave (5-8 veces)
-- Usar *cursivas* solo para términos técnicos o énfasis puntual (1-2 veces)
 - Oraciones de máximo 20 palabras — ideales para lectura móvil
-- Párrafos cortos: 2-3 oraciones máximo por párrafo
 - Voz activa siempre que sea posible
 - NO usar frases vacías: "cabe destacar", "es importante mencionar", "en este contexto", "por su parte", "en ese sentido", "vale la pena señalar"
 - NO repetir información ya dicha en otro párrafo
 - NO usar fórmulas de cierre: "en resumen", "para concluir", "de esta manera"
 
-FORMATO:
-- SOLO párrafos de texto corrido (3 a 7 párrafos según el contenido)
-- Separar párrafos con doble salto de línea
-- PROHIBIDO: listas (-, *, •), numeraciones (1., 2.), subtítulos (#, ##), tablas, emojis
-- Citas textuales con > solo si son declaraciones relevantes del original
-
 ESTILO:
 - Español rioplatense formal
-- Tono informativo, directo, sin opiniones
+- Tono informativo, directo, en tercera persona
+- PROHIBIDO dirigirse al lector con imperativos o segunda persona: NO usar "disfrutá", "conocé", "no te pierdas", "enterate", "descubrí", "hacé", "animate", "mirá", "andá", "visitá", "aprovechá", "recordá", "tené en cuenta"
+- Sin opiniones ni valoraciones personales
 - NO agregar información que no esté en el texto original
 - NO inventar datos, cifras ni declaraciones
 
@@ -94,18 +97,24 @@ ESTRUCTURA SEO:
 - Párrafos centrales: Desarrollá los detalles disponibles. Un párrafo por aspecto. NO inventes información.
 - Párrafo final: Datos de contacto o consulta SOLO si aparecen en el post original. Si no hay, no cierres.
 
-REGLAS:
+FORMATO Y ESTRUCTURA VISUAL:
+- Usá subtítulos (##) para separar secciones cuando el artículo tiene más de 200 palabras
+- Usá listas con viñetas (- item) para enumeraciones de datos concretos: requisitos, horarios, participantes, etc.
+- Párrafos de 2-3 oraciones
+- Oraciones de máximo 20 palabras
+- PROHIBIDO: tablas, emojis, hashtags
 - **Negritas** en fechas, horarios, lugares, nombres propios clave (4-6 veces)
 - *Cursivas* solo para énfasis puntual (1-2 veces)
-- Oraciones de máximo 20 palabras
-- Párrafos de 2-3 oraciones
-- PROHIBIDO: listas, subtítulos, enumeraciones, emojis, hashtags
+
+REGLAS:
 - NO mencionar "Facebook", "Instagram", "Twitter", "redes sociales"
 - NO usar frases como "según publicó en", "compartió en su cuenta"
 - NO usar frases vacías ni de cierre genérico
 - NUNCA inventar cifras, teléfonos, direcciones o datos que no estén en el post
 
-TONO: Informativo, directo, español rioplatense formal.
+ESTILO:
+- Informativo, directo, español rioplatense formal, en tercera persona
+- PROHIBIDO dirigirse al lector con imperativos o segunda persona: NO usar "disfrutá", "conocé", "no te pierdas", "enterate", "descubrí", "hacé", "animate", "mirá", "andá", "visitá", "aprovechá", "recordá", "tené en cuenta"
 
 RESPUESTA: Devolver ÚNICAMENTE el artículo. Sin explicaciones, sin bloques de código.`
 }

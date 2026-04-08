@@ -543,15 +543,14 @@ async function generateMetadata(extractedText, maxRetries = 3) {
       throw new Error('Incomplete metadata structure')
     }
 
-    // Post-process: ensure title is 50-70 chars (SEO optimal)
-    if (parsed.title.length > 70) {
-      // Try to cut at a word boundary
-      const trimmed = parsed.title.substring(0, 67)
-      const lastSpace = trimmed.lastIndexOf(' ')
+    // Post-process: title — allow up to 90 chars, never truncate with "..."
+    // The AI targets 50-70 but we give headroom so nothing gets cropped
+    if (parsed.title.length > 90) {
+      const lastSpace = parsed.title.substring(0, 90).lastIndexOf(' ')
       parsed.title =
         lastSpace > 40
-          ? trimmed.substring(0, lastSpace) + '...'
-          : trimmed + '...'
+          ? parsed.title.substring(0, lastSpace)
+          : parsed.title.substring(0, 90)
     }
 
     // Post-process: ensure volanta doesn't exceed 4 words
@@ -560,14 +559,18 @@ async function generateMetadata(extractedText, maxRetries = 3) {
       parsed.volanta = volantaWords.slice(0, 4).join(' ')
     }
 
-    // Post-process: ensure bajada is 120-155 chars (SEO meta description)
-    if (parsed.bajada.length > 155) {
-      const trimmed = parsed.bajada.substring(0, 152)
-      const lastSpace = trimmed.lastIndexOf(' ')
-      parsed.bajada =
-        lastSpace > 100
-          ? trimmed.substring(0, lastSpace) + '...'
-          : trimmed + '...'
+    // Post-process: bajada — allow up to 200 chars, never truncate with "..."
+    if (parsed.bajada.length > 200) {
+      const lastPeriod = parsed.bajada.substring(0, 200).lastIndexOf('.')
+      if (lastPeriod > 100) {
+        parsed.bajada = parsed.bajada.substring(0, lastPeriod + 1)
+      } else {
+        const lastSpace = parsed.bajada.substring(0, 200).lastIndexOf(' ')
+        parsed.bajada =
+          lastSpace > 100
+            ? parsed.bajada.substring(0, lastSpace)
+            : parsed.bajada.substring(0, 200)
+      }
     }
 
     console.log('Successfully generated metadata')
@@ -649,18 +652,6 @@ async function reelaborateText(
       .replace(/\s*```$/i, '')
       .trim()
 
-    // VALIDATE: Check for bullet points or lists
-    const hasBullets = /^[\s]*[-*•]\s/m.test(processedText)
-    const hasNumberedList = /^[\s]*\d+\.\s/m.test(processedText)
-    const hasSubtitles = /^#{1,6}\s+/m.test(processedText)
-
-    if (hasBullets || hasNumberedList || hasSubtitles) {
-      console.warn(
-        '❌ Generated text contains lists or subtitles, using fallback...',
-      )
-      return formatTextAsFallback(extractedText, imageMarkdown)
-    }
-
     // Count words
     const wordCount = processedText
       .split(/\s+/)
@@ -728,17 +719,6 @@ async function reelaborateSocialMediaContent(postText, item, sourceName) {
       /\b(según publicó|compartió en|posteó en|difundió en|anunció en|publicó en)\s+(Facebook|Instagram|Twitter|YouTube|redes sociales|la plataforma|su cuenta)\b/gi,
       '',
     )
-
-    const hasBullets = /^[\s]*[-*•]\s/m.test(processedText)
-    const hasNumberedList = /^[\s]*\d+\.\s/m.test(processedText)
-    const hasSubtitles = /^#{1,6}\s+/m.test(processedText)
-
-    if (hasBullets || hasNumberedList || hasSubtitles) {
-      console.warn(
-        '❌ Social media text contains lists/subtitles, using fallback...',
-      )
-      return formatSocialMediaAsFallback(postText, sourceName, item)
-    }
 
     const wordCount = processedText
       .split(/\s+/)
