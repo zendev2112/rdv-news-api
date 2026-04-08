@@ -618,46 +618,61 @@ async function reelaborateText(
   try {
     const prompt = prompts.reelaborateArticle(extractedText)
 
-    const result = await generateContent(prompt, {
-      maxRetries: 3,
-      preferGroq: false,
-    })
+    let processedText = null
+    let attempts = 0
+    const MAX_ATTEMPTS = 2
 
-    if (!result.text) {
-      return formatTextAsFallback(extractedText, imageMarkdown)
-    }
+    while (attempts < MAX_ATTEMPTS) {
+      attempts++
+      const currentPrompt =
+        attempts === 1
+          ? prompt
+          : `El siguiente artículo es demasiado corto. Necesito que lo EXPANDAS significativamente hasta alcanzar entre 300 y 500 palabras. Mantené toda la información y agregá más desarrollo, contexto y detalles del texto original.\n\nARTÍCULO CORTO:\n"""\n${processedText}\n"""\n\nTEXTO ORIGINAL DE REFERENCIA:\n"""\n${extractedText.substring(0, 6000)}\n"""\n\nREQUISITO OBLIGATORIO: El artículo final DEBE tener entre 300 y 500 palabras. Devolver ÚNICAMENTE el artículo expandido.`
 
-    let processedText = result.text
-      .trim()
-      .replace(/^```markdown\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/\s*```$/i, '')
-      .trim()
+      const result = await generateContent(currentPrompt, {
+        maxTokens: 8192,
+      })
 
-    // VALIDATE: Check for bullet points or lists
-    const hasBullets = /^[\s]*[-*•]\s/m.test(processedText)
-    const hasNumberedList = /^[\s]*\d+\.\s/m.test(processedText)
-    const hasSubtitles = /^#{1,6}\s+/m.test(processedText)
+      if (!result.text) {
+        if (attempts >= MAX_ATTEMPTS) {
+          return formatTextAsFallback(extractedText, imageMarkdown)
+        }
+        continue
+      }
 
-    if (hasBullets || hasNumberedList || hasSubtitles) {
+      processedText = result.text
+        .trim()
+        .replace(/^```markdown\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim()
+
+      // VALIDATE: Check for bullet points or lists
+      const hasBullets = /^[\s]*[-*•]\s/m.test(processedText)
+      const hasNumberedList = /^[\s]*\d+\.\s/m.test(processedText)
+      const hasSubtitles = /^#{1,6}\s+/m.test(processedText)
+
+      if (hasBullets || hasNumberedList || hasSubtitles) {
+        console.warn(
+          '❌ Generated text contains lists or subtitles, using fallback...',
+        )
+        return formatTextAsFallback(extractedText, imageMarkdown)
+      }
+
+      // Count words
+      const wordCount = processedText
+        .split(/\s+/)
+        .filter((w) => w.length > 0).length
+      console.log(`✅ Generated text: ${wordCount} words (attempt ${attempts})`)
+
+      if (wordCount >= 200) {
+        break
+      }
+
       console.warn(
-        '❌ Generated text contains lists or subtitles, using fallback...',
+        `⚠️ Word count too low: ${wordCount} words, retrying with expansion prompt...`,
       )
-      return formatTextAsFallback(extractedText, imageMarkdown)
     }
-
-    // Count words
-    const wordCount = processedText
-      .split(/\s+/)
-      .filter((w) => w.length > 0).length
-    console.log(`✅ Generated text: ${wordCount} words`)
-
-    /*     if (wordCount < 250 || wordCount > 600) {
-      console.warn(
-        `⚠️ Word count out of range: ${wordCount} words, using fallback...`,
-      )
-      return formatTextAsFallback(extractedText, imageMarkdown)
-    } */
 
     // Clean up forbidden phrases
     processedText = processedText
@@ -685,65 +700,79 @@ async function reelaborateSocialMediaContent(postText, item, sourceName) {
   try {
     const prompt = prompts.reelaborateSocialMedia(postText, item, sourceName)
 
-    const result = await generateContent(prompt, {
-      maxRetries: 3,
-      preferGroq: false,
-    })
+    let processedText = null
+    let attempts = 0
+    const MAX_ATTEMPTS = 2
 
-    if (!result.text) {
-      return formatSocialMediaAsFallback(postText, sourceName, item)
-    }
+    while (attempts < MAX_ATTEMPTS) {
+      attempts++
+      const currentPrompt =
+        attempts === 1
+          ? prompt
+          : `El siguiente artículo es demasiado corto. Necesito que lo EXPANDAS significativamente hasta alcanzar entre 300 y 450 palabras. Mantené toda la información y agregá más desarrollo y contexto.\n\nARTÍCULO CORTO:\n"""\n${processedText}\n"""\n\nPUBLICACIÓN ORIGINAL:\n"""\n${postText.substring(0, 3000)}\n"""\n\nREQUISITO OBLIGATORIO: El artículo final DEBE tener entre 300 y 450 palabras. Devolver ÚNICAMENTE el artículo expandido.`
 
-    let processedText = result.text
-      .trim()
-      .replace(/^```markdown\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/\s*```$/i, '')
-      .trim()
+      const result = await generateContent(currentPrompt, {
+        maxTokens: 8192,
+      })
 
-    // VALIDATE: Remove any emojis that slipped through
-    processedText = processedText.replace(
-      /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu,
-      '',
-    )
+      if (!result.text) {
+        if (attempts >= MAX_ATTEMPTS) {
+          return formatSocialMediaAsFallback(postText, sourceName, item)
+        }
+        continue
+      }
 
-    // VALIDATE: Remove references to social media
-    processedText = processedText.replace(
-      /\b(según publicó|compartió en|posteó en|difundió en|anunció en|publicó en)\s+(Facebook|Instagram|Twitter|YouTube|redes sociales|la plataforma|su cuenta)\b/gi,
-      '',
-    )
+      processedText = result.text
+        .trim()
+        .replace(/^```markdown\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim()
 
-    const hasBullets = /^[\s]*[-*•]\s/m.test(processedText)
-    const hasNumberedList = /^[\s]*\d+\.\s/m.test(processedText)
-    const hasSubtitles = /^#{1,6}\s+/m.test(processedText)
-
-    if (hasBullets || hasNumberedList || hasSubtitles) {
-      console.warn(
-        '❌ Social media text contains lists/subtitles, using fallback...',
+      // VALIDATE: Remove any emojis that slipped through
+      processedText = processedText.replace(
+        /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu,
+        '',
       )
-      return formatSocialMediaAsFallback(postText, sourceName, item)
-    }
 
-    const wordCount = processedText
-      .split(/\s+/)
-      .filter((w) => w.length > 0).length
-    console.log(`✅ Generated social media article: ${wordCount} words`)
-
-    // ✅ ADJUSTED VALIDATION: Lower minimum for social media (250 words instead of 300)
-    /*     if (wordCount < 250) {
-      console.warn(
-        `⚠️ Social media article too short: ${wordCount} words, using fallback...`,
+      // VALIDATE: Remove references to social media
+      processedText = processedText.replace(
+        /\b(según publicó|compartió en|posteó en|difundió en|anunció en|publicó en)\s+(Facebook|Instagram|Twitter|YouTube|redes sociales|la plataforma|su cuenta)\b/gi,
+        '',
       )
-      return formatSocialMediaAsFallback(postText, sourceName, item)
-    } */
 
-    if (wordCount > 600) {
-      console.warn(
-        `⚠️ Social media article too long: ${wordCount} words, trimming...`,
+      const hasBullets = /^[\s]*[-*•]\s/m.test(processedText)
+      const hasNumberedList = /^[\s]*\d+\.\s/m.test(processedText)
+      const hasSubtitles = /^#{1,6}\s+/m.test(processedText)
+
+      if (hasBullets || hasNumberedList || hasSubtitles) {
+        console.warn(
+          '❌ Social media text contains lists/subtitles, using fallback...',
+        )
+        return formatSocialMediaAsFallback(postText, sourceName, item)
+      }
+
+      const wordCount = processedText
+        .split(/\s+/)
+        .filter((w) => w.length > 0).length
+      console.log(
+        `✅ Generated social media article: ${wordCount} words (attempt ${attempts})`,
       )
-      // Trim to approximately 500 words
-      const words = processedText.split(/\s+/)
-      processedText = words.slice(0, 500).join(' ')
+
+      if (wordCount >= 200) {
+        if (wordCount > 600) {
+          console.warn(
+            `⚠️ Social media article too long: ${wordCount} words, trimming...`,
+          )
+          const words = processedText.split(/\s+/)
+          processedText = words.slice(0, 500).join(' ')
+        }
+        break
+      }
+
+      console.warn(
+        `⚠️ Word count too low: ${wordCount} words, retrying with expansion prompt...`,
+      )
     }
 
     return postProcessText(processedText)

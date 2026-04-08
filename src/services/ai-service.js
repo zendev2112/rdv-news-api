@@ -19,7 +19,7 @@ export async function generateContent(prompt, options = {}) {
   const {
     model = process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     temperature = 0.7,
-    maxTokens = 2048,
+    maxTokens = 8192,
   } = options
 
   try {
@@ -88,7 +88,7 @@ export function printUsageReport() {
             100
           ).toFixed(2)
         : 0
-    }%`
+    }%`,
   )
 }
 

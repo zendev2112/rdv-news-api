@@ -13,6 +13,8 @@
 export function reelaborateArticle(extractedText) {
   return `Sos un redactor profesional de un medio digital argentino llamado Radio del Volga. Tu tarea es reescribir el siguiente artículo periodístico manteniendo toda la información factual.
 
+REQUISITO OBLIGATORIO DE EXTENSIÓN: El artículo DEBE tener entre 300 y 500 palabras. Un artículo de menos de 300 palabras es INACEPTABLE y será rechazado.
+
 TEXTO ORIGINAL:
 """
 ${extractedText.substring(0, 6000)}
@@ -22,16 +24,16 @@ INSTRUCCIONES PASO A PASO:
 
 PASO 1 — ANÁLISIS: Identificá los datos clave: quién, qué, cuándo, dónde, por qué, cómo. Identificá cifras, nombres propios, fechas y citas textuales.
 
-PASO 2 — REDACCIÓN: Escribí un artículo de 300 a 500 palabras siguiendo esta estructura:
+PASO 2 — REDACCIÓN: Escribí un artículo EXTENSO de entre 300 y 500 palabras (MÍNIMO 300 palabras obligatorio) siguiendo esta estructura:
 
 - Párrafo 1 (LEAD): Respondé las preguntas fundamentales (qué pasó, quién, cuándo, dónde). Máximo 3 oraciones.
-- Párrafos 2-3 (DESARROLLO): Ampliá con detalles, contexto y datos específicos del texto original. Integrá cifras y nombres en oraciones completas.
-- Párrafos 4-5 (CONTEXTO): Agregá antecedentes o información complementaria que esté presente en el original.
+- Párrafos 2-3 (DESARROLLO): Ampliá con detalles, contexto y datos específicos del texto original. Integrá cifras y nombres en oraciones completas. Desarrollá cada punto en profundidad.
+- Párrafos 4-5 (CONTEXTO): Agregá antecedentes o información complementaria que esté presente en el original. Explicá el contexto más amplio del hecho.
 - Párrafo final (CIERRE): Información adicional relevante (próximos pasos, fechas futuras, datos de contacto). NO uses frases de cierre como "en resumen" ni "para concluir".
 
 REGLAS DE FORMATO:
-- SOLO párrafos de texto corrido (4 a 7 párrafos)
-- Cada párrafo: 2 a 4 oraciones
+- SOLO párrafos de texto corrido (5 a 7 párrafos)
+- Cada párrafo: 3 a 5 oraciones
 - Separar párrafos con doble salto de línea
 - PROHIBIDO: listas (-, *, •), numeraciones (1., 2.), subtítulos (#, ##), tablas, emojis
 - Usar **negritas** en datos clave: cifras, fechas, nombres de personas/instituciones (5-7 veces máximo)
@@ -46,6 +48,8 @@ REGLAS DE ESTILO:
 - NO agregar información que no esté en el texto original
 - NO inventar datos, cifras o declaraciones
 - Integrar datos en oraciones completas. NUNCA enumerar datos sueltos.
+
+RECORDATORIO FINAL: Tu respuesta DEBE contener entre 300 y 500 palabras. Contá las palabras antes de responder. Si tu borrador tiene menos de 300 palabras, EXPANDILO con más desarrollo y contexto del texto original.
 
 RESPUESTA: Devolver ÚNICAMENTE el artículo reescrito. Sin explicaciones, sin comentarios, sin bloques de código.`
 }
@@ -63,6 +67,8 @@ export function reelaborateSocialMedia(postText, item, sourceName) {
 
   return `Sos un redactor profesional de un medio digital argentino llamado Radio del Volga. Transformá esta publicación de redes sociales en un artículo periodístico completo.
 
+REQUISITO OBLIGATORIO DE EXTENSIÓN: El artículo DEBE tener entre 300 y 450 palabras. Un artículo de menos de 300 palabras es INACEPTABLE y será rechazado.
+
 PUBLICACIÓN ORIGINAL:
 """
 ${postText.substring(0, 3000)}
@@ -71,7 +77,7 @@ ${postText.substring(0, 3000)}
 FUENTE: ${author}
 FECHA: ${date}
 
-OBJETIVO: Crear un artículo periodístico de 300 a 450 palabras a partir de esta publicación corta. Debés EXPANDIR el contenido con desarrollo periodístico, pero sin inventar hechos que no estén implícitos en el post original.
+OBJETIVO: Crear un artículo periodístico de 300 a 450 palabras (MÍNIMO 300 palabras obligatorio) a partir de esta publicación corta. Debés EXPANDIR el contenido con desarrollo periodístico, pero sin inventar hechos que no estén implícitos en el post original.
 
 CÓMO EXPANDIR SIN INVENTAR:
 - Si el post menciona un evento: desarrollá qué tipo de evento es, explicá el formato, mencioná la institución organizadora y su rol en la comunidad.
@@ -95,6 +101,8 @@ FORMATO:
 - NO usar frases de cierre como "en resumen", "para concluir"
 
 TONO: Informativo, formal, neutral. Español rioplatense.
+
+RECORDATORIO FINAL: Tu respuesta DEBE contener entre 300 y 450 palabras. Contá las palabras antes de responder. Si tu borrador tiene menos de 300 palabras, EXPANDILO con más desarrollo y contexto.
 
 RESPUESTA: Devolver ÚNICAMENTE el artículo. Sin explicaciones, sin bloques de código.`
 }
