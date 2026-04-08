@@ -675,8 +675,8 @@ async function reelaborateText(
         /\b(en resumen|en conclusión|para finalizar|para concluir|de esta manera)\b/gi,
         '',
       )
-      .replace(/\s{2,}/g, ' ')
       .replace(/\n\s*\n\s*\n/g, '\n\n')
+      .replace(/ {2,}/g, ' ')
       .trim()
 
     return postProcessText(processedText)
@@ -750,8 +750,8 @@ async function reelaborateSocialMediaContent(postText, item, sourceName) {
         /\b(en resumen|en conclusión|para finalizar|para concluir|de esta manera)\b/gi,
         '',
       )
-      .replace(/\s{2,}/g, ' ')
       .replace(/\n\s*\n\s*\n/g, '\n\n')
+      .replace(/ {2,}/g, ' ')
       .trim()
 
     return postProcessText(processedText)
