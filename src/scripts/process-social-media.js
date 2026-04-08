@@ -312,8 +312,8 @@ async function processRecord(record, tableName) {
         try {
           console.log('Trying to update with minimal fields...')
           await airtableBase(tableName).update(record.id, {
-            title: generatedContent.title,
-            excerpt: generatedContent.excerpt,
+            title: strip(generatedContent.title),
+            excerpt: strip(generatedContent.excerpt),
             processingStatus: 'completed',
           })
           console.log('Minimal update succeeded')
@@ -463,36 +463,59 @@ async function generateAllContentElements(content, source) {
       maxTokens: 1024,
     })
 
-    let title = createBasicTitle(content, source)
-    let overline = source || 'Local'
-    let excerpt = content.substring(0, 150)
+    let title = ''
+    let overline = ''
+    let excerpt = ''
 
     try {
-      const cleanJson = metadataResult.text
+      let cleanJson = metadataResult.text
         .replace(/^```json\s*/i, '')
         .replace(/^```\s*/i, '')
         .replace(/\s*```$/i, '')
         .trim()
+
+      // Extract JSON object even if surrounded by text
+      const startIdx = cleanJson.indexOf('{')
+      const endIdx = cleanJson.lastIndexOf('}')
+      if (startIdx !== -1 && endIdx !== -1) {
+        cleanJson = cleanJson
+          .substring(startIdx, endIdx + 1)
+          .replace(/,\s*}/g, '}')
+          .replace(/\n/g, ' ')
+          .replace(/\r/g, '')
+          .replace(/\t/g, ' ')
+      }
+
       const parsed = JSON.parse(cleanJson)
-      const stripMarkdown = (str) =>
-        str
-          .replace(/\*\*([^*]+)\*\*/g, '$1')
-          .replace(/\*([^*]+)\*/g, '$1')
-          .replace(/__([^_]+)__/g, '$1')
-          .replace(/_([^_]+)_/g, '$1')
-          .replace(/`([^`]+)`/g, '$1')
-          .replace(/^#+\s*/gm, '')
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-          .replace(/ {2,}/g, ' ')
-          .trim()
-      if (parsed.title) title = stripMarkdown(parsed.title)
-      if (parsed.volanta) overline = stripMarkdown(parsed.volanta)
-      if (parsed.bajada) excerpt = stripMarkdown(parsed.bajada)
+      if (parsed.title) title = parsed.title
+      if (parsed.volanta) overline = parsed.volanta
+      if (parsed.bajada) excerpt = parsed.bajada
       console.log(`Generated metadata: "${title}" | "${overline}"`)
     } catch (parseError) {
       console.warn(
         `Metadata JSON parse failed: ${parseError.message}, using fallbacks`,
       )
+    }
+
+    // Fallbacks only if AI returned nothing
+    if (!title) {
+      const firstSentence = (article || content).split(/[.\n]/)[0]?.trim() || ''
+      title =
+        firstSentence.length > 70
+          ? firstSentence.substring(0, firstSentence.lastIndexOf(' ', 70) || 70)
+          : firstSentence
+    }
+    if (!overline) overline = 'Institucionales'
+    if (!excerpt) {
+      const plainArticle = (article || content)
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/^#+\s*/gm, '')
+      const sentences = plainArticle
+        .split(/[.!?]+/)
+        .filter((s) => s.trim().length > 20)
+      excerpt = sentences.slice(0, 2).join('. ').trim()
+      if (excerpt && !excerpt.endsWith('.')) excerpt += '.'
     }
 
     return { title, overline, excerpt, article }
@@ -501,7 +524,7 @@ async function generateAllContentElements(content, source) {
 
     return {
       title: createBasicTitle(content, source),
-      overline: source || 'Local',
+      overline: 'Institucionales',
       excerpt: content.substring(0, 150),
       article: formatRawContent(content, source),
     }
@@ -513,10 +536,10 @@ async function generateAllContentElements(content, source) {
  */
 function createBasicTitle(content, source) {
   try {
-    // Get first sentence or line
     const firstLine = content.split(/[\n\r.!?]+/)[0].trim()
-
-    return firstLine
+    if (firstLine.length <= 70) return firstLine
+    const cut = firstLine.lastIndexOf(' ', 70)
+    return firstLine.substring(0, cut > 30 ? cut : 70)
   } catch (e) {
     return `Publicación de ${source || 'Redes Sociales'}`
   }
