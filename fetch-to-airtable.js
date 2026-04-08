@@ -937,38 +937,56 @@ async function processArticle(item, sectionId) {
   try {
     console.log(`Processing article: ${item.url} for section ${sectionId}`)
 
-    // Fetch and extract content
-    const htmlContent = await fetchContent(item.url)
-    if (!htmlContent) {
-      console.warn(`Failed to fetch content for URL: ${item.url}`)
-      return null
-    }
+    // Use comprehensive scraping: tries direct → AMP → Google Cache → RSS fallback
+    const scrapeResult = await scraper.scrapeArticle(item.url, {
+      timeout: 15000,
+      rssContentText: item.content_text || '',
+      rssContentHtml: item.content_html || '',
+      rssTitle: item.title || '',
+    })
 
-    // Extract images and convert to markdown
-    const { images, markdown: imageMarkdown } =
-      extractImagesAsMarkdown(htmlContent)
-    console.log(`Found ${images.length} images in article: ${item.url}`)
+    const htmlContent = scrapeResult.html
+    const extractedText = scrapeResult.text
 
-    const extractedText = extractText(htmlContent)
     if (!extractedText || extractedText.length < 50) {
-      console.warn(`Insufficient content for URL: ${item.url}`)
+      console.warn(
+        `Insufficient content for URL: ${item.url} (${extractedText?.length || 0} chars from ${scrapeResult.method})`,
+      )
       return null
     }
 
-    // Extract embeds using the imported services
-    const instagramContent = embeds.extractInstagramEmbeds(htmlContent)
-    const facebookContent = embeds.extractFacebookEmbeds(htmlContent)
-    const twitterContent = embeds.extractTwitterEmbeds(htmlContent)
-    const youtubeContent = embeds.extractYoutubeEmbeds(htmlContent)
+    console.log(
+      `📰 Scraped ${extractedText.length} chars via ${scrapeResult.method} for: ${item.url}`,
+    )
 
-    // Log found embeds
-    const embedsFound = {
-      instagram: !!instagramContent,
-      facebook: !!facebookContent,
-      twitter: !!twitterContent,
-      youtube: !!youtubeContent,
+    // Extract images and embeds from HTML (if we have HTML)
+    let imageMarkdown = ''
+    let images = []
+    let instagramContent = ''
+    let facebookContent = ''
+    let twitterContent = ''
+    let youtubeContent = ''
+
+    if (htmlContent) {
+      const imgResult = extractImagesAsMarkdown(htmlContent)
+      images = imgResult.images
+      imageMarkdown = imgResult.markdown
+      console.log(`Found ${images.length} images in article: ${item.url}`)
+
+      // Extract embeds using the imported services
+      instagramContent = embeds.extractInstagramEmbeds(htmlContent)
+      facebookContent = embeds.extractFacebookEmbeds(htmlContent)
+      twitterContent = embeds.extractTwitterEmbeds(htmlContent)
+      youtubeContent = embeds.extractYoutubeEmbeds(htmlContent)
+
+      const embedsFound = {
+        instagram: !!instagramContent,
+        facebook: !!facebookContent,
+        twitter: !!twitterContent,
+        youtube: !!youtubeContent,
+      }
+      console.log(`Found embeds for ${item.url}:`, embedsFound)
     }
-    console.log(`Found embeds for ${item.url}:`, embedsFound)
 
     // Reelaborate text WITH image markdown
     console.log(`Reelaborating text for: ${item.url}`)

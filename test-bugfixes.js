@@ -381,6 +381,49 @@ test(
 )
 
 // ────────────────────────────────────────────────────────
+// COMPREHENSIVE SCRAPING (anti-cropping) CHECKS
+// ────────────────────────────────────────────────────────
+console.log('\nComprehensive scraping checks')
+
+test(
+  'scraper exports scrapeArticle',
+  scraperSource.includes('export async function scrapeArticle('),
+)
+test(
+  'scraper exports fetchGoogleCache',
+  scraperSource.includes('export async function fetchGoogleCache('),
+)
+test(
+  'scraper exports fetchAmpVersion',
+  scraperSource.includes('export async function fetchAmpVersion('),
+)
+test(
+  'scrapeArticle tries AMP fallback',
+  scraperSource.includes('fetchAmpVersion(url'),
+)
+test(
+  'scrapeArticle tries Google Cache fallback',
+  scraperSource.includes('fetchGoogleCache(url'),
+)
+test(
+  'scrapeArticle uses RSS content as last resort',
+  scraperSource.includes('rss-feed') &&
+    scraperSource.includes('rssContentText'),
+)
+test(
+  'scrapeArticle has MIN_QUALITY_CHARS threshold',
+  scraperSource.includes('MIN_QUALITY_CHARS'),
+)
+test(
+  'processArticle uses scraper.scrapeArticle',
+  source.includes('scraper.scrapeArticle('),
+)
+test(
+  'processArticle passes RSS content to scrapeArticle',
+  source.includes('rssContentText') && source.includes('rssContentHtml'),
+)
+
+// ────────────────────────────────────────────────────────
 // RESULTS
 // ────────────────────────────────────────────────────────
 console.log(`\n${'='.repeat(50)}`)

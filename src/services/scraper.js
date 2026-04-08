@@ -800,3 +800,253 @@ function isValidImageUrl(url) {
   if (url.includes('tracking') || url.includes('beacon')) return false
   return true
 }
+
+// ─────────────────────────────────────────────────────────────
+// MINIMUM CONTENT THRESHOLD
+// If extracted text is below this, we consider it "cropped" and
+// try alternate sources. 400 chars ≈ 2 short paragraphs.
+// ─────────────────────────────────────────────────────────────
+const MIN_QUALITY_CHARS = 400
+
+/**
+ * Fetch page HTML from Google's web cache.
+ * Google cache stores the fully-rendered page, so it often has content
+ * that JS-rendered or paywalled sites don't serve to bots.
+ * @param {string} url - Original article URL
+ * @param {number} timeout - Request timeout in ms
+ * @returns {Promise<string|null>}
+ */
+export async function fetchGoogleCache(url, timeout = 15000) {
+  try {
+    const cacheUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}&hl=es`
+    const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
+
+    const response = await axios.get(cacheUrl, {
+      timeout,
+      maxRedirects: 5,
+      headers: {
+        'User-Agent': ua,
+        Accept:
+          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'es-AR,es;q=0.9,en;q=0.5',
+      },
+      responseType: 'text',
+      transformResponse: [(data) => data],
+    })
+
+    if (
+      response.status === 200 &&
+      response.data &&
+      response.data.length > 1000
+    ) {
+      console.log(
+        `✅ Fetched Google Cache version (${response.data.length} chars)`,
+      )
+      return response.data
+    }
+  } catch (error) {
+    console.warn(`⚠️ Google Cache not available: ${error.message}`)
+  }
+  return null
+}
+
+/**
+ * Try fetching the AMP version of a URL.
+ * AMP pages are lighter, often lack paywalls, and have full article content.
+ * @param {string} url - Original article URL
+ * @param {number} timeout - Request timeout in ms
+ * @returns {Promise<string|null>}
+ */
+export async function fetchAmpVersion(url, timeout = 15000) {
+  // Common AMP URL patterns
+  const ampUrls = []
+
+  try {
+    const parsed = new URL(url)
+
+    // Pattern 1: /amp/ suffix
+    if (
+      !parsed.pathname.endsWith('/amp') &&
+      !parsed.pathname.endsWith('/amp/')
+    ) {
+      ampUrls.push(`${parsed.origin}${parsed.pathname.replace(/\/$/, '')}/amp`)
+    }
+
+    // Pattern 2: amp subdomain
+    ampUrls.push(`${parsed.protocol}//amp.${parsed.hostname}${parsed.pathname}`)
+
+    // Pattern 3: ?amp=1 query parameter
+    parsed.searchParams.set('amp', '1')
+    ampUrls.push(parsed.href)
+  } catch {
+    return null
+  }
+
+  const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
+
+  for (const ampUrl of ampUrls) {
+    try {
+      const response = await axios.get(ampUrl, {
+        timeout,
+        maxRedirects: 5,
+        headers: {
+          'User-Agent': ua,
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'es-AR,es;q=0.9,en;q=0.5',
+          Referer: 'https://www.google.com/',
+        },
+        responseType: 'text',
+        transformResponse: [(data) => data],
+        // Don't throw on 404
+        validateStatus: (status) => status < 500,
+      })
+
+      if (
+        response.status === 200 &&
+        response.data &&
+        response.data.length > 1000
+      ) {
+        // Verify this is actually an AMP page or at least has article content
+        const hasContent =
+          response.data.includes('<article') ||
+          response.data.includes('amp-') ||
+          response.data.includes('articleBody') ||
+          response.data.length > 5000
+
+        if (hasContent) {
+          console.log(
+            `✅ Fetched AMP version from: ${ampUrl} (${response.data.length} chars)`,
+          )
+          return response.data
+        }
+      }
+    } catch {
+      // This AMP URL pattern didn't work, try next
+    }
+  }
+
+  return null
+}
+
+/**
+ * Comprehensive article scraping function.
+ * Tries multiple fetch sources and extraction strategies to get the fullest content.
+ *
+ * Order:
+ *   1. Direct fetch → extract (JSON-LD, __NEXT_DATA__, Readability, selectors)
+ *   2. If content looks truncated → try AMP version
+ *   3. If still truncated → try Google Cache
+ *   4. If all fetches fail or content is still short → use RSS feed content as last resort
+ *
+ * @param {string} url - Article URL to scrape
+ * @param {Object} options
+ * @param {number} options.timeout - Fetch timeout (default 15000)
+ * @param {string} options.rssContentText - content_text from RSS feed item (fallback)
+ * @param {string} options.rssContentHtml - content_html from RSS feed item (fallback)
+ * @param {string} options.rssTitle - title from RSS feed item
+ * @returns {Promise<{ text: string, title: string, excerpt: string, method: string, html: string|null }>}
+ */
+export async function scrapeArticle(url, options = {}) {
+  const {
+    timeout = 15000,
+    rssContentText = '',
+    rssContentHtml = '',
+    rssTitle = '',
+  } = options
+
+  let bestResult = { text: '', title: '', excerpt: '', method: 'none' }
+  let bestHtml = null
+
+  // ── SOURCE 1: Direct fetch ──────────────────────────────────────
+  const directHtml = await fetchContent(url, { timeout, maxRetries: 2 })
+  if (directHtml) {
+    bestHtml = directHtml
+    const directResult = extractText(directHtml)
+
+    if (directResult.text.length >= MIN_QUALITY_CHARS) {
+      console.log(
+        `📰 Direct scrape: ${directResult.text.length} chars via ${directResult.method}`,
+      )
+      return { ...directResult, html: directHtml }
+    }
+
+    // Keep as best so far even if short
+    if (directResult.text.length > bestResult.text.length) {
+      bestResult = directResult
+    }
+
+    console.warn(
+      `⚠️ Direct scrape only got ${directResult.text.length} chars (min: ${MIN_QUALITY_CHARS}), trying alternates...`,
+    )
+  }
+
+  // ── SOURCE 2: AMP version ──────────────────────────────────────
+  const ampHtml = await fetchAmpVersion(url, timeout)
+  if (ampHtml) {
+    const ampResult = extractText(ampHtml)
+
+    if (ampResult.text.length > bestResult.text.length) {
+      bestResult = { ...ampResult, method: `amp+${ampResult.method}` }
+      bestHtml = ampHtml
+      console.log(
+        `📰 AMP scrape: ${ampResult.text.length} chars via ${ampResult.method}`,
+      )
+    }
+
+    if (bestResult.text.length >= MIN_QUALITY_CHARS) {
+      return { ...bestResult, html: bestHtml }
+    }
+  }
+
+  // ── SOURCE 3: Google Cache ──────────────────────────────────────
+  const cacheHtml = await fetchGoogleCache(url, timeout)
+  if (cacheHtml) {
+    const cacheResult = extractText(cacheHtml)
+
+    if (cacheResult.text.length > bestResult.text.length) {
+      bestResult = { ...cacheResult, method: `cache+${cacheResult.method}` }
+      bestHtml = cacheHtml
+      console.log(
+        `📰 Google Cache: ${cacheResult.text.length} chars via ${cacheResult.method}`,
+      )
+    }
+
+    if (bestResult.text.length >= MIN_QUALITY_CHARS) {
+      return { ...bestResult, html: bestHtml }
+    }
+  }
+
+  // ── SOURCE 4: RSS feed content as last resort ──────────────────
+  // RSS.app only provides summaries (~150-300 chars) but it's better than nothing
+  if (bestResult.text.length < 100) {
+    let rssText = rssContentText || ''
+
+    // Try extracting from content_html if content_text is short
+    if (rssText.length < 100 && rssContentHtml) {
+      rssText = extractFromContentHtml(rssContentHtml)
+    }
+
+    if (rssText && rssText.length > bestResult.text.length) {
+      console.warn(
+        `⚠️ Using RSS feed content as last resort (${rssText.length} chars)`,
+      )
+      bestResult = {
+        text: rssText,
+        title: rssTitle,
+        excerpt: '',
+        method: 'rss-feed',
+      }
+    }
+  }
+
+  if (bestResult.text.length > 0) {
+    console.log(
+      `📰 Best result: ${bestResult.text.length} chars via ${bestResult.method}`,
+    )
+  } else {
+    console.error(`❌ All scraping sources failed for: ${url}`)
+  }
+
+  return { ...bestResult, html: bestHtml }
+}

@@ -53,6 +53,42 @@ async function findArticleUrl(siteUrl, pathPattern) {
   return linkArray[0] || null
 }
 
+async function testDiagnostic(name, url) {
+  console.log(`\n=== Diagnostic: ${name} ===`)
+  const html = await scraper.fetchContent(url, { timeout: 20000 })
+  if (!html) {
+    console.log('❌ Could not fetch HTML at all')
+    return
+  }
+  console.log(`HTML length: ${html.length}`)
+  console.log(`Has JSON-LD: ${html.includes('application/ld+json')}`)
+  console.log(`Has __NEXT_DATA__: ${html.includes('__NEXT_DATA__')}`)
+
+  // Check what JSON-LD contains
+  const $ = cheerio.load(html)
+  $('script[type="application/ld+json"]').each((i, el) => {
+    try {
+      const data = JSON.parse($(el).html())
+      const schemas = Array.isArray(data) ? data : [data]
+      for (const s of schemas) {
+        const type = s['@type'] || 'unknown'
+        const hasBody = !!(s.articleBody || s.text)
+        const bodyLen = (s.articleBody || s.text || '').length
+        console.log(
+          `  JSON-LD schema: ${type}, hasBody: ${hasBody}, bodyLength: ${bodyLen}`,
+        )
+      }
+    } catch {}
+  })
+
+  const result = scraper.extractText(html)
+  console.log(`Extraction method: ${result.method}`)
+  console.log(`Text length: ${result.text.length}`)
+  console.log(`Title: ${(result.title || '').substring(0, 100)}`)
+  console.log(`First 300 chars: ${result.text.substring(0, 300)}`)
+  return result
+}
+
 async function main() {
   console.log('Testing improved scraper with real Argentine news sites\n')
 
@@ -98,6 +134,35 @@ async function main() {
   const extracted = scraper.extractFromContentHtml(sampleHtml)
   console.log(`Extracted from content_html (${extracted.length} chars):`)
   console.log(extracted)
-}
 
+  // Diagnostic tests for problematic sites
+  console.log('\n\n=== COMPREHENSIVE SCRAPING: scrapeArticle() ===')
+
+  // Test scrapeArticle end-to-end with various sites
+  const testSites = [
+    { name: 'Diario de Rivera', homepage: 'https://www.diarioderivera.com.ar' },
+    { name: 'Infobae', homepage: 'https://www.infobae.com' },
+  ]
+
+  for (const site of testSites) {
+    console.log(`\n--- ${site.name} ---`)
+    const articleUrl = await findArticleUrl(site.homepage, '/')
+    if (articleUrl) {
+      console.log(`Article: ${articleUrl}`)
+      const result = await scraper.scrapeArticle(articleUrl, {
+        rssContentText: 'Fallback RSS content for testing purposes only.',
+        rssContentHtml:
+          '<p>Fallback RSS content for testing purposes only.</p>',
+        rssTitle: 'Test Title',
+      })
+      console.log(`Method: ${result.method}`)
+      console.log(`Text length: ${result.text.length}`)
+      console.log(`Has HTML: ${!!result.html}`)
+      console.log(`Title: ${(result.title || '').substring(0, 100)}`)
+      console.log(`First 400 chars: ${result.text.substring(0, 400)}`)
+    } else {
+      console.log('Could not find article URL')
+    }
+  }
+}
 main().catch(console.error)
