@@ -911,7 +911,20 @@ async function generateSocialMediaMetadata(postText, sourceName, item) {
       parsed.volanta = volantaWords.slice(0, 4).join(' ')
     }
 
-    console.log('Successfully generated social media metadata')
+    // Strip any markdown from plain-text fields
+    const stripMd = (str) =>
+      str
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/__([^_]+)__/g, '$1')
+        .replace(/_([^_]+)_/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/^#+\s*/gm, '')
+        .replace(/ {2,}/g, ' ')
+        .trim()
+    parsed.title = stripMd(parsed.title)
+    parsed.bajada = stripMd(parsed.bajada)
+    parsed.volanta = stripMd(parsed.volanta)
     return parsed
   } catch (error) {
     console.error('Error generating social media metadata:', error.message)

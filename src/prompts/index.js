@@ -134,6 +134,7 @@ Generá exactamente 3 campos en formato JSON:
    - Que genere interés sin ser clickbait
    - Sin signos de exclamación, sin comillas, sin emojis
    - Si hay un evento futuro, incluir la fecha o referencia temporal en el título
+   - SIN MARKDOWN: no uses **, *, _, __ ni ningún formato
    - Ejemplo: "Bahía Blanca: el municipio lanza nuevas medidas para el agro en julio"
 
 2. "bajada" — Meta description / copete:
@@ -143,12 +144,14 @@ Generá exactamente 3 campos en formato JSON:
    - Tono informativo que invite a leer
    - Una o dos oraciones máximo
    - Si hay fechas/horarios de eventos, incluirlos acá
+   - SIN MARKDOWN: no uses **, *, _, __ ni ningún formato
 
 3. "volanta" — Cintillo superior:
    - Máximo 3 palabras
    - Indica el tema general o categoría
    - Sentence case
    - No repetir palabras del título
+   - SIN MARKDOWN
    - Ejemplos: "Economía nacional", "Salud pública", "Política local"
 
 RESPUESTA: Devolver SOLO el JSON, sin explicaciones ni bloques de código.
@@ -178,6 +181,7 @@ Generá exactamente 3 campos en formato JSON:
    - Sin emojis, sin hashtags, sin signos de exclamación
    - Si hay un evento futuro, incluir la fecha o referencia temporal
    - NO mencionar ninguna red social
+   - SIN MARKDOWN: no uses **, *, _, __ ni ningún formato
 
 2. "bajada" — Meta description / copete:
    - Entre 120 y 155 caracteres (óptimo para snippet de Google)
@@ -186,10 +190,12 @@ Generá exactamente 3 campos en formato JSON:
    - Si hay fechas/horarios, incluirlos
    - NO mencionar Facebook, Instagram, Twitter, YouTube, redes sociales
    - Sin emojis
+   - SIN MARKDOWN: no uses **, *, _, __ ni ningún formato
 
 3. "volanta" — Cintillo superior:
    - Máximo 3 palabras
    - Sentence case
+   - SIN MARKDOWN
    - Ejemplos: "Cultura local", "Actividades municipales", "Convocatorias"
 
 PROHIBIDO mencionar: Facebook, Instagram, Twitter, YouTube, redes sociales, "según publicó", "compartió en"
