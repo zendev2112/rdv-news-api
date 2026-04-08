@@ -317,9 +317,7 @@ function generateFallbackMetadata(extractedText) {
         .trim()
     }
 
-    if (bajada.length > 250) {
-      bajada = bajada.substring(0, 247) + '...'
-    }
+    // No truncation — send complete bajada
 
     // ✅ NORMALIZE WHITESPACE IN METADATA
     const cleanTitle = title.trim().replace(/\s+/g, ' ')
@@ -907,10 +905,6 @@ async function generateSocialMediaMetadata(postText, sourceName, item) {
         )
         .trim(),
     )
-
-    if (parsed.title.length > 80) {
-      parsed.title = parsed.title.substring(0, 77) + '...'
-    }
 
     const volantaWords = parsed.volanta.split(/\s+/)
     if (volantaWords.length > 4) {

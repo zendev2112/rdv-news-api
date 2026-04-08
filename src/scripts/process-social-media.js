@@ -505,12 +505,7 @@ function createBasicTitle(content, source) {
     // Get first sentence or line
     const firstLine = content.split(/[\n\r.!?]+/)[0].trim()
 
-    if (firstLine.length <= 80) {
-      return firstLine
-    } else {
-      // Use first 8 words
-      return firstLine.split(/\s+/).slice(0, 8).join(' ') + '...'
-    }
+    return firstLine
   } catch (e) {
     return `Publicación de ${source || 'Redes Sociales'}`
   }
