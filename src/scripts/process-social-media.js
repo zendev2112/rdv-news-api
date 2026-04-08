@@ -276,9 +276,20 @@ async function processRecord(record, tableName) {
       }
 
       // Always update these fields with fresh content
-      updateFields.title = generatedContent.title
-      updateFields.overline = generatedContent.overline
-      updateFields.excerpt = generatedContent.excerpt
+      // Strip ALL markdown from plain-text fields — only article keeps formatting
+      const strip = (s) =>
+        s
+          .replace(/\*\*([^*]+)\*\*/g, '$1')
+          .replace(/\*([^*]+)\*/g, '$1')
+          .replace(/__([^_]+)__/g, '$1')
+          .replace(/_([^_]+)_/g, '$1')
+          .replace(/`([^`]+)`/g, '$1')
+          .replace(/^#+\s*/gm, '')
+          .replace(/ {2,}/g, ' ')
+          .trim()
+      updateFields.title = strip(generatedContent.title)
+      updateFields.overline = strip(generatedContent.overline)
+      updateFields.excerpt = strip(generatedContent.excerpt)
       updateFields.article = generatedContent.article
 
       // Only set source if not already present

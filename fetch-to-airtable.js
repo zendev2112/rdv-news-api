@@ -1141,10 +1141,24 @@ async function processArticle(item, sectionId) {
 
     // Find the recordFields creation around line 1036 and modify it:
 
+    // Strip ALL markdown from plain-text fields before Airtable
+    const stripPlain = (s) =>
+      (s || '')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/__([^_]+)__/g, '$1')
+        .replace(/_([^_]+)_/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/^#+\s*/gm, '')
+        .replace(/ {2,}/g, ' ')
+        .trim()
+
     const recordFields = {
-      title: metadata ? metadata.title : item.title,
-      overline: metadata ? metadata.volanta : 'No overline available.',
-      excerpt: metadata ? metadata.bajada : 'No summary available.',
+      title: stripPlain(metadata ? metadata.title : item.title),
+      overline: stripPlain(
+        metadata ? metadata.volanta : 'No overline available.',
+      ),
+      excerpt: stripPlain(metadata ? metadata.bajada : 'No summary available.'),
       article: processedText,
       image: imageAttachments, // ✅ Array of attachment objects for Airtable
 
@@ -1436,15 +1450,27 @@ async function processSection(section) {
             )
           }
 
+          // Strip ALL markdown from plain-text fields before Airtable
+          const strip = (s) =>
+            (s || '')
+              .replace(/\*\*([^*]+)\*\*/g, '$1')
+              .replace(/\*([^*]+)\*/g, '$1')
+              .replace(/__([^_]+)__/g, '$1')
+              .replace(/_([^_]+)_/g, '$1')
+              .replace(/`([^`]+)`/g, '$1')
+              .replace(/^#+\s*/gm, '')
+              .replace(/ {2,}/g, ' ')
+              .trim()
+
           // Create record fields using the generated metadata
           const recordFields = {
-            title: metadata.title,
+            title: strip(metadata.title),
             url: itemUrl,
-            excerpt: metadata.bajada,
+            excerpt: strip(metadata.bajada),
             source: sourceName,
             imgUrl: imageUrl || '',
             article: reelaboratedArticle,
-            overline: metadata.volanta,
+            overline: strip(metadata.volanta),
             author: item.authors?.[0]?.name || '',
             status: 'draft',
             processingStatus: 'completed',
