@@ -9,6 +9,8 @@ import fs from 'fs'
 import * as cheerio from 'cheerio'
 import yargs from 'yargs'
 import { hideBin } from 'yargs/helpers'
+import * as prompts from './src/prompts/index.js'
+import * as scraper from './src/services/scraper.js'
 
 // Setup dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url)
@@ -200,188 +202,27 @@ function delay(ms) {
 
 /**
  * Extracts images from HTML and creates markdown references
- * @param {string} htmlContent - HTML content
- * @returns {Object} - Object with markdown text and extracted images
+ * Delegates to the improved scraper module.
  */
 function extractImagesAsMarkdown(htmlContent) {
-  try {
-    const $ = cheerio.load(htmlContent)
-
-    // Array to store image information
-    const extractedImages = []
-    let imageMarkdown = ''
-
-    // Extract figures with captions
-    $('figure').each((i, figure) => {
-      const $figure = $(figure)
-      const $img = $figure.find('img')
-      const $caption = $figure.find('figcaption')
-
-      // Only process if there's both an image and a caption
-      if (
-        $img.length &&
-        $img.attr('src') &&
-        $caption.length &&
-        $caption.text().trim()
-      ) {
-        const imageUrl = $img.attr('src')
-
-        // Skip SVG, tiny or data URLs
-        if (imageUrl.includes('.svg') || imageUrl.startsWith('data:')) {
-          return
-        }
-
-        // Skip common ad/tracking/icon domains and paths
-        if (
-          imageUrl.includes('ad.') ||
-          imageUrl.includes('ads.') ||
-          imageUrl.includes('pixel.') ||
-          imageUrl.includes('analytics') ||
-          imageUrl.includes('/icons/') ||
-          imageUrl.includes('/social/')
-        ) {
-          return
-        }
-
-        const altText = $img.attr('alt') || ''
-        const caption = $caption.text().trim()
-
-        // Only include substantial images
-        const width = parseInt($img.attr('width') || '0', 10)
-        const height = parseInt($img.attr('height') || '0', 10)
-
-        // Skip tiny images that are likely icons
-        if ((width > 0 && width < 100) || (height > 0 && height < 100)) {
-          return
-        }
-
-        extractedImages.push({
-          url: imageUrl,
-          altText: altText || 'Image',
-          caption,
-        })
-
-        // Create markdown for this image - UPDATED FORMAT
-        imageMarkdown += `**Imagen:** ${caption}\n\n`
-      }
-    })
-
-    // Extract standalone images that have nearby captions
-    $('img').each((i, img) => {
-      const $img = $(img)
-
-      // Skip images that are in figures (already processed)
-      if ($img.closest('figure').length === 0) {
-        const imageUrl = $img.attr('src')
-
-        // Skip if no src or if it's a tiny image (likely an icon)
-        if (!imageUrl || imageUrl.startsWith('data:')) return
-
-        // Skip SVGs (likely icons or logos)
-        if (imageUrl.includes('.svg')) return
-
-        // Skip common ad/tracking/icon domains and paths
-        if (
-          imageUrl.includes('ad.') ||
-          imageUrl.includes('ads.') ||
-          imageUrl.includes('pixel.') ||
-          imageUrl.includes('analytics') ||
-          imageUrl.includes('/icons/') ||
-          imageUrl.includes('/social/')
-        ) {
-          return
-        }
-
-        const altText = $img.attr('alt') || ''
-        const width = parseInt($img.attr('width') || '0', 10)
-        const height = parseInt($img.attr('height') || '0', 10)
-
-        // Skip small images (likely icons)
-        if ((width > 0 && width < 100) || (height > 0 && height < 100)) return
-
-        // Try to find a nearby caption
-        let caption = ''
-        const $parent = $img.parent()
-        const $nextSibling = $img.next()
-
-        if (
-          $nextSibling.is('em') ||
-          $nextSibling.is('small') ||
-          $nextSibling.is('span.caption')
-        ) {
-          caption = $nextSibling.text().trim()
-        } else if (
-          $parent.next().is('em') ||
-          $parent.next().is('small') ||
-          $parent.next().is('span.caption')
-        ) {
-          caption = $parent.next().text().trim()
-        }
-
-        // Only include images that have a caption
-        if (caption && caption.length > 0) {
-          // Make sure we don't have duplicate images
-          if (!extractedImages.some((img) => img.url === imageUrl)) {
-            extractedImages.push({
-              url: imageUrl,
-              altText: altText || 'Image',
-              caption,
-            })
-
-            // Create markdown for this image - UPDATED FORMAT
-            imageMarkdown += `**Imagen:** ${caption}\n\n`
-          }
-        }
-      }
-    })
-
-    console.log(
-      `Extracted ${extractedImages.length} captioned images from HTML content`,
-    )
-
-    // Return both the raw URLs and the markdown representation
-    return {
-      images: extractedImages.map((img) => img.url),
-      markdown: imageMarkdown,
-    }
-  } catch (error) {
-    console.error('Error extracting images:', error.message)
-    return { images: [], markdown: '' }
-  }
+  return scraper.extractImagesAsMarkdown(htmlContent)
 }
 
 /**
- * Fetches HTML content from a URL
+ * Fetches HTML content from a URL with retries and better headers.
+ * Delegates to the improved scraper module.
  */
-async function fetchContent(url, timeout = 10000) {
-  try {
-    const response = await axios.get(url, {
-      timeout,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      },
-    })
-    return response.data
-  } catch (error) {
-    console.error(`Error fetching content from ${url}:`, error.message)
-    return null
-  }
+async function fetchContent(url, timeout = 15000) {
+  return scraper.fetchContent(url, { timeout, maxRetries: 2 })
 }
 
 /**
- * Extracts main text content from HTML using Readability
+ * Extracts main text content from HTML using multi-strategy pipeline.
+ * Delegates to the improved scraper module.
  */
 function extractText(htmlContent) {
-  try {
-    const dom = new JSDOM(htmlContent)
-    const reader = new Readability(dom.window.document)
-    const article = reader.parse()
-    return article && article.textContent ? article.textContent.trim() : ''
-  } catch (error) {
-    console.error(`Error extracting text:`, error.message)
-    return ''
-  }
+  const result = scraper.extractText(htmlContent)
+  return result.text || ''
 }
 
 /**
@@ -648,43 +489,7 @@ function generateFallbackSocialMetadata(postText, sourceName, item) {
  */
 async function generateMetadata(extractedText, maxRetries = 3) {
   try {
-    const prompt = `Sos un editor de un medio de noticias argentino. Tu tarea es generar metadata periodística a partir del siguiente texto.
-
-TEXTO A ANALIZAR:
-"""
-${extractedText.substring(0, 4000)}
-"""
-
-TAREA: Generar exactamente 3 campos en formato JSON.
-
-CAMPO 1 - title (título):
-- Máximo 80 caracteres
-- Primera letra en mayúscula, resto en minúscula excepto nombres propios
-- Sin signos de exclamación ni interrogación
-- Sin comillas
-- Debe capturar el hecho noticioso principal
-- Ejemplo correcto: "El gobierno anunció nuevas medidas económicas para el sector agrario"
-- Ejemplo incorrecto: "¡Increíbles Medidas Económicas Anunciadas Por El Gobierno!"
-
-CAMPO 2 - bajada (copete/resumen):
-- Exactamente entre 40 y 50 palabras (contar palabras, no caracteres)
-- Debe ampliar la información del título sin repetirlo
-- Incluir: quién, qué, cuándo, dónde si están disponibles
-- Tono neutral e informativo
-- Sin opiniones ni adjetivos valorativos
-- Una sola oración o máximo dos oraciones
-
-CAMPO 3 - volanta (cintillo superior):
-- Máximo 4 palabras
-- Indica el tema general o contexto
-- Primera palabra en mayúscula, resto en minúscula
-- No repetir palabras del título
-- Ejemplos: "Economía nacional", "Crisis energética", "Elecciones 2024"
-
-FORMATO DE RESPUESTA:
-Responder ÚNICAMENTE con el JSON, sin explicaciones, sin bloques de código, sin texto adicional.
-
-{"title": "texto del título aquí", "bajada": "texto de la bajada aquí con 40-50 palabras exactas", "volanta": "texto corto"}`
+    const prompt = prompts.generateMetadata(extractedText)
 
     const result = await generateContent(prompt, {
       maxRetries: 3,
@@ -811,80 +616,7 @@ async function reelaborateText(
   maxRetries = 3,
 ) {
   try {
-    const prompt = `Sos un redactor profesional de un medio digital argentino. Tu tarea es reescribir completamente el siguiente artículo periodístico.
-
-TEXTO ORIGINAL:
-"""
-${extractedText.substring(0, 5000)}
-"""
-
-REGLAS OBLIGATORIAS (SI NO SE CUMPLEN TODAS, RECHAZAR LA RESPUESTA):
-
-1. EXTENSIÓN: Entre 300 y 500 palabras exactas. Contar las palabras antes de responder.
-
-2. FORMATO: Solo párrafos de texto corrido. PROHIBIDO usar:
-   - Listas con viñetas (-, *, •)
-   - Listas numeradas (1., 2., 3.)
-   - Subtítulos (##, ###)
-   - Títulos principales
-   - Cualquier tipo de lista o enumeración
-
-3. ESTRUCTURA:
-   - Dividir en 5 a 8 párrafos
-   - Cada párrafo: 2 a 4 oraciones
-   - Separar párrafos con doble salto de línea
-   - Primer párrafo: responde qué, quién, cuándo, dónde
-   - Párrafos intermedios: desarrolla contexto y detalles
-   - Último párrafo: información complementaria (NO conclusión)
-
-4. SINTAXIS:
-   - Oraciones simples, máximo 20 palabras
-   - Voz activa preferentemente
-   - Conectores entre párrafos para fluidez
-   - Uso periodístico del español rioplatense
-
-5. MARKDOWN PERMITIDO (ÚNICO):
-   - **texto** para negritas (usar 4-6 veces): cifras, fechas, nombres clave
-   - *texto* para cursivas (usar 2-3 veces): términos técnicos o énfasis
-   - > para citas textuales si existen en el original
-
-6. INTEGRACIÓN DE DATOS:
-   - Si hay cifras, fechas o datos, integrarlos en oraciones completas
-   - Ejemplo CORRECTO: "La medida incluye un fondo de compensación de **500 millones de pesos**, la reducción de retenciones para pequeños productores rurales y la extensión del plazo de pago para exportadores."
-   - Ejemplo INCORRECTO: "La medida incluye: - Fondo de 500 millones - Reducción de retenciones"
-
-7. SEO Y CONTENIDO:
-   - Incluir palabras clave del tema naturalmente
-   - Repetir términos importantes 2-3 veces
-   - Primer párrafo debe captar atención
-   - No agregar información externa al original
-   - No incluir conclusiones tipo "en resumen" o "para finalizar"
-
-8. TONO: Informativo, objetivo, sin opiniones ni valoraciones.
-
-9. PROHIBICIONES ABSOLUTAS:
-   - NO usar listas de ningún tipo
-   - NO usar subtítulos
-   - NO usar palabras: "puntos principales", "incluyen los siguientes", "a continuación", "destacan", "cabe mencionar"
-   - NO usar emojis, hashtags, tablas
-   - NO agregar frases de cierre o síntesis
-
-EJEMPLO DE ESTRUCTURA CORRECTA (300-350 palabras):
-
-El gobierno nacional presentó un nuevo paquete de medidas económicas que impactará directamente en el sector agropecuario argentino. El anuncio fue realizado por el ministro **Juan Pérez** durante una conferencia de prensa en Casa Rosada, donde detalló los alcances de la normativa que entrará en vigencia el **próximo 15 de marzo**.
-
-La iniciativa contempla un fondo de compensación de **500 millones de pesos** destinado a pequeños y medianos productores rurales. Según explicó el funcionario, esta medida busca *estabilizar los precios internos* y proteger la capacidad productiva del sector. El fondo será administrado por el Ministerio de Agricultura en coordinación con las cámaras empresariales.
-
-Entre los cambios más significativos se encuentra la reducción de retenciones para productores de hasta 100 hectáreas. Esta modificación representa un alivio fiscal de aproximadamente **30 por ciento** respecto a los valores actuales. Además, el gobierno extendió el plazo de pago para exportadores de granos, permitiendo mayor flexibilidad en las operaciones comerciales internacionales.
-
-El paquete incluye también incentivos fiscales para empresas que inviertan en tecnología aplicada a la producción local. Las compañías que demuestren inversiones en maquinaria agrícola o sistemas de riego podrán acceder a deducciones impositivas durante los próximos **tres años fiscales**. Esta política apunta a modernizar el sector y mejorar la competitividad argentina en mercados externos.
-
-Los representantes del sector agropecuario manifestaron su *postura cautelosa* respecto a las nuevas disposiciones. La Sociedad Rural Argentina solicitó una reunión técnica con autoridades del Ministerio de Economía para analizar el impacto específico en diferentes cadenas productivas. Organizaciones de pequeños productores expresaron satisfacción por la reducción de retenciones.
-
-La normativa será publicada en el Boletín Oficial durante las próximas 48 horas. El gobierno estableció una mesa de diálogo permanente con el sector para evaluar los resultados de implementación y realizar ajustes necesarios según la evolución del contexto económico nacional.
-
-RESPUESTA:
-Devolver ÚNICAMENTE el texto reelaborado. Sin explicaciones. Sin comentarios. Sin bloques de código.`
+    const prompt = prompts.reelaborateArticle(extractedText)
 
     const result = await generateContent(prompt, {
       maxRetries: 3,
@@ -951,96 +683,7 @@ Devolver ÚNICAMENTE el texto reelaborado. Sin explicaciones. Sin comentarios. S
  */
 async function reelaborateSocialMediaContent(postText, item, sourceName) {
   try {
-    const prompt = `Sos un redactor profesional de un medio digital argentino. Tu tarea es transformar esta publicación corta de redes sociales en un artículo periodístico COMPLETO Y EXTENSO.
-
-PUBLICACIÓN ORIGINAL (CORTA):
-"""
-${postText.substring(0, 3000)}
-"""
-
-CONTEXTO ADICIONAL:
-- Autor/Fuente: ${item.authors?.[0]?.name || 'Institución local'}
-- Fecha: ${item.date_published || 'Reciente'}
-
-OBJETIVO CRÍTICO: Crear un artículo periodístico de 350-500 palabras a partir de esta publicación corta.
-
-⚠️ IMPORTANTE: La publicación original es BREVE, pero vos tenés que EXPANDIRLA en un artículo COMPLETO.
-
-CÓMO EXPANDIR EL CONTENIDO:
-
-1. Si menciona un EVENTO:
-   - Desarrollar en qué consiste
-   - Explicar dónde y cuándo se realizará
-   - Detallar horarios, requisitos, condiciones
-   - Mencionar organizadores y participantes
-   - Explicar el contexto o antecedentes
-   - Describir el impacto esperado o la importancia
-
-2. Si menciona una ACTIVIDAD/SERVICIO:
-   - Explicar en detalle de qué se trata
-   - Detallar cómo funciona, cómo acceder
-   - Mencionar beneficiarios o público objetivo
-   - Explicar requisitos o pasos a seguir
-   - Contextualizar por qué es relevante
-   - Agregar información sobre la institución organizadora
-
-3. Si menciona un ANUNCIO/COMUNICADO:
-   - Desarrollar qué implica exactamente
-   - Explicar a quiénes afecta o beneficia
-   - Detallar plazos, fechas, condiciones
-   - Contextualizar la decisión o medida
-   - Explicar antecedentes si corresponde
-   - Mencionar próximos pasos
-
-4. SIEMPRE AGREGAR:
-   - Información sobre la institución/organismo que publica
-   - Contexto local relevante
-   - Datos concretos (fechas, horarios, lugares, números)
-   - Información de contacto o consulta si está disponible
-
-ESTRUCTURA OBLIGATORIA (4-6 PÁRRAFOS):
-
-Párrafo 1: Presentar el hecho principal de forma periodística
-Párrafo 2: Desarrollar detalles específicos (qué, cuándo, dónde, cómo)
-Párrafo 3: Explicar contexto, antecedentes o relevancia
-Párrafo 4: Agregar información complementaria (organizadores, requisitos, condiciones)
-Párrafo 5 (opcional): Datos de contacto, inscripción o información adicional
-Párrafo 6 (opcional): Impacto esperado o cierre informativo
-
-REGLAS DE FORMATO:
-
-- SOLO párrafos de texto corrido
-- PROHIBIDO: listas (-, *, •), subtítulos, enumeraciones
-- Usar **negritas** para fechas, horarios, nombres importantes (6-8 veces)
-- Usar *cursivas* para énfasis (2-3 veces)
-- Eliminar TODOS los emojis
-- Eliminar hashtags y menciones
-- NO mencionar "Facebook", "Instagram", "redes sociales"
-- NO decir "según publicó", "compartió en", etc.
-
-EXTENSIÓN: Entre 350 y 500 palabras. NO MENOS.
-
-EJEMPLO DE EXPANSIÓN:
-
-POST ORIGINAL (30 palabras):
-"Este domingo 'Las dos horas del Cantorcito' en el teatro Samuel. 18hs. Entrada libre y gratuita! 🎵"
-
-ARTÍCULO GENERADO (420 palabras):
-
-El Municipio de Coronel Suárez anunció la realización del evento cultural "Las dos horas del Cantorcito" para este domingo en el teatro Samuel. La actividad musical forma parte de la programación mensual de espectáculos que organiza la Secretaría de Cultura municipal y contará con entrada libre y gratuita para todo el público.
-
-El evento está programado para las **18 horas** con apertura de puertas desde las **17:30**. Los organizadores recomiendan llegar con anticipación dado que el teatro Samuel tiene capacidad para **300 espectadores** y se espera una concurrencia numerosa. Las puertas se abrirán por orden de llegada hasta completar el aforo disponible.
-
-La propuesta incluye presentaciones de artistas locales y regionales que interpretarán un variado repertorio de música tradicional argentina. "Las dos horas del Cantorcito" es un formato que se viene desarrollando mensualmente en el teatro y ha logrado consolidarse como uno de los espectáculos más convocantes de la agenda cultural local. En ediciones anteriores, el evento reunió a más de *250 personas* y recibió elogios tanto del público como de los artistas participantes.
-
-El teatro Samuel se encuentra ubicado en **calle Rivadavia 250** del centro de Coronel Suárez. El edificio cuenta con accesibilidad para personas con movilidad reducida y dispone de estacionamiento en las inmediaciones. Las autoridades municipales destacaron que el espacio cumple con todos los protocolos de seguridad vigentes y dispone de las habilitaciones correspondientes.
-
-Para aquellos interesados en asegurar su lugar, el municipio habilitó un sistema de reserva anticipada. Las entradas pueden retirarse a partir del **viernes 7 de febrero** en la boletería del teatro, en horario de **9 a 13 horas**. También está disponible la opción de reserva telefónica comunicándose al número **02926-420100** en el mismo horario. Cada persona podrá retirar hasta dos entradas por presentación de DNI.
-
-La Secretaría de Cultura informó que este evento forma parte de una serie de actividades culturales gratuitas que se desarrollarán durante todo el mes. El objetivo es acercar propuestas artísticas de calidad a la comunidad y promover el acceso a la cultura en todas sus expresiones. Próximamente se darán a conocer las fechas de nuevas presentaciones.
-
-RESPUESTA:
-Devolver ÚNICAMENTE el artículo expandido. Sin explicaciones.`
+    const prompt = prompts.reelaborateSocialMedia(postText, item, sourceName)
 
     const result = await generateContent(prompt, {
       maxRetries: 3,
@@ -1206,36 +849,7 @@ function formatSocialMediaAsFallback(postText, sourceName, item) {
  */
 async function generateSocialMediaMetadata(postText, sourceName, item) {
   try {
-    const prompt = `Genera metadata periodística para esta publicación.
-
-POST:
-"""
-${postText.substring(0, 2000)}
-"""
-
-Generar JSON con 3 campos:
-
-1. title: Título periodístico (max 80 chars)
-   - **SENTENCE CASE**: Solo primera letra en mayúscula, resto en minúscula (excepto nombres propios)
-   - Ejemplo correcto: "El municipio anunció nuevas actividades culturales"
-   - Ejemplo INCORRECTO: "El Municipio Anunció Nuevas Actividades Culturales"
-   - NO mencionar red social
-   - NO usar emojis ni hashtags
-   - Convertir el post en título formal
-
-2. bajada: Resumen 40-50 palabras
-   - Tono formal periodístico
-   - NO mencionar "según publicó en Facebook/Instagram/Twitter"
-   - NO usar emojis
-
-3. volanta: Categoría (max 4 palabras)
-   - **SENTENCE CASE**: Solo primera letra en mayúscula
-   - Ejemplos: "Cultura y espectáculos", "Actividades municipales", "Convocatorias"
-
-PROHIBIDO mencionar: Facebook, Instagram, Twitter, YouTube, redes sociales
-
-Responder SOLO con JSON:
-{"title": "...", "bajada": "...", "volanta": "..."}`
+    const prompt = prompts.generateSocialMediaMetadata(postText)
 
     const result = await generateContent(prompt, {
       maxRetries: 3,
@@ -1871,7 +1485,8 @@ async function processSection(section) {
       console.error(`Error processing section ${section.name}:`, error.message)
     }
 
-    // If we reach here, something went wrong with Instituciones processing
+    // Social media processing complete — do NOT fall through to regular article processing
+    return
   }
 
   // Load state for this section
@@ -2001,66 +1616,7 @@ async function processAllRequestedSections() {
   }
 }
 
-// Look for a function like fetchFeed or getFeedItems
-
-async function fetchFeed(feedUrl) {
-  // Existing code to fetch and parse the feed...
-
-  // After you have the items array, apply the limit
-  const limitedItems = items.slice(0, ITEM_LIMIT)
-  console.log(
-    `Fetched ${items.length} items, returning ${limitedItems.length} (limit: ${ITEM_LIMIT})`,
-  )
-
-  return limitedItems // Return limited items
-}
-
-// Look for any functions with maxItems, limit, or similar parameters
-
-// For example:
-async function fetchSourceItems(source, maxItems) {
-  // If the function already has a maxItems parameter,
-  // make sure it's respecting the global limit
-  const effectiveLimit = maxItems || ITEM_LIMIT
-
-  // Use effectiveLimit in your code...
-}
-
-// Near the end of your file where the main execution happen
-
-// If --all flag is specified, process all sections
-if (args.all) {
-  console.log(
-    'Processing all sections with limit:',
-    ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT,
-  )
-  const allSections = getSections()
-  for (const section of allSections) {
-    await processSection(section) // This will use the ITEM_LIMIT
-  }
-  process.exit(0)
-}
-
-// Process specific section if provided
-const sectionName = args._[0]
-if (sectionName) {
-  console.log(
-    `Processing section: ${sectionName} with limit:`,
-    ITEM_LIMIT === Infinity ? 'No limit' : ITEM_LIMIT,
-  )
-  const section = getSection(sectionName)
-  if (section) {
-    await processSection(section) // This will use the ITEM_LIMIT
-  } else {
-    console.error(`Section not found: ${sectionName}`)
-  }
-  process.exit(0)
-}
-
-// Start processing
-processAllRequestedSections()
-  .then(() => console.log('Process completed'))
-  .catch((error) => console.error('Process failed:', error.message))
+// Start processing (single entry point — uses sectionsToProcess determined at top of file)
 
 /**
  * Extract source name from URL dynamically without hardcoding
@@ -2151,33 +1707,7 @@ function extractSourceName(url) {
  */
 async function generateTags(extractedText, metadata, maxRetries = 3) {
   try {
-    const title = metadata?.title || ''
-    const bajada = metadata?.bajada || ''
-
-    const prompt = `
-      Analiza este artículo y genera entre 5 y 8 etiquetas (tags) relevantes para categorizarlo.
-
-      TÍTULO: ${title}
-      BAJADA: ${bajada}
-      CONTENIDO: "${extractedText.substring(0, 4000)}"
-      
-      INSTRUCCIONES:
-      1. Identifica nombres propios importantes (personas, lugares, organizaciones, eventos).
-      2. Identifica temas principales y subtemas.
-      3. Prioriza sustantivos y conceptos clave.
-      4. Cada etiqueta debe tener entre 1 y 3 palabras.
-      5. NO utilices hashtags (#).
-      6. Enfócate en sujetos y temas, NO en adjetivos o emociones.
-      7. Las etiquetas deben ser específicas pero no demasiado largas.
-      8. Las etiquetas pueden ser en singular o plural, según corresponda.
-      9. NO incluyas palabras muy genéricas como "noticia", "actualidad", etc.
-      
-      IMPORTANTE: Devuelve SOLO un array JSON sin ningún texto adicional.
-      NO incluyas explicaciones, comentarios, ni bloques de código markdown.
-      
-      Formato requerido:
-      ["etiqueta1", "etiqueta2", "etiqueta3", "etiqueta4", "etiqueta5"]
-    `
+    const prompt = prompts.generateTags(extractedText, metadata)
 
     // ✅ USE NEW AI SERVICE - Groq is good for simple tasks
     const result = await generateContent(prompt, {
