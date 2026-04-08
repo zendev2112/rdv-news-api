@@ -933,35 +933,167 @@ async function generateSocialMediaMetadata(postText, sourceName, item) {
 }
 
 /**
- * Processes a single article
+ * Detect if a URL is from a social media platform
+ */
+function isSocialMediaUrl(url) {
+  try {
+    const hostname = new URL(url).hostname
+    return (
+      hostname.includes('facebook.com') ||
+      hostname.includes('instagram.com') ||
+      hostname.includes('twitter.com') ||
+      hostname.includes('x.com') ||
+      hostname.includes('youtube.com') ||
+      hostname.includes('youtu.be')
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Detect social media type from URL for the corresponding Airtable field
+ */
+function getSocialMediaType(url) {
+  try {
+    const hostname = new URL(url).hostname
+    if (hostname.includes('facebook.com')) return 'fb-post'
+    if (hostname.includes('instagram.com')) return 'ig-post'
+    if (hostname.includes('twitter.com') || hostname.includes('x.com'))
+      return 'tw-post'
+    if (hostname.includes('youtube.com') || hostname.includes('youtu.be'))
+      return 'yt-video'
+  } catch {}
+  return ''
+}
+
+// Create a dynamic mapping of section IDs to Airtable values (module-level, shared)
+const sectionIdToAirtableValue = {
+  'coronel-suarez': 'Coronel Suárez',
+  'pueblos-alemanes': 'Pueblos Alemanes',
+  huanguelen: 'Huanguelén',
+  'la-sexta': 'La Sexta',
+  instituciones: 'Instituciones',
+  'local-facebook': 'Local Facebook',
+  politica: 'Política',
+  economia: 'Economía',
+  agro: 'Agro',
+  sociedad: 'Sociedad',
+  salud: 'Salud',
+  cultura: 'Cultura',
+  opinion: 'Opinión',
+  deportes: 'Deportes',
+  lifestyle: 'Lifestyle',
+  vinos: 'Vinos',
+  'el-recetario': 'El Recetario',
+  'santa-trinidad': 'Santa Trinidad',
+  'san-jose': 'San José',
+  'santa-maria': 'Santa María',
+  iactualidad: 'IActualidad',
+  dolar: 'Dólar',
+  propiedades: 'Propiedades',
+  'pymes-emprendimientos': 'Pymes y Emprendimientos',
+  inmuebles: 'Inmuebles',
+  campos: 'Campos',
+  'construccion-diseno': 'Construcción y Diseño',
+  agricultura: 'Agricultura',
+  ganaderia: 'Ganadería',
+  'tecnologias-agro': 'Tecnologías',
+  educacion: 'Educación',
+  policiales: 'Policiales',
+  efemerides: 'Efemérides',
+  ciencia: 'Ciencia',
+  'vida-armonia': 'Vida en Armonía',
+  'nutricion-energia': 'Nutrición y Energía',
+  fitness: 'Fitness',
+  'salud-mental': 'Salud Mental',
+  turismo: 'Turismo',
+  horoscopo: 'Horóscopo',
+  feriados: 'Feriados',
+  'loterias-quinielas': 'Loterías y Quinielas',
+  'moda-belleza': 'Moda y Belleza',
+  mascotas: 'Mascotas',
+  mundo: 'Mundo',
+  espectaculos: 'Espectáculos',
+  ambiente: 'Ambiente',
+  clima: 'Clima',
+  tecnologia: 'Tecnología',
+  actualidad: 'Actualidad',
+  'cine-series': 'Cine y Series',
+  'historia-literatura': 'Historia y Literatura',
+  recetas: 'Recetas',
+  'primera-plana': 'Primera Plana',
+  local: 'Local',
+}
+
+/**
+ * Processes a single article — unified pipeline for all sections.
+ * Auto-detects social media sources and uses the appropriate prompt.
  */
 async function processArticle(item, sectionId) {
   try {
-    console.log(`Processing article: ${item.url} for section ${sectionId}`)
+    const itemUrl = item.url || ''
+    console.log(`Processing article: ${itemUrl} for section ${sectionId}`)
 
-    // Use comprehensive scraping: tries direct → AMP → Google Cache → RSS fallback
-    const scrapeResult = await scraper.scrapeArticle(item.url, {
-      timeout: 15000,
-      rssContentText: item.content_text || '',
-      rssContentHtml: item.content_html || '',
-      rssTitle: item.title || '',
-    })
+    const isSocial = isSocialMediaUrl(itemUrl)
+    const socialMediaType = isSocial ? getSocialMediaType(itemUrl) : ''
 
-    const htmlContent = scrapeResult.html
-    const extractedText = scrapeResult.text
+    // ── STEP 1: Extract content ──────────────────────────────────────────
+    let extractedText = ''
+    let htmlContent = ''
+    let sourceName = ''
+
+    if (isSocial) {
+      // Social media: content comes from the RSS feed fields
+      let postText = item.content_text || ''
+      if ((!postText || postText.length < 100) && item.content_html) {
+        const htmlText = scraper.extractFromContentHtml(item.content_html)
+        if (htmlText && htmlText.length > postText.length) {
+          console.log(
+            `📝 Using content_html (${htmlText.length} chars) over content_text (${postText.length} chars)`,
+          )
+          postText = htmlText
+        }
+      }
+      if (!postText || postText.length < 50) {
+        postText = item.summary || item.title || postText
+      }
+      extractedText = postText
+      htmlContent = item.content_html || ''
+
+      // Determine source name from URL hostname
+      try {
+        const hostname = new URL(itemUrl).hostname
+        const domain = hostname.replace(/^www\./, '')
+        const parts = domain.split('.')
+        sourceName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1)
+      } catch {
+        sourceName = item.authors?.[0]?.name || 'Social Media'
+      }
+    } else {
+      // Regular article: scrape the URL with RSS fallback
+      const scrapeResult = await scraper.scrapeArticle(itemUrl, {
+        timeout: 15000,
+        rssContentText: item.content_text || '',
+        rssContentHtml: item.content_html || '',
+        rssTitle: item.title || '',
+      })
+      extractedText = scrapeResult.text
+      htmlContent = scrapeResult.html
+      sourceName = extractSourceName(itemUrl)
+      console.log(
+        `📰 Scraped ${extractedText?.length || 0} chars via ${scrapeResult.method} for: ${itemUrl}`,
+      )
+    }
 
     if (!extractedText || extractedText.length < 50) {
       console.warn(
-        `Insufficient content for URL: ${item.url} (${extractedText?.length || 0} chars from ${scrapeResult.method})`,
+        `Insufficient content for URL: ${itemUrl} (${extractedText?.length || 0} chars)`,
       )
       return null
     }
 
-    console.log(
-      `📰 Scraped ${extractedText.length} chars via ${scrapeResult.method} for: ${item.url}`,
-    )
-
-    // Extract images and embeds from HTML (if we have HTML)
+    // ── STEP 2: Extract images and embeds from HTML ──────────────────────
     let imageMarkdown = ''
     let images = []
     let instagramContent = ''
@@ -973,173 +1105,92 @@ async function processArticle(item, sectionId) {
       const imgResult = extractImagesAsMarkdown(htmlContent)
       images = imgResult.images
       imageMarkdown = imgResult.markdown
-      console.log(`Found ${images.length} images in article: ${item.url}`)
+      console.log(`Found ${images.length} images in article: ${itemUrl}`)
 
-      // Extract embeds using the imported services
       instagramContent = embeds.extractInstagramEmbeds(htmlContent)
       facebookContent = embeds.extractFacebookEmbeds(htmlContent)
       twitterContent = embeds.extractTwitterEmbeds(htmlContent)
       youtubeContent = embeds.extractYoutubeEmbeds(htmlContent)
-
-      const embedsFound = {
-        instagram: !!instagramContent,
-        facebook: !!facebookContent,
-        twitter: !!twitterContent,
-        youtube: !!youtubeContent,
-      }
-      console.log(`Found embeds for ${item.url}:`, embedsFound)
     }
 
-    // Reelaborate text WITH image markdown
-    console.log(`Reelaborating text for: ${item.url}`)
+    // For social media items, also check item.image and attachments
+    let imageUrl = ''
+    if (isSocial) {
+      imageUrl = item.image || ''
+      if (!imageUrl && item.attachments && item.attachments.length > 0) {
+        imageUrl = item.attachments[0].url || ''
+      }
+    }
+
+    // ── STEP 3: Reelaborate text ────────────────────────────────────────
+    console.log(`Reelaborating text for: ${itemUrl}`)
     let reelaboratedText = null
     try {
-      reelaboratedText = await reelaborateText(extractedText, imageMarkdown)
+      if (isSocial) {
+        reelaboratedText = await reelaborateSocialMediaContent(
+          extractedText,
+          item,
+          sourceName,
+        )
+      } else {
+        reelaboratedText = await reelaborateText(extractedText, imageMarkdown)
+      }
     } catch (textError) {
       console.error(`Error reelaborating text: ${textError.message}`)
-      console.warn(`Failed to reelaborate text for URL: ${item.url}`)
-      // Use original text as fallback
-      reelaboratedText = formatTextAsFallback(extractedText, imageMarkdown)
+      reelaboratedText = isSocial
+        ? formatSocialMediaAsFallback(extractedText, sourceName, item)
+        : formatTextAsFallback(extractedText, imageMarkdown)
     }
 
     if (!reelaboratedText) {
-      reelaboratedText = formatTextAsFallback(extractedText, imageMarkdown)
-      console.warn(`Using fallback formatting for: ${item.url}`)
+      reelaboratedText = isSocial
+        ? formatSocialMediaAsFallback(extractedText, sourceName, item)
+        : formatTextAsFallback(extractedText, imageMarkdown)
+      console.warn(`Using fallback formatting for: ${itemUrl}`)
     }
 
-    // Generate metadata
-    console.log(`Generating metadata for: ${item.url}`)
+    // ── STEP 4: Generate metadata ───────────────────────────────────────
+    console.log(`Generating metadata for: ${itemUrl}`)
     let metadata = null
     try {
-      metadata = await generateMetadata(extractedText)
+      if (isSocial) {
+        metadata = await generateSocialMediaMetadata(
+          extractedText,
+          sourceName,
+          item,
+        )
+      } else {
+        metadata = await generateMetadata(extractedText)
+      }
     } catch (metaError) {
       console.error(`Error generating metadata: ${metaError.message}`)
-      // Use fallback metadata
-      metadata = generateFallbackMetadata(extractedText)
+      metadata = isSocial
+        ? generateFallbackSocialMetadata(extractedText, sourceName, item)
+        : generateFallbackMetadata(extractedText)
     }
 
     if (!metadata) {
-      metadata = generateFallbackMetadata(extractedText)
-      console.warn(`Using fallback metadata for: ${item.url}`)
+      metadata = isSocial
+        ? generateFallbackSocialMetadata(extractedText, sourceName, item)
+        : generateFallbackMetadata(extractedText)
     }
 
-    // Generate tags
-    console.log(`Generating tags for: ${item.url}`)
+    // ── STEP 5: Generate tags ───────────────────────────────────────────
+    console.log(`Generating tags for: ${itemUrl}`)
     let tags = ''
     try {
-      tags = await generateTags(extractedText, metadata)
-      console.log(`Generated tags for: ${item.url}`)
+      const tagText = isSocial
+        ? `${metadata.title} ${metadata.bajada} ${reelaboratedText}`
+        : extractedText
+      tags = await generateTags(tagText, metadata)
     } catch (tagError) {
       console.error(`Error generating tags: ${tagError.message}`)
       tags = generateFallbackTags(extractedText, metadata)
     }
 
-    // Generate social media text
-    /*     console.log(`Generating social media text for: ${item.url}`)
-    let socialMediaText = ''
-    try {
-      socialMediaText = await generateSocialMediaText(
-        extractedText,
-        metadata,
-        tags
-      )
-      console.log(
-        `Generated social media text: ${socialMediaText.length} chars`
-      )
-    } catch (socialTextError) {
-      console.error(
-        `Error generating social media text: ${socialTextError.message}`
-      )
-      socialMediaText = generateFallbackSocialText(metadata, tags)
-    } */
-
-    // Get section information
-    const section = getSection(sectionId)
-
-    // Prepare record
-    const attachments = item.attachments || []
-    const attachmentUrls = attachments.map((attachment) => attachment.url)
-    const imgUrl = [...attachmentUrls].filter(Boolean).join(', ')
-
-    // Clean the reelaborated text using postProcessText
+    // ── STEP 6: Build record fields ─────────────────────────────────────
     const processedText = postProcessText(reelaboratedText)
-
-    // Format image URLs as attachment objects for Airtable
-    let imageAttachments = []
-    if (images.length > 0) {
-      imageAttachments = images.map((url) => ({ url }))
-    } else if (imgUrl) {
-      imageAttachments = [{ url: imgUrl }]
-    }
-
-    // Create a dynamic mapping of Supabase section IDs to Airtable values
-    const sectionIdToAirtableValue = {
-      'coronel-suarez': 'Coronel Suárez',
-      'pueblos-alemanes': 'Pueblos Alemanes',
-      huanguelen: 'Huanguelén',
-      'la-sexta': 'La Sexta',
-      politica: 'Política',
-      economia: 'Economía',
-      agro: 'Agro',
-      sociedad: 'Sociedad',
-      salud: 'Salud',
-      cultura: 'Cultura',
-      opinion: 'Opinión',
-      deportes: 'Deportes',
-      lifestyle: 'Lifestyle',
-      vinos: 'Vinos',
-      'el-recetario': 'El Recetario',
-      'santa-trinidad': 'Santa Trinidad',
-      'san-jose': 'San José',
-      'santa-maria': 'Santa María',
-      iactualidad: 'IActualidad',
-      dolar: 'Dólar',
-      propiedades: 'Propiedades',
-      'pymes-emprendimientos': 'Pymes y Emprendimientos',
-      inmuebles: 'Inmuebles',
-      campos: 'Campos',
-      'construccion-diseno': 'Construcción y Diseño',
-      agricultura: 'Agricultura',
-      ganaderia: 'Ganadería',
-      'tecnologias-agro': 'Tecnologías',
-      educacion: 'Educación',
-      policiales: 'Policiales',
-      efemerides: 'Efemérides',
-      ciencia: 'Ciencia',
-      'vida-armonia': 'Vida en Armonía',
-      'nutricion-energia': 'Nutrición y Energía',
-      fitness: 'Fitness',
-      'salud-mental': 'Salud Mental',
-      turismo: 'Turismo',
-      horoscopo: 'Horóscopo',
-      feriados: 'Feriados',
-      'loterias-quinielas': 'Loterías y Quinielas',
-      'moda-belleza': 'Moda y Belleza',
-      mascotas: 'Mascotas',
-      mundo: 'Mundo', // ✅ ADD THIS
-      espectaculos: 'Espectáculos', // ✅ ADD THIS
-      ambiente: 'Ambiente',
-      clima: 'Clima',
-      tecnologia: 'Tecnología',
-      actualidad: 'Actualidad',
-      'cine-series': 'Cine y Series',
-      'historia-literatura': 'Historia y Literatura',
-    }
-
-    // Replace the hardcoded section mapping with this more dynamic lookup
-    // Default to empty string as requested
-    let sectionValue = sectionIdToAirtableValue[sectionId] || ''
-
-    // Look up the section in our mapping
-    if (sectionIdToAirtableValue[sectionId]) {
-      sectionValue = sectionIdToAirtableValue[sectionId]
-    }
-
-    // Extract source name from the URL
-    const sourceName = extractSourceName(item.url)
-    console.log(`Extracted source name: ${sourceName} from URL: ${item.url}`)
-
-    // Find the recordFields creation around line 1036 and modify it:
+    const sectionValue = sectionIdToAirtableValue[sectionId] || ''
 
     // Strip ALL markdown from plain-text fields before Airtable
     const stripPlain = (s) =>
@@ -1153,21 +1204,30 @@ async function processArticle(item, sectionId) {
         .replace(/ {2,}/g, ' ')
         .trim()
 
+    // Image attachments for Airtable
+    let imageAttachments = []
+    if (images.length > 0) {
+      imageAttachments = images.map((url) => ({ url }))
+    } else if (imageUrl) {
+      imageAttachments = [{ url: imageUrl }]
+    } else {
+      const attachments = item.attachments || []
+      const attachmentUrls = attachments.map((a) => a.url).filter(Boolean)
+      if (attachmentUrls.length > 0) {
+        imageAttachments = [{ url: attachmentUrls[0] }]
+      }
+    }
+
     const recordFields = {
       title: stripPlain(metadata ? metadata.title : item.title),
-      overline: stripPlain(
-        metadata ? metadata.volanta : 'No overline available.',
-      ),
-      excerpt: stripPlain(metadata ? metadata.bajada : 'No summary available.'),
+      overline: stripPlain(metadata ? metadata.volanta : ''),
+      excerpt: stripPlain(metadata ? metadata.bajada : ''),
       article: processedText,
-      image: imageAttachments, // ✅ Array of attachment objects for Airtable
-
-      author: '',
-      // ✅ MODIFIED: Set placeholder values that will be updated with Airtable URLs
-      imgUrl: '', // Will be populated with Airtable URL after insertion
-      'article-images': '', // Will be populated with Airtable URLs after insertion
-
-      url: item.url,
+      image: imageAttachments,
+      author: item.authors?.[0]?.name || '',
+      imgUrl: imageUrl || '',
+      'article-images': '',
+      url: itemUrl,
       source: sourceName,
       'ig-post': instagramContent || '',
       'fb-post': facebookContent || '',
@@ -1176,16 +1236,36 @@ async function processArticle(item, sectionId) {
       section: sectionValue,
       status: 'draft',
       tags: tags,
-      /* socialMediaText: socialMediaText, */
+    }
+
+    // Social media items: set the specific social type field to the URL
+    if (socialMediaType && itemUrl) {
+      recordFields[socialMediaType] = itemUrl
+    }
+
+    // Social media items: add extra fields if available
+    if (isSocial) {
+      recordFields.processingStatus = 'completed'
+      if (item.date_published) recordFields.postDate = item.date_published
+      try {
+        if (item.date_published) {
+          recordFields.postDateFormatted = new Date(
+            item.date_published,
+          ).toLocaleDateString('es-AR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })
+        }
+      } catch {}
+      if (item.content_html) recordFields.contentHtml = item.content_html
+      if (item.id) recordFields.postId = item.id
     }
 
     console.log(
-      `Successfully processed article: ${item.url} for section ${sectionId}`,
+      `Successfully processed article: ${itemUrl} for section ${sectionId}`,
     )
-
-    return {
-      fields: recordFields,
-    }
+    return { fields: recordFields }
   } catch (error) {
     console.error(`Error processing article ${item.url}:`, error.message)
     return null
@@ -1239,314 +1319,6 @@ async function processBatch(items, sectionId) {
  */
 async function processSection(section) {
   console.log(`\n=== Processing section: ${section.name} ===\n`)
-
-  // Special handling for Instituciones social media content
-  if (
-    section.id === 'instituciones' ||
-    section.id === 'local-facebook' ||
-    section.id === 'huanguelen' ||
-    section.id === 'pueblos-alemanes'
-  ) {
-    console.log(`Processing ${section.name} as social media content...`)
-
-    try {
-      // Load state for this section
-      const state = loadSectionState(section.id)
-      const processedUrls = new Set(state.processedUrls || [])
-
-      // Fetch feed data
-      console.log(`Fetching social media feed for ${section.name}`)
-      const response = await axios.get(section.rssUrl)
-      const feedData = response.data
-
-      if (!feedData || !feedData.items || !Array.isArray(feedData.items)) {
-        console.warn(`No valid items in feed data for ${section.name}`)
-        return
-      }
-
-      console.log(
-        `Fetched ${feedData.items.length} items from ${section.name} feed`,
-      )
-      console.log(`Already processed ${processedUrls.size} items previously`)
-
-      // Filter out already processed items unless force flag is used
-      const newItems = args.force
-        ? feedData.items.slice(0, FEED_SIZE)
-        : feedData.items
-            .filter((item) => !processedUrls.has(item.url))
-            .slice(0, FEED_SIZE)
-
-      if (newItems.length === 0) {
-        console.log(
-          `No new items to process for ${section.name}${
-            args.force ? ' (even with force flag)' : ''
-          }`,
-        )
-        return
-      }
-
-      console.log(
-        `Found ${newItems.length} ${
-          args.force ? '' : 'new '
-        }items to process for ${section.name}`,
-      )
-
-      // Apply the limit
-      const limitedItems = newItems.slice(0, ITEM_LIMIT)
-      console.log(
-        `Processing ${limitedItems.length} social media items (limit: ${ITEM_LIMIT})`,
-      )
-
-      // Process the limited items
-      for (const item of limitedItems) {
-        try {
-          const itemUrl = item.url || ''
-          console.log(
-            `Processing social media item: ${
-              item.title || 'Untitled'
-            } (${itemUrl})`,
-          )
-
-          // IMPROVED: Extract all content directly from the RSS feed item structure
-          // This matches the expected format you provided
-
-          // Extract post text content — prefer content_text, fall back to content_html
-          let postText = item.content_text || ''
-
-          // If content_text is short/empty but content_html exists, extract text from HTML
-          if ((!postText || postText.length < 100) && item.content_html) {
-            const htmlText = scraper.extractFromContentHtml(item.content_html)
-            if (htmlText && htmlText.length > postText.length) {
-              console.log(
-                `📝 Using content_html (${htmlText.length} chars) over content_text (${postText.length} chars)`,
-              )
-              postText = htmlText
-            }
-          }
-
-          // Last resort: try the summary or title fields
-          if (!postText || postText.length < 50) {
-            postText = item.summary || item.title || postText
-          }
-
-          // Get image URL (primary source is the image field)
-          let imageUrl = item.image || null
-
-          // If main image is missing, check attachments
-          if (!imageUrl && item.attachments && item.attachments.length > 0) {
-            imageUrl = item.attachments[0].url
-          }
-
-          // Determine source platform from URL
-          let sourceName = 'Social Media'
-          let socialMediaType = ''
-
-          try {
-            const hostname = new URL(itemUrl).hostname
-            if (hostname.includes('facebook.com')) {
-              sourceName = 'Facebook'
-              socialMediaType = 'fb-post'
-            } else if (hostname.includes('instagram.com')) {
-              sourceName = 'Instagram'
-              socialMediaType = 'ig-post'
-            } else if (
-              hostname.includes('twitter.com') ||
-              hostname.includes('x.com')
-            ) {
-              sourceName = 'Twitter'
-              socialMediaType = 'tw-post'
-            } else if (
-              hostname.includes('youtube.com') ||
-              hostname.includes('youtu.be')
-            ) {
-              sourceName = 'YouTube'
-              socialMediaType = 'yt-video'
-            } else {
-              // Get domain without www. prefix for other sources
-              const domain = hostname.replace(/^www\./, '')
-              const parts = domain.split('.')
-              if (parts.length >= 2) {
-                sourceName =
-                  parts[0].charAt(0).toUpperCase() + parts[0].slice(1)
-              }
-            }
-          } catch (e) {
-            console.log(
-              `Error parsing URL: ${e.message}. Using default source name.`,
-            )
-            // URL parsing failed, check if we can extract from authors
-            if (
-              item.authors &&
-              item.authors.length > 0 &&
-              item.authors[0].name
-            ) {
-              sourceName = item.authors[0].name
-            }
-          }
-
-          // Get author information
-          const authorName =
-            item.authors && item.authors.length > 0
-              ? item.authors[0].name
-              : sourceName
-
-          // Format publication date if available
-          let pubDate = ''
-          try {
-            if (item.date_published) {
-              const date = new Date(item.date_published)
-              pubDate = date.toLocaleDateString('es-AR', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })
-            }
-          } catch (e) {
-            console.log(`Error formatting date: ${e.message}`)
-          }
-
-          // Reelaborate social media content into article
-          console.log(`Reelaborating social media content for: ${itemUrl}`)
-          let reelaboratedArticle = null
-          try {
-            reelaboratedArticle = await reelaborateSocialMediaContent(
-              postText,
-              item,
-              sourceName,
-            )
-          } catch (textError) {
-            console.error(
-              `Error reelaborating social media text: ${textError.message}`,
-            )
-            reelaboratedArticle = formatSocialMediaAsFallback(
-              postText,
-              sourceName,
-              item,
-            )
-          }
-
-          // Generate metadata for social media content
-          console.log(
-            `Generating metadata for social media content: ${itemUrl}`,
-          )
-          let metadata = null
-          try {
-            metadata = await generateSocialMediaMetadata(
-              postText,
-              sourceName,
-              item,
-            )
-          } catch (metaError) {
-            console.error(
-              `Error generating social media metadata: ${metaError.message}`,
-            )
-            metadata = generateFallbackSocialMetadata(
-              postText,
-              sourceName,
-              item,
-            )
-          }
-
-          // Strip ALL markdown from plain-text fields before Airtable
-          const strip = (s) =>
-            (s || '')
-              .replace(/\*\*([^*]+)\*\*/g, '$1')
-              .replace(/\*([^*]+)\*/g, '$1')
-              .replace(/__([^_]+)__/g, '$1')
-              .replace(/_([^_]+)_/g, '$1')
-              .replace(/`([^`]+)`/g, '$1')
-              .replace(/^#+\s*/gm, '')
-              .replace(/ {2,}/g, ' ')
-              .trim()
-
-          // Create record fields using the generated metadata
-          const recordFields = {
-            title: strip(metadata.title),
-            url: itemUrl,
-            excerpt: strip(metadata.bajada),
-            source: sourceName,
-            imgUrl: imageUrl || '',
-            article: reelaboratedArticle,
-            overline: strip(metadata.volanta),
-            author: item.authors?.[0]?.name || '',
-            status: 'draft',
-            processingStatus: 'completed',
-            postDate: item.date_published || '',
-            postDateFormatted: pubDate,
-            image: imageUrl ? [{ url: imageUrl }] : [],
-          }
-
-          // ✅ ADD TAG GENERATION FOR SOCIAL MEDIA
-          try {
-            console.log(`Generating tags for social media item: ${itemUrl}`)
-            const socialText = `${metadata.title} ${metadata.bajada} ${reelaboratedArticle}`
-            const tags = await generateTags(socialText, metadata)
-            console.log(`Generated tags: ${tags}`)
-            recordFields.tags = tags
-          } catch (genError) {
-            console.error(`Error generating tags: ${genError.message}`)
-            recordFields.tags = generateFallbackTags(
-              reelaboratedArticle,
-              metadata,
-            )
-          }
-
-          // Add social media specific fields based on source type
-          if (socialMediaType) {
-            recordFields[socialMediaType] = itemUrl
-          }
-
-          // Add HTML content if available (useful for embedding or further processing)
-          if (item.content_html) {
-            recordFields.contentHtml = item.content_html
-          }
-
-          // Add post ID if available
-          if (item.id) {
-            recordFields.postId = item.id
-          }
-
-          // Insert into Airtable
-          try {
-            await airtableService.insertRecords(
-              [{ fields: recordFields }],
-              section.id,
-            )
-            console.log(
-              `Added social media item to Airtable: ${recordFields.title}`,
-            )
-
-            // Mark URL as processed
-            processedUrls.add(itemUrl)
-
-            // Update section state after each item
-            saveSectionState(section.id, {
-              processedUrls: [...processedUrls],
-              lastRun: new Date().toISOString(),
-            })
-          } catch (airtableError) {
-            console.error(
-              `Error adding item to Airtable: ${airtableError.message}`,
-            )
-          }
-
-          // Add a delay to avoid rate limits
-          await delay(API_DELAY)
-        } catch (itemError) {
-          console.error(
-            `Error processing social media item: ${itemError.message}`,
-          )
-        }
-      }
-
-      console.log(`Completed processing ${section.name} content`)
-    } catch (error) {
-      console.error(`Error processing section ${section.name}:`, error.message)
-    }
-
-    // Social media processing complete — do NOT fall through to regular article processing
-    return
-  }
 
   // Load state for this section
   const state = loadSectionState(section.id)

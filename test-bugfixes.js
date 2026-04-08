@@ -50,14 +50,11 @@ console.log(
 //   }
 //   // Load state for this section  <-- regular processing starts here
 
-// Simple check: after "Social media processing complete" comment, there must be a return before the next function body
-const returnBeforeRegularProcessing =
-  source.includes('// Social media processing complete') &&
-  source.includes('return\n  }\n\n  // Load state for this section')
+// Unified pipeline: no more separate social media branch in processSection
 test(
-  'return statement exists after social media try/catch',
-  returnBeforeRegularProcessing,
-  'Expected: return statement before closing } of social media if-block',
+  'no separate social media branch in processSection',
+  !source.includes('// Social media processing complete'),
+  'Expected: social media branch removed from processSection',
 )
 
 // Double check: the comment "If we reach here, something went wrong" should be GONE
@@ -170,19 +167,19 @@ test(
   source.includes('async function processArticle('),
 )
 
-// Make sure the social media sections are still detected
-const socialSections = [
-  'instituciones',
-  'local-facebook',
-  'huanguelen',
-  'pueblos-alemanes',
-]
-for (const sid of socialSections) {
-  test(
-    `social media section '${sid}' still handled`,
-    source.includes(`section.id === '${sid}'`),
-  )
-}
+// Make sure unified pipeline detects social media URLs
+test(
+  'unified pipeline has isSocialMediaUrl helper',
+  source.includes('function isSocialMediaUrl('),
+)
+test(
+  'unified pipeline has getSocialMediaType helper',
+  source.includes('function getSocialMediaType('),
+)
+test(
+  'unified pipeline uses isSocial branching in processArticle',
+  source.includes('const isSocial = isSocialMediaUrl('),
+)
 
 // Make sure sectionsToProcess is still set at the top
 test(
