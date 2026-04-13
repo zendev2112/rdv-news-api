@@ -50,9 +50,12 @@ Force Processing: ${forceProcess ? 'Yes' : 'No'}
 
   try {
     // IMPROVED: Include records that need OCR in the filter formula
+    // For Slack Noticias: process records still showing 'Procesando...' or with no article
     let filterFormula = forceProcess
       ? ''
-      : "OR({processingStatus} = 'needs_extraction', {isOcrNeeded} = 1)"
+      : tableName === 'Slack Noticias'
+        ? "OR({article} = 'Procesando...', {article} = '', NOT({imgUrl} = ''))"
+        : "OR({processingStatus} = 'needs_extraction', {isOcrNeeded} = 1)"
 
     console.log(
       `Fetching records from "${tableName}" with filter: ${filterFormula || 'ALL RECORDS'}`,
@@ -141,21 +144,24 @@ async function processRecord(record, tableName) {
 
     // Check if OCR is needed for this record
     const needsOcr = fields.isOcrNeeded === true
+    const isSlackTable = tableName === 'Slack Noticias'
 
     if (needsOcr) {
       console.log('Record is marked for OCR processing')
     }
 
-    // Update processing status
-    try {
-      await airtableBase(tableName).update(record.id, {
-        processingStatus: 'needs_extraction',
-        processingNotes: needsOcr
-          ? 'Starting OCR and content generation'
-          : 'Starting content generation',
-      })
-    } catch (updateErr) {
-      console.error(`Couldn't update processing status: ${updateErr.message}`)
+    // Update processing status (skip for Slack Noticias which lacks this field)
+    if (!isSlackTable) {
+      try {
+        await airtableBase(tableName).update(record.id, {
+          processingStatus: 'needs_extraction',
+          processingNotes: needsOcr
+            ? 'Starting OCR and content generation'
+            : 'Starting content generation',
+        })
+      } catch (updateErr) {
+        console.error(`Couldn't update processing status: ${updateErr.message}`)
+      }
     }
 
     // Get content from article or contentHtml (prioritize article)
@@ -244,13 +250,15 @@ async function processRecord(record, tableName) {
     // Still no content, mark as failed
     if (!rawContent) {
       console.log('No content found in record')
-      try {
-        await airtableBase(tableName).update(record.id, {
-          processingStatus: 'failed',
-          processingNotes: 'No content found in record or image',
-        })
-      } catch (err) {
-        console.error(`Failed to update status: ${err.message}`)
+      if (!isSlackTable) {
+        try {
+          await airtableBase(tableName).update(record.id, {
+            processingStatus: 'failed',
+            processingNotes: 'No content found in record or image',
+          })
+        } catch (err) {
+          console.error(`Failed to update status: ${err.message}`)
+        }
       }
       return false
     }
@@ -268,11 +276,14 @@ async function processRecord(record, tableName) {
       )
 
       // Update record with ALL generated content
-      const updateFields = {
-        processingStatus: 'completed',
-        processingNotes: needsOcr
+      const updateFields = {}
+
+      // Only set processing fields for tables that have them
+      if (!isSlackTable) {
+        updateFields.processingStatus = 'completed'
+        updateFields.processingNotes = needsOcr
           ? 'Successfully processed with OCR'
-          : 'Successfully processed',
+          : 'Successfully processed'
       }
 
       // Always update these fields with fresh content
@@ -326,13 +337,15 @@ async function processRecord(record, tableName) {
     } catch (contentGenError) {
       console.error(`Content generation failed: ${contentGenError.message}`)
 
-      try {
-        await airtableBase(tableName).update(record.id, {
-          processingStatus: 'error',
-          processingNotes: `Content generation failed: ${contentGenError.message.substring(0, 500)}`,
-        })
-      } catch (e) {
-        console.error(`Failed to update error status: ${e.message}`)
+      if (!isSlackTable) {
+        try {
+          await airtableBase(tableName).update(record.id, {
+            processingStatus: 'error',
+            processingNotes: `Content generation failed: ${contentGenError.message.substring(0, 500)}`,
+          })
+        } catch (e) {
+          console.error(`Failed to update error status: ${e.message}`)
+        }
       }
 
       return false
@@ -340,13 +353,15 @@ async function processRecord(record, tableName) {
   } catch (error) {
     console.error(`Error processing record:`, error)
 
-    try {
-      await airtableBase(tableName).update(record.id, {
-        processingStatus: 'error',
-        processingNotes: `Error: ${error.message.substring(0, 500)}`,
-      })
-    } catch (e) {
-      console.error('Failed to update error status:', e)
+    if (tableName !== 'Slack Noticias') {
+      try {
+        await airtableBase(tableName).update(record.id, {
+          processingStatus: 'error',
+          processingNotes: `Error: ${error.message.substring(0, 500)}`,
+        })
+      } catch (e) {
+        console.error('Failed to update error status:', e)
+      }
     }
 
     return false
@@ -586,6 +601,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ),
     forceProcess: args.includes('--force'),
   }
+
+  console.log(`
+Usage: node src/scripts/process-social-media.js [tableName] [--limit=N] [--force]
+Tables: Instituciones (default), "Slack Noticias"
+Example: node src/scripts/process-social-media.js "Slack Noticias" --force --limit=10
+  `)
 
   processSocialMediaContent(options)
     .then((stats) => {

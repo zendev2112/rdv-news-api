@@ -135,8 +135,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing recordId or url' })
   }
 
-  // Respond immediately — the function keeps running until it finishes or hits 300s
-  res.status(202).json({ status: 'processing' })
+  // DO NOT respond early — Vercel kills the function after res.send().
+  // The caller fires this as fire-and-forget, so it doesn't need a fast response.
+  // We do ALL processing first, then respond when done.
 
   try {
     // Guard against double-processing
@@ -146,7 +147,7 @@ export default async function handler(req, res) {
       existing.fields.article !== 'Procesando...'
     ) {
       console.log(`Record ${recordId} already processed, skipping`)
-      return
+      return res.status(200).json({ status: 'already_processed' })
     }
 
     const isSocial = isSocialMediaUrl(url)
@@ -246,11 +247,14 @@ export default async function handler(req, res) {
         { title: 'Fuente', value: sourceName, short: true },
       ],
     })
+
+    return res.status(200).json({ status: 'processed' })
   } catch (error) {
     console.error(`Error processing Slack article ${url}:`, error.message)
     await sendSlackMessage(
       channel,
       `❌ Error procesando artículo: ${error.message}`,
     )
+    return res.status(500).json({ error: error.message })
   }
 }
