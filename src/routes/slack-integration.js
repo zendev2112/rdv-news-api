@@ -1,6 +1,7 @@
 import express from 'express'
 import Airtable from 'airtable'
 import { waitUntil } from '@vercel/functions'
+import { v2 as cloudinary } from 'cloudinary'
 import logger from '../utils/logger.js'
 import { generateContent } from '../services/ai-service.js'
 import {
@@ -155,10 +156,59 @@ function withTimeout(promise, timeoutMs = 25000) {
   ])
 }
 
+// Download a file from Slack using bot token authentication
+async function downloadSlackFile(file) {
+  const downloadUrl = file.url_private_download || file.url_private
+  if (!downloadUrl) throw new Error('No download URL available for Slack file')
+
+  const res = await fetch(downloadUrl, {
+    headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+  })
+  if (!res.ok) throw new Error(`Failed to download Slack file: ${res.status}`)
+  return Buffer.from(await res.arrayBuffer())
+}
+
+// Upload a Slack file buffer to Cloudinary and return the URL
+async function uploadSlackFileToCloudinary(
+  buffer,
+  fileName,
+  resourceType = 'image',
+) {
+  const timestamp = Date.now()
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').split('.')[0]
+  const publicId = `slack-uploads/${timestamp}-${safeName}`
+
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        public_id: publicId,
+        resource_type: resourceType,
+        use_filename: true,
+        unique_filename: true,
+      },
+      (error, result) => {
+        if (error) reject(error)
+        else resolve(result.secure_url)
+      },
+    )
+    stream.end(buffer)
+  })
+}
+
 // --- Background processing ---
 
 async function processUrlArticle(recordId, url, channel) {
   try {
+    // Guard against double-processing (both waitUntil and self-POST may fire)
+    const existing = await base(TABLE_NAME).find(recordId)
+    if (
+      existing.fields.article &&
+      existing.fields.article !== 'Procesando...'
+    ) {
+      logger.info(`Record ${recordId} already processed, skipping`)
+      return
+    }
+
     const isSocial = isSocialMediaUrl(url)
     const sourceName = extractSourceName(url)
 
@@ -321,9 +371,25 @@ router.post('/add', async (req, res) => {
 
     const record = await base(TABLE_NAME).create(recordFields)
 
-    // For URLs: schedule background AI processing via waitUntil
-    // (Vercel keeps the function alive until waitUntil promises resolve)
+    // For URLs: schedule background AI processing
+    // Belt-and-suspenders: waitUntil + self-POST (one of them will work on Vercel)
     if (inputIsUrl) {
+      const baseUrl = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : process.env.API_BASE_URL || 'https://rdv-news-api.vercel.app'
+
+      // Self-POST fires a separate Vercel function invocation (most reliable)
+      fetch(`${baseUrl}/api/slack/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId: record.id,
+          url: input,
+          channel: channel_name,
+        }),
+      }).catch((err) => logger.error('Failed to trigger process:', err.message))
+
+      // Also use waitUntil as backup
       waitUntil(processUrlArticle(record.id, input, channel_name))
     }
 
@@ -497,27 +563,27 @@ async function getSlackChannelName(channelId) {
   return ''
 }
 
-async function getPublicImageUrl(file, fileId) {
-  if (file.permalink_public) return file.permalink_public
-
+// Download from Slack and upload to Cloudinary for a persistent public URL
+async function getCloudinaryUrl(file, fileId) {
   try {
-    const shareRes = await fetch(
-      'https://slack.com/api/files.sharedPublicURL',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.SLACK_USER_TOKEN || process.env.SLACK_BOT_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ file: fileId }),
-      },
+    const buffer = await downloadSlackFile(file)
+    const mimeType = file.mimetype || ''
+    const resourceType = mimeType.startsWith('video/')
+      ? 'video'
+      : mimeType.startsWith('audio/')
+        ? 'video' // Cloudinary uses 'video' for audio too
+        : 'image'
+    const url = await uploadSlackFileToCloudinary(
+      buffer,
+      file.name || 'slack-file',
+      resourceType,
     )
-    const shareData = await shareRes.json()
-    if (shareData.ok) return shareData.file?.permalink_public
+    logger.info(`Uploaded Slack file to Cloudinary: ${url}`)
+    return url
   } catch (err) {
-    logger.warn('Could not make file public:', err.message)
+    logger.warn('Could not upload Slack file to Cloudinary:', err.message)
+    return null
   }
-  return null
 }
 
 async function saveFileToAirtable(file, fileId, userId, channelId) {
@@ -556,11 +622,16 @@ async function saveFileToAirtable(file, fileId, userId, channelId) {
     'yt-video': '',
   }
 
-  if (isImage) {
-    const publicUrl = await getPublicImageUrl(file, fileId)
-    if (publicUrl) {
-      recordFields.image = [{ url: publicUrl }]
-      recordFields.imgUrl = publicUrl
+  // Upload media to Cloudinary for a persistent public URL
+  const cloudinaryUrl = await getCloudinaryUrl(file, fileId)
+  if (cloudinaryUrl) {
+    if (isImage) {
+      recordFields.image = [{ url: cloudinaryUrl }]
+      recordFields.imgUrl = cloudinaryUrl
+    } else if (isAudio) {
+      recordFields.url = cloudinaryUrl // Store audio URL in url field
+    } else if (isVideo) {
+      recordFields.url = cloudinaryUrl // Store video URL in url field
     }
   }
 
