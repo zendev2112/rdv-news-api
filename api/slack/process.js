@@ -6,7 +6,6 @@
  * This MUST live outside of src/server.js so Vercel treats it as an
  * independent function — not part of the Express catch-all.
  */
-import { waitUntil } from '@vercel/functions'
 import Airtable from 'airtable'
 import { generateContent } from '../../src/services/ai-service.js'
 import {
@@ -136,14 +135,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing recordId or url' })
   }
 
-  // Respond 202 immediately so the caller (/add) gets a response fast.
-  // waitUntil keeps this function alive for up to 300s to finish processing.
-  res.status(202).json({ status: 'processing' })
-
-  waitUntil(processArticle(recordId, url, channel))
-}
-
-async function processArticle(recordId, url, channel) {
+  // Do ALL work before responding — Vercel kills the function after res.send()
   try {
     // Guard against double-processing
     const existing = await base(TABLE_NAME).find(recordId)
@@ -152,7 +144,7 @@ async function processArticle(recordId, url, channel) {
       existing.fields.article !== 'Procesando...'
     ) {
       console.log(`Record ${recordId} already processed, skipping`)
-      return
+      return res.status(200).json({ status: 'already_processed' })
     }
 
     const isSocial = isSocialMediaUrl(url)
@@ -167,7 +159,7 @@ async function processArticle(recordId, url, channel) {
         channel,
         `⚠️ No se pudo extraer contenido suficiente de ${url}. Registro guardado como borrador.`,
       )
-      return
+      return res.status(200).json({ status: 'insufficient_content' })
     }
 
     let articleText, metadata, tags
@@ -252,11 +244,14 @@ async function processArticle(recordId, url, channel) {
         { title: 'Fuente', value: sourceName, short: true },
       ],
     })
+
+    return res.status(200).json({ status: 'processed' })
   } catch (error) {
     console.error(`Error processing Slack article ${url}:`, error.message)
     await sendSlackMessage(
       channel,
       `❌ Error procesando artículo: ${error.message}`,
     )
+    return res.status(500).json({ error: error.message })
   }
 }

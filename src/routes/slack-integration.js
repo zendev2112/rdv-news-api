@@ -371,25 +371,7 @@ router.post('/add', async (req, res) => {
 
     const record = await base(TABLE_NAME).create(recordFields)
 
-    // For URLs: trigger standalone serverless function at api/slack/process.js
-    // MUST await so the HTTP request is sent before Vercel kills this function
-    if (inputIsUrl) {
-      try {
-        await fetch('https://rdv-news-api.vercel.app/api/slack/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            recordId: record.id,
-            url: input,
-            channel: channel_name,
-          }),
-        })
-      } catch (err) {
-        logger.error('Failed to trigger process:', err.message)
-      }
-    }
-
-    // Respond to Slack immediately
+    // Respond to Slack FIRST (must happen within 3s)
     res.json({
       response_type: 'in_channel',
       text: inputIsUrl
@@ -409,6 +391,24 @@ router.post('/add', async (req, res) => {
         },
       ],
     })
+
+    // AFTER responding to Slack, trigger background processing
+    // The response is already flushed — this fetch runs in remaining time
+    if (inputIsUrl) {
+      try {
+        await fetch('https://rdv-news-api.vercel.app/api/slack/process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recordId: record.id,
+            url: input,
+            channel: channel_name,
+          }),
+        })
+      } catch (err) {
+        logger.error('Failed to trigger process:', err.message)
+      }
+    }
   } catch (error) {
     logger.error('Slack add error:', error.message)
     return res.json({
