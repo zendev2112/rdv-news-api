@@ -6,6 +6,13 @@
  * This MUST live outside of src/server.js so Vercel treats it as an
  * independent function — not part of the Express catch-all.
  */
+
+// Vercel function config — builds[].config ignores maxDuration,
+// so it must be exported from the function file itself.
+export const config = {
+  maxDuration: 300,
+}
+
 import Airtable from 'airtable'
 import { generateContent } from '../../src/services/ai-service.js'
 import {
