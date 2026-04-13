@@ -1,5 +1,6 @@
 import express from 'express'
 import Airtable from 'airtable'
+import { waitUntil } from '@vercel/functions'
 import logger from '../utils/logger.js'
 import { generateContent } from '../services/ai-service.js'
 import {
@@ -320,6 +321,12 @@ router.post('/add', async (req, res) => {
 
     const record = await base(TABLE_NAME).create(recordFields)
 
+    // For URLs: schedule background AI processing via waitUntil
+    // (Vercel keeps the function alive until waitUntil promises resolve)
+    if (inputIsUrl) {
+      waitUntil(processUrlArticle(record.id, input, channel_name))
+    }
+
     // Respond to Slack immediately
     res.json({
       response_type: 'in_channel',
@@ -340,28 +347,31 @@ router.post('/add', async (req, res) => {
         },
       ],
     })
-
-    // For URLs: trigger background AI processing (don't await, let it run in background)
-    if (inputIsUrl) {
-      // Wrap with timeout to prevent Vercel function timeout
-      withTimeout(
-        processUrlArticle(record.id, input, channel_name),
-        25000,
-      ).catch((err) => {
-        logger.error('Background processing failed:', err.message)
-        // Send error message to Slack
-        sendSlackMessage(
-          channel_name,
-          `⚠️ Background processing failed for: ${input.substring(0, 100)}\nError: ${err.message}`,
-        )
-      })
-    }
   } catch (error) {
     logger.error('Slack add error:', error.message)
     return res.json({
       response_type: 'ephemeral',
       text: `❌ Error: ${error.message}`,
     })
+  }
+})
+
+/**
+ * Background processing endpoint — called internally by /add
+ * POST /api/slack/process
+ * Runs as a separate Vercel function invocation so it isn't killed when /add responds
+ */
+router.post('/process', async (req, res) => {
+  // Respond immediately so the caller isn't blocked
+  res.status(202).send()
+
+  const { recordId, url, channel } = req.body
+  if (!recordId || !url) return
+
+  try {
+    await processUrlArticle(recordId, url, channel)
+  } catch (error) {
+    logger.error('Error in /process:', error.message)
   }
 })
 
@@ -403,6 +413,7 @@ router.post('/simple-add', async (req, res) => {
  * Handles:
  * - url_verification (Slack challenge on setup)
  * - file_shared events (images, audio, video uploaded to a channel)
+ * - message events with files (alternative Slack event format)
  */
 router.post('/events', async (req, res) => {
   const body = req.body
@@ -412,190 +423,204 @@ router.post('/events', async (req, res) => {
     return res.json({ challenge: body.challenge })
   }
 
-  // 2. Respond immediately (Slack requires 200 within 3s)
-  res.status(200).send()
-
-  // 3. Ignore retries (Slack retries if it didn't get 200 fast enough)
+  // 2. Ignore Slack retries
   if (req.headers['x-slack-retry-num']) {
-    logger.info('Ignoring Slack retry')
+    return res.status(200).send()
+  }
+
+  const event = body.event
+  if (!event) {
+    logger.warn('Slack event received with no event payload:', body.type)
+    return res.status(200).send()
+  }
+
+  logger.info(`Slack event received: type=${event.type}, subtype=${event.subtype || 'none'}`)
+
+  // 3. Handle file_shared events
+  if (event.type === 'file_shared') {
+    waitUntil(
+      processFileSharedEvent(event.file_id, event.user_id, event.channel_id),
+    )
+    return res.status(200).send()
+  }
+
+  // 4. Handle message events with files (alternative event format)
+  if (event.type === 'message' && event.files && event.files.length > 0) {
+    // Skip bot messages to avoid loops
+    if (event.bot_id || event.subtype === 'bot_message') {
+      return res.status(200).send()
+    }
+    waitUntil(
+      processMessageWithFiles(event),
+    )
+    return res.status(200).send()
+  }
+
+  // 5. Unknown event type — accept but ignore
+  logger.info(`Ignoring Slack event type: ${event.type}`)
+  return res.status(200).send()
+})
+
+// --- File processing helpers ---
+
+async function fetchSlackFileInfo(fileId) {
+  const res = await fetch(
+    `https://slack.com/api/files.info?file=${fileId}`,
+    { headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` } },
+  )
+  const data = await res.json()
+  if (!data.ok || !data.file) {
+    throw new Error(`Slack files.info failed: ${data.error || 'no file'}`)
+  }
+  return data.file
+}
+
+async function getSlackUserName(userId) {
+  try {
+    const res = await fetch(
+      `https://slack.com/api/users.info?user=${userId}`,
+      { headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` } },
+    )
+    const data = await res.json()
+    if (data.ok) return data.user.real_name || data.user.name
+  } catch {}
+  return 'Equipo'
+}
+
+async function getSlackChannelName(channelId) {
+  try {
+    const res = await fetch(
+      `https://slack.com/api/conversations.info?channel=${channelId}`,
+      { headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` } },
+    )
+    const data = await res.json()
+    if (data.ok) return data.channel.name
+  } catch {}
+  return ''
+}
+
+async function getPublicImageUrl(file, fileId) {
+  if (file.permalink_public) return file.permalink_public
+
+  try {
+    const shareRes = await fetch(
+      'https://slack.com/api/files.sharedPublicURL',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.SLACK_USER_TOKEN || process.env.SLACK_BOT_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ file: fileId }),
+      },
+    )
+    const shareData = await shareRes.json()
+    if (shareData.ok) return shareData.file?.permalink_public
+  } catch (err) {
+    logger.warn('Could not make file public:', err.message)
+  }
+  return null
+}
+
+async function saveFileToAirtable(file, fileId, userId, channelId) {
+  const fileName = file.name || 'untitled'
+  const mimeType = file.mimetype || ''
+
+  const isImage = mimeType.startsWith('image/')
+  const isAudio = mimeType.startsWith('audio/')
+  const isVideo = mimeType.startsWith('video/')
+
+  if (!isImage && !isAudio && !isVideo) {
+    logger.info(`Ignoring non-media file: ${fileName} (${mimeType})`)
     return
   }
 
-  // 4. Handle events
-  const event = body.event
-  if (!event) return
+  const typeLabel = isImage ? '📸 Imagen' : isAudio ? '🎙️ Audio' : '🎬 Video'
+  const comment = file.initial_comment?.comment || file.title || fileName
 
-  // Only handle file_shared events
-  if (event.type !== 'file_shared') return
+  const userName = await getSlackUserName(userId)
+  const channelName = await getSlackChannelName(channelId)
 
-  try {
-    const fileId = event.file_id
-    const userId = event.user_id
-    const channelId = event.channel_id
-
-    // Fetch file info from Slack API
-    const fileInfoRes = await fetch(
-      `https://slack.com/api/files.info?file=${fileId}`,
-      {
-        headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
-      },
-    )
-    const fileInfo = await fileInfoRes.json()
-
-    if (!fileInfo.ok || !fileInfo.file) {
-      logger.error('Could not fetch file info from Slack:', fileInfo.error)
-      return
-    }
-
-    const file = fileInfo.file
-    const fileName = file.name || 'untitled'
-    const fileType = file.filetype || ''
-    const mimeType = file.mimetype || ''
-
-    // Determine content type
-    const isImage = mimeType.startsWith('image/')
-    const isAudio = mimeType.startsWith('audio/')
-    const isVideo = mimeType.startsWith('video/')
-
-    if (!isImage && !isAudio && !isVideo) {
-      logger.info(`Ignoring non-media file: ${fileName} (${mimeType})`)
-      return
-    }
-
-    // Download file from Slack (needs bot token auth)
-    const downloadUrl = file.url_private_download || file.url_private
-    if (!downloadUrl) {
-      logger.error('No download URL for file:', fileId)
-      return
-    }
-
-    const fileRes = await fetch(downloadUrl, {
-      headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
-    })
-    if (!fileRes.ok) {
-      logger.error(`Failed to download file from Slack: ${fileRes.status}`)
-      return
-    }
-
-    const fileBuffer = Buffer.from(await fileRes.arrayBuffer())
-
-    // Upload to Airtable as a base64 data URL attachment
-    // Airtable accepts attachments with a URL — we use a temporary upload approach
-    // For files from Slack, we pass the Slack URL directly (with bot token, Slack URLs are temporary)
-    // Better approach: use Airtable's attachment field which accepts URL + filename
-
-    // Build the Airtable record
-    const typeLabel = isImage ? '📸 Imagen' : isAudio ? '🎙️ Audio' : '🎬 Video'
-    const comment = file.initial_comment?.comment || file.title || fileName
-
-    // Get user info for the title
-    let userName = 'Equipo'
-    try {
-      const userRes = await fetch(
-        `https://slack.com/api/users.info?user=${userId}`,
-        {
-          headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
-        },
-      )
-      const userInfo = await userRes.json()
-      if (userInfo.ok) userName = userInfo.user.real_name || userInfo.user.name
-    } catch {}
-
-    // Get channel name for notifications
-    let channelName = ''
-    try {
-      const chanRes = await fetch(
-        `https://slack.com/api/conversations.info?channel=${channelId}`,
-        {
-          headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
-        },
-      )
-      const chanInfo = await chanRes.json()
-      if (chanInfo.ok) channelName = chanInfo.channel.name
-    } catch {}
-
-    const recordFields = {
-      title: `${typeLabel} de ${userName}`,
-      article: comment,
-      source: 'Slack',
-      status: 'draft',
-      tags: 'Slack Import',
-      overline: '',
-      excerpt: '',
-      url: '',
-      imgUrl: '',
-      'article-images': '',
-      'ig-post': '',
-      'fb-post': '',
-      'tw-post': '',
-      'yt-video': '',
-    }
-
-    // Airtable attachment: pass the Slack private URL with auth header won't work,
-    // so we use the public permalink if available, or upload via the Airtable API directly
-    // Slack's url_private requires auth, but Airtable fetches attachments server-side
-    // Solution: use Slack's public share URL or create a temporary signed URL
-
-    // For Airtable attachments, we need a publicly accessible URL.
-    // Slack files ARE publicly accessible if the file is shared — check permalink_public
-    if (file.public_url_shared || file.permalink_public) {
-      const publicUrl = file.permalink_public
-        ? `${file.permalink_public.replace(/\?.*$/, '')}?pub_secret=${file.permalink_public.split('pub_secret=')[1] || ''}`
-        : null
-
-      if (publicUrl && isImage) {
-        recordFields.image = [{ url: publicUrl }]
-        recordFields.imgUrl = publicUrl
-      }
-    }
-
-    // If no public URL available, make the file public first
-    if (!recordFields.image && !file.public_url_shared) {
-      try {
-        const shareRes = await fetch(
-          'https://slack.com/api/files.sharedPublicURL',
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${process.env.SLACK_USER_TOKEN || process.env.SLACK_BOT_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ file: fileId }),
-          },
-        )
-        const shareData = await shareRes.json()
-
-        if (shareData.ok && shareData.file) {
-          const pubUrl = shareData.file.permalink_public
-          if (pubUrl && isImage) {
-            recordFields.image = [{ url: pubUrl }]
-            recordFields.imgUrl = pubUrl
-          }
-        }
-      } catch (err) {
-        logger.warn('Could not make file public:', err.message)
-      }
-    }
-
-    const record = await base(TABLE_NAME).create(recordFields)
-
-    if (channelName) {
-      await sendSlackMessage(channelName, null, {
-        text: `✅ ${typeLabel} guardado en Airtable`,
-        color: 'good',
-        fields: [
-          { title: 'Archivo', value: fileName, short: true },
-          { title: 'Por', value: userName, short: true },
-        ],
-      })
-    }
-
-    logger.info(
-      `✅ Saved Slack file ${fileName} to Airtable record ${record.id}`,
-    )
-  } catch (error) {
-    logger.error('Error handling Slack file event:', error.message)
+  const recordFields = {
+    title: `${typeLabel} de ${userName}`,
+    article: comment,
+    source: 'Slack',
+    status: 'draft',
+    tags: 'Slack Import',
+    overline: '',
+    excerpt: '',
+    url: '',
+    imgUrl: '',
+    'article-images': '',
+    'ig-post': '',
+    'fb-post': '',
+    'tw-post': '',
+    'yt-video': '',
   }
+
+  if (isImage) {
+    const publicUrl = await getPublicImageUrl(file, fileId)
+    if (publicUrl) {
+      recordFields.image = [{ url: publicUrl }]
+      recordFields.imgUrl = publicUrl
+    }
+  }
+
+  const record = await base(TABLE_NAME).create(recordFields)
+  logger.info(`Saved Slack file ${fileName} to Airtable record ${record.id}`)
+
+  if (channelName) {
+    await sendSlackMessage(channelName, null, {
+      text: `✅ ${typeLabel} guardado en Airtable`,
+      color: 'good',
+      fields: [
+        { title: 'Archivo', value: fileName, short: true },
+        { title: 'Por', value: userName, short: true },
+      ],
+    })
+  }
+}
+
+// --- Background event processors (called via waitUntil) ---
+
+async function processFileSharedEvent(fileId, userId, channelId) {
+  try {
+    logger.info(`Processing file_shared event: fileId=${fileId}`)
+    const file = await fetchSlackFileInfo(fileId)
+    await saveFileToAirtable(file, fileId, userId, channelId)
+  } catch (error) {
+    logger.error('Error processing file_shared event:', error.message)
+  }
+}
+
+async function processMessageWithFiles(event) {
+  try {
+    const channelId = event.channel
+    const userId = event.user
+    logger.info(`Processing message with ${event.files.length} file(s) from user ${userId}`)
+
+    for (const file of event.files) {
+      const fileId = file.id
+      // file object from message event may have partial info — fetch full info
+      const fullFile = await fetchSlackFileInfo(fileId)
+      await saveFileToAirtable(fullFile, fileId, userId, channelId)
+    }
+  } catch (error) {
+    logger.error('Error processing message with files:', error.message)
+  }
+}
+
+/**
+ * Legacy background file processing endpoint — kept as fallback
+ * POST /api/slack/events/process
+ */
+router.post('/events/process', async (req, res) => {
+  res.status(202).send()
+
+  const { fileId, userId, channelId } = req.body
+  if (!fileId) return
+
+  await processFileSharedEvent(fileId, userId, channelId)
 })
 
 export default router
