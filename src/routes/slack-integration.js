@@ -371,14 +371,13 @@ router.post('/add', async (req, res) => {
 
     const record = await base(TABLE_NAME).create(recordFields)
 
-    // For URLs: schedule background AI processing
-    // Belt-and-suspenders: waitUntil + self-POST (one of them will work on Vercel)
+    // For URLs: fire to standalone serverless function at api/slack/process.js
+    // This is a SEPARATE Vercel function invocation with its own 300s timeout
     if (inputIsUrl) {
       const baseUrl = process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
         : process.env.API_BASE_URL || 'https://rdv-news-api.vercel.app'
 
-      // Self-POST fires a separate Vercel function invocation (most reliable)
       fetch(`${baseUrl}/api/slack/process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -388,9 +387,6 @@ router.post('/add', async (req, res) => {
           channel: channel_name,
         }),
       }).catch((err) => logger.error('Failed to trigger process:', err.message))
-
-      // Also use waitUntil as backup
-      waitUntil(processUrlArticle(record.id, input, channel_name))
     }
 
     // Respond to Slack immediately

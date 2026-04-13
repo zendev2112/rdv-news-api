@@ -37,6 +37,10 @@
       "dest": "/api/fetch/section.js"
     },
     {
+      "src": "/api/slack/process",
+      "dest": "/api/slack/process.js"
+    },
+    {
       "src": "/(.*)",
       "dest": "src/server.js"
     }
