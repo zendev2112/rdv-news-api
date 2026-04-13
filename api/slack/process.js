@@ -125,9 +125,7 @@ function postProcessText(text) {
     .split('\n')
     .map((line) => line.trim())
     .join('\n')
-  fixed = fixed
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/\n\s+\n/g, '\n\n')
+  fixed = fixed.replace(/\n{3,}/g, '\n\n').replace(/\n\s+\n/g, '\n\n')
   fixed = fixed.replace(/^\s*-\s+/gm, '- ')
   fixed = fixed.replace(/^\s*(\d+)\.\s+/gm, '$1. ')
   fixed = fixed.replace(/^#+\s+/gm, '## ')
