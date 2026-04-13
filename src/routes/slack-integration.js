@@ -141,6 +141,19 @@ async function sendSlackMessage(channel, text, attachment = null) {
   }
 }
 
+// Helper to run task with timeout
+function withTimeout(promise, timeoutMs = 25000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Task timeout after ${timeoutMs}ms`)),
+        timeoutMs,
+      ),
+    ),
+  ])
+}
+
 // --- Background processing ---
 
 async function processUrlArticle(recordId, url, channel) {
@@ -328,11 +341,20 @@ router.post('/add', async (req, res) => {
       ],
     })
 
-    // For URLs: trigger background AI processing (don't await)
+    // For URLs: trigger background AI processing (don't await, let it run in background)
     if (inputIsUrl) {
-      processUrlArticle(record.id, input, channel_name).catch((err) =>
-        logger.error('Background processing failed:', err.message),
-      )
+      // Wrap with timeout to prevent Vercel function timeout
+      withTimeout(
+        processUrlArticle(record.id, input, channel_name),
+        25000,
+      ).catch((err) => {
+        logger.error('Background processing failed:', err.message)
+        // Send error message to Slack
+        sendSlackMessage(
+          channel_name,
+          `⚠️ Background processing failed for: ${input.substring(0, 100)}\nError: ${err.message}`,
+        )
+      })
     }
   } catch (error) {
     logger.error('Slack add error:', error.message)
