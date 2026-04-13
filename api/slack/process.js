@@ -148,9 +148,11 @@ export default async function handler(req, res) {
     const isSocial = isSocialMediaUrl(url)
     const sourceName = extractSourceName(url)
 
+    console.time('scrape')
     const html = await fetchContent(url)
     const { text: extractedText } = extractText(html)
     const { images, markdown: imageMarkdown } = extractImagesAsMarkdown(html)
+    console.timeEnd('scrape')
 
     if (!extractedText || extractedText.length < 50) {
       await sendSlackMessage(
@@ -164,14 +166,20 @@ export default async function handler(req, res) {
 
     if (isSocial) {
       const item = { url, title: '', content_text: extractedText }
-      const articleResult = await generateContent(
-        reelaborateSocialMedia(extractedText, item, sourceName),
-      )
+
+      // Parallel: article + metadata (independent calls)
+      console.time('ai-parallel')
+      const [articleResult, metaResult] = await Promise.all([
+        generateContent(
+          reelaborateSocialMedia(extractedText, item, sourceName),
+        ),
+        generateContent(generateSocialMediaMetadata(extractedText), {
+          maxTokens: 1024,
+        }),
+      ])
+      console.timeEnd('ai-parallel')
       articleText = articleResult.text
 
-      const metaResult = await generateContent(
-        generateSocialMediaMetadata(extractedText),
-      )
       const metaMatch = metaResult.text.match(/\{[\s\S]*\}/)
       metadata = metaMatch
         ? JSON.parse(metaMatch[0])
@@ -181,29 +189,41 @@ export default async function handler(req, res) {
             volanta: 'Redes Sociales',
           }
 
+      // Sequential: tags depends on metadata
+      console.time('ai-tags')
       const tagsResult = await generateContent(
         generateTags(extractedText, metadata),
+        { maxTokens: 1024 },
       )
+      console.timeEnd('ai-tags')
       const tagsMatch = tagsResult.text.match(/\[[\s\S]*\]/)
       tags = tagsMatch ? JSON.parse(tagsMatch[0]).join(', ') : 'Redes Sociales'
     } else {
       const textWithImages = imageMarkdown
         ? `${extractedText}\n\n${imageMarkdown}`
         : extractedText
-      const articleResult = await generateContent(
-        reelaborateArticle(textWithImages),
-      )
+
+      // Parallel: article + metadata (independent calls)
+      console.time('ai-parallel')
+      const [articleResult, metaResult] = await Promise.all([
+        generateContent(reelaborateArticle(textWithImages)),
+        generateContent(generateMetadata(extractedText), { maxTokens: 1024 }),
+      ])
+      console.timeEnd('ai-parallel')
       articleText = articleResult.text
 
-      const metaResult = await generateContent(generateMetadata(extractedText))
       const metaMatch = metaResult.text.match(/\{[\s\S]*\}/)
       metadata = metaMatch
         ? JSON.parse(metaMatch[0])
         : { title: 'Artículo procesado', bajada: '', volanta: 'Noticias' }
 
+      // Sequential: tags depends on metadata
+      console.time('ai-tags')
       const tagsResult = await generateContent(
         generateTags(extractedText, metadata),
+        { maxTokens: 1024 },
       )
+      console.timeEnd('ai-tags')
       const tagsMatch = tagsResult.text.match(/\[[\s\S]*\]/)
       tags = tagsMatch
         ? JSON.parse(tagsMatch[0]).join(', ')
@@ -228,7 +248,9 @@ export default async function handler(req, res) {
       updateFields.image = images.slice(0, 3).map((imgUrl) => ({ url: imgUrl }))
     }
 
+    console.time('airtable-update')
     await base(TABLE_NAME).update(recordId, updateFields)
+    console.timeEnd('airtable-update')
 
     await sendSlackMessage(channel, null, {
       text: `✅ Artículo procesado`,

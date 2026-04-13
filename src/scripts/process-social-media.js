@@ -50,12 +50,9 @@ Force Processing: ${forceProcess ? 'Yes' : 'No'}
 
   try {
     // IMPROVED: Include records that need OCR in the filter formula
-    // For Slack Noticias: process records still showing 'Procesando...' or with no article
     let filterFormula = forceProcess
       ? ''
-      : tableName === 'Slack Noticias'
-        ? "AND({isOcrNeeded} = 1, {processingStatus} = 'needs_extraction')"
-        : "OR({processingStatus} = 'needs_extraction', {isOcrNeeded} = 1)"
+      : "OR({processingStatus} = 'needs_extraction', {isOcrNeeded} = 1)"
 
     console.log(
       `Fetching records from "${tableName}" with filter: ${filterFormula || 'ALL RECORDS'}`,
