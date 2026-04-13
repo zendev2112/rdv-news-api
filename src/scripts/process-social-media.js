@@ -54,7 +54,7 @@ Force Processing: ${forceProcess ? 'Yes' : 'No'}
     let filterFormula = forceProcess
       ? ''
       : tableName === 'Slack Noticias'
-        ? "OR({article} = 'Procesando...', {article} = '', NOT({imgUrl} = ''))"
+        ? '{isOcrNeeded} = 1'
         : "OR({processingStatus} = 'needs_extraction', {isOcrNeeded} = 1)"
 
     console.log(
