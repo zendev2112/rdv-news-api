@@ -139,10 +139,8 @@ export default async function handler(req, res) {
   try {
     // Guard against double-processing
     const existing = await base(TABLE_NAME).find(recordId)
-    if (
-      existing.fields.article &&
-      existing.fields.article !== 'Procesando...'
-    ) {
+    const existingArticle = (existing.fields.article || '').trim()
+    if (existingArticle && existingArticle !== 'Procesando...') {
       console.log(`Record ${recordId} already processed, skipping`)
       return res.status(200).json({ status: 'already_processed' })
     }
