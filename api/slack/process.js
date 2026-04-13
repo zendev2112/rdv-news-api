@@ -27,6 +27,12 @@ import {
   generateSocialMediaMetadata,
   generateTags,
 } from '../../src/prompts/index.js'
+import {
+  extractInstagramEmbeds,
+  extractFacebookEmbeds,
+  extractTwitterEmbeds,
+  extractYoutubeEmbeds,
+} from '../../src/services/embeds/index.js'
 
 const base = new Airtable({ apiKey: process.env.AIRTABLE_TOKEN }).base(
   process.env.AIRTABLE_BASE_ID,
@@ -113,6 +119,26 @@ function stripMarkdown(text) {
     .trim()
 }
 
+function postProcessText(text) {
+  if (!text) return ''
+  let fixed = text
+    .split('\n')
+    .map((line) => line.trim())
+    .join('\n')
+  fixed = fixed
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\n\s+\n/g, '\n\n')
+  fixed = fixed.replace(/^\s*-\s+/gm, '- ')
+  fixed = fixed.replace(/^\s*(\d+)\.\s+/gm, '$1. ')
+  fixed = fixed.replace(/^#+\s+/gm, '## ')
+  fixed = fixed.replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+  fixed = fixed.replace(/\t/g, ' ')
+  fixed = fixed.replace(/ {2,}/g, ' ')
+  fixed = fixed.trim()
+  fixed = fixed.replace(/[""]/g, '"').replace(/['']/g, "'")
+  return fixed
+}
+
 async function sendSlackMessage(channel, text, attachment = null) {
   if (!process.env.SLACK_BOT_TOKEN) return
   const payload = {
@@ -159,6 +185,18 @@ export default async function handler(req, res) {
     const html = await fetchContent(url)
     const { text: extractedText } = extractText(html)
     const { images, markdown: imageMarkdown } = extractImagesAsMarkdown(html)
+
+    // Extract embeds from HTML (same as RSS pipeline)
+    let instagramContent = ''
+    let facebookContent = ''
+    let twitterContent = ''
+    let youtubeContent = ''
+    if (html) {
+      instagramContent = extractInstagramEmbeds(html)
+      facebookContent = extractFacebookEmbeds(html)
+      twitterContent = extractTwitterEmbeds(html)
+      youtubeContent = extractYoutubeEmbeds(html)
+    }
     console.timeEnd('scrape')
 
     if (!extractedText || extractedText.length < 50) {
@@ -237,23 +275,36 @@ export default async function handler(req, res) {
         : 'Noticias, Actualidad'
     }
 
+    // Post-process article text (same cleanup as RSS pipeline)
+    const processedArticle = postProcessText(articleText)
+
+    // Build image attachments for Airtable (same as RSS pipeline)
+    let imageAttachments = []
+    if (images.length > 0) {
+      imageAttachments = images.map((imgUrl) => ({ url: imgUrl }))
+    }
+
     const updateFields = {
       title: stripMarkdown(metadata.title || ''),
       overline: stripMarkdown(metadata.volanta || ''),
       excerpt: stripMarkdown(metadata.bajada || ''),
-      article: articleText,
-      tags,
+      article: processedArticle,
+      image: imageAttachments,
       imgUrl: images.length > 0 ? images[0] : '',
       'article-images': images.slice(1).join(', '),
+      url,
+      source: sourceName,
+      'ig-post': instagramContent || '',
+      'fb-post': facebookContent || '',
+      'tw-post': twitterContent || '',
+      'yt-video': youtubeContent || '',
       status: 'draft',
+      tags,
     }
 
+    // Social media URLs: set the specific social type field to the URL
     const socialType = getSocialMediaType(url)
     if (socialType) updateFields[socialType] = url
-
-    if (images.length > 0) {
-      updateFields.image = images.slice(0, 3).map((imgUrl) => ({ url: imgUrl }))
-    }
 
     console.time('airtable-update')
     await base(TABLE_NAME).update(recordId, updateFields)

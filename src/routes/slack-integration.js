@@ -16,6 +16,12 @@ import {
   generateSocialMediaMetadata,
   generateTags,
 } from '../prompts/index.js'
+import {
+  extractInstagramEmbeds,
+  extractFacebookEmbeds,
+  extractTwitterEmbeds,
+  extractYoutubeEmbeds,
+} from '../services/embeds/index.js'
 
 const router = express.Router()
 
@@ -122,6 +128,26 @@ function stripMarkdown(text) {
     .trim()
 }
 
+function postProcessText(text) {
+  if (!text) return ''
+  let fixed = text
+    .split('\n')
+    .map((line) => line.trim())
+    .join('\n')
+  fixed = fixed
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\n\s+\n/g, '\n\n')
+  fixed = fixed.replace(/^\s*-\s+/gm, '- ')
+  fixed = fixed.replace(/^\s*(\d+)\.\s+/gm, '$1. ')
+  fixed = fixed.replace(/^#+\s+/gm, '## ')
+  fixed = fixed.replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+  fixed = fixed.replace(/\t/g, ' ')
+  fixed = fixed.replace(/ {2,}/g, ' ')
+  fixed = fixed.trim()
+  fixed = fixed.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'")
+  return fixed
+}
+
 async function sendSlackMessage(channel, text, attachment = null) {
   if (!process.env.SLACK_BOT_TOKEN) return
   const payload = {
@@ -217,6 +243,18 @@ async function processUrlArticle(recordId, url, channel) {
     const { text: extractedText } = extractText(html)
     const { images, markdown: imageMarkdown } = extractImagesAsMarkdown(html)
 
+    // Extract embeds from HTML (same as RSS pipeline)
+    let instagramContent = ''
+    let facebookContent = ''
+    let twitterContent = ''
+    let youtubeContent = ''
+    if (html) {
+      instagramContent = extractInstagramEmbeds(html)
+      facebookContent = extractFacebookEmbeds(html)
+      twitterContent = extractTwitterEmbeds(html)
+      youtubeContent = extractYoutubeEmbeds(html)
+    }
+
     if (!extractedText || extractedText.length < 50) {
       // Not enough content to process — keep the draft as-is
       await sendSlackMessage(
@@ -277,26 +315,37 @@ async function processUrlArticle(recordId, url, channel) {
         : 'Noticias, Actualidad'
     }
 
-    // Build update fields
+    // Post-process article text (same cleanup as RSS pipeline)
+    const processedArticle = postProcessText(articleText)
+
+    // Build image attachments for Airtable (same as RSS pipeline)
+    let imageAttachments = []
+    if (images.length > 0) {
+      imageAttachments = images.map((imgUrl) => ({ url: imgUrl }))
+    }
+
+    // Build update fields (same schema as RSS pipeline)
     const updateFields = {
       title: stripMarkdown(metadata.title || ''),
       overline: stripMarkdown(metadata.volanta || ''),
       excerpt: stripMarkdown(metadata.bajada || ''),
-      article: articleText,
-      tags,
+      article: processedArticle,
+      image: imageAttachments,
       imgUrl: images.length > 0 ? images[0] : '',
       'article-images': images.slice(1).join(', '),
+      url,
+      source: sourceName,
+      'ig-post': instagramContent || '',
+      'fb-post': facebookContent || '',
+      'tw-post': twitterContent || '',
+      'yt-video': youtubeContent || '',
       status: 'draft',
+      tags,
     }
 
-    // Set social media type field
+    // Social media URLs: set the specific social type field to the URL
     const socialType = getSocialMediaType(url)
     if (socialType) updateFields[socialType] = url
-
-    // Image attachments
-    if (images.length > 0) {
-      updateFields.image = images.slice(0, 3).map((imgUrl) => ({ url: imgUrl }))
-    }
 
     await base(TABLE_NAME).update(recordId, updateFields)
 
