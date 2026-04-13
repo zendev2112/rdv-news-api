@@ -434,7 +434,9 @@ router.post('/events', async (req, res) => {
     return res.status(200).send()
   }
 
-  logger.info(`Slack event received: type=${event.type}, subtype=${event.subtype || 'none'}`)
+  logger.info(
+    `Slack event received: type=${event.type}, subtype=${event.subtype || 'none'}`,
+  )
 
   // 3. Handle file_shared events
   if (event.type === 'file_shared') {
@@ -450,9 +452,7 @@ router.post('/events', async (req, res) => {
     if (event.bot_id || event.subtype === 'bot_message') {
       return res.status(200).send()
     }
-    waitUntil(
-      processMessageWithFiles(event),
-    )
+    waitUntil(processMessageWithFiles(event))
     return res.status(200).send()
   }
 
@@ -464,10 +464,9 @@ router.post('/events', async (req, res) => {
 // --- File processing helpers ---
 
 async function fetchSlackFileInfo(fileId) {
-  const res = await fetch(
-    `https://slack.com/api/files.info?file=${fileId}`,
-    { headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` } },
-  )
+  const res = await fetch(`https://slack.com/api/files.info?file=${fileId}`, {
+    headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+  })
   const data = await res.json()
   if (!data.ok || !data.file) {
     throw new Error(`Slack files.info failed: ${data.error || 'no file'}`)
@@ -477,10 +476,9 @@ async function fetchSlackFileInfo(fileId) {
 
 async function getSlackUserName(userId) {
   try {
-    const res = await fetch(
-      `https://slack.com/api/users.info?user=${userId}`,
-      { headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` } },
-    )
+    const res = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
+      headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+    })
     const data = await res.json()
     if (data.ok) return data.user.real_name || data.user.name
   } catch {}
@@ -597,7 +595,9 @@ async function processMessageWithFiles(event) {
   try {
     const channelId = event.channel
     const userId = event.user
-    logger.info(`Processing message with ${event.files.length} file(s) from user ${userId}`)
+    logger.info(
+      `Processing message with ${event.files.length} file(s) from user ${userId}`,
+    )
 
     for (const file of event.files) {
       const fileId = file.id
