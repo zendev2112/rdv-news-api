@@ -403,6 +403,10 @@ router.post('/simple-add', async (req, res) => {
 router.post('/events', async (req, res) => {
   const body = req.body
 
+  logger.info(
+    `/events hit: type=${body.type}, event_type=${body.event?.type || 'none'}`,
+  )
+
   // 1. URL verification challenge (Slack sends this once during setup)
   if (body.type === 'url_verification') {
     return res.json({ challenge: body.challenge })
@@ -420,7 +424,7 @@ router.post('/events', async (req, res) => {
   }
 
   logger.info(
-    `Slack event received: type=${event.type}, subtype=${event.subtype || 'none'}`,
+    `Slack event: type=${event.type}, subtype=${event.subtype || 'none'}, channel=${event.channel || 'none'}, bot_id=${event.bot_id || 'none'}, text=${(event.text || '').substring(0, 50)}`,
   )
 
   // 3. Handle file_shared events
@@ -452,9 +456,15 @@ router.post('/events', async (req, res) => {
   ) {
     // Check channel filter — resolve channel name first
     const channelName = await getSlackChannelName(event.channel)
+    logger.info(
+      `Channel check: id=${event.channel}, name="${channelName}", allowed=${NEWS_CHANNELS}`,
+    )
     const allowed =
       NEWS_CHANNELS.includes('*') || NEWS_CHANNELS.includes(channelName)
     if (!allowed) {
+      logger.info(
+        `Message ignored: channel "${channelName}" not in NEWS_CHANNELS [${NEWS_CHANNELS}]`,
+      )
       return res.status(200).send()
     }
     waitUntil(processPlainTextMessage(event))
