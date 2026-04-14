@@ -118,20 +118,43 @@ async function processUrlArticle(recordId, url, channel) {
       return
     }
 
-    // Run the shared pipeline
+    const sourceName = extractSourceName(url)
+
+    // Social media URLs can't be scraped — just save the URL to the right field
+    if (isSocialMediaUrl(url)) {
+      const socialType = getSocialMediaType(url)
+      const updateFields = {}
+      if (socialType) updateFields[socialType] = url
+      updateFields.title = `Publicación de ${sourceName}`
+      updateFields.source = sourceName
+      updateFields.article = `Enlace a publicación de ${sourceName}: ${url}`
+      updateFields.status = 'draft'
+
+      await base(TABLE_NAME).update(recordId, updateFields)
+      await sendSlackMessage(channel, null, {
+        text: `✅ Enlace de ${sourceName} guardado`,
+        color: 'good',
+        fields: [
+          { title: 'Fuente', value: sourceName, short: true },
+          { title: 'URL', value: url, short: false },
+        ],
+      })
+      return
+    }
+
+    // Regular article: run the shared pipeline
     const fields = await processArticleFromUrl(url)
 
     if (!fields) {
       await sendSlackMessage(
         channel,
-        `⚠️ Could not extract enough content from ${url}. Record saved as draft.`,
+        `⚠️ No se pudo extraer contenido suficiente de ${url}. Registro guardado como borrador.`,
       )
       return
     }
 
     await base(TABLE_NAME).update(recordId, fields)
 
-    const sourceName = extractSourceName(url)
     await sendSlackMessage(channel, null, {
       text: `✅ Artículo procesado`,
       color: 'good',

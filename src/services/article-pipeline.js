@@ -570,35 +570,25 @@ export async function processArticleFromUrl(url, options = {}) {
   let imageMarkdown = ''
 
   if (isSocial && !text) {
-    // Social media: platforms block scrapers, so use oEmbed API to get
-    // whatever metadata we can, then rely on the AI to flesh it out.
-    const oembed = await fetchOembedData(url)
-    if (oembed) {
-      text = oembed.title || oembed.description || oembed.author_name || url
-      if (oembed.thumbnail_url) images = [oembed.thumbnail_url]
-    }
-    // If oEmbed failed, still try a quick scrape (some Twitter links work)
-    if (!text || text.length < 20) {
-      try {
-        html = await fetchContent(url)
-        if (html) {
-          const extracted = extractText(html)
-          text = extracted.text || text
-          const metaImg = extractMetaImage(html)
-          if (metaImg && images.length === 0) images = [metaImg]
-        }
-      } catch {
-        // Social scrape failed — continue with what we have
-      }
-    }
-    // Minimum viable content for social: just the URL + source is enough
-    if (!text || text.length < 10) {
-      text = `Publicación de ${sourceName}: ${url}`
-    }
+    // Social media platforms block scrapers. Callers should handle
+    // social URLs before reaching the pipeline. If we get here anyway,
+    // return null so the caller can save just the URL.
+    console.warn(`⚠️ Social media URL passed to pipeline — skipping: ${url}`)
+    return null
   } else {
-    // Regular article: scrape the URL
+    // Regular article: scrape the URL with a hard timeout
     if (!html && !text) {
-      html = await fetchContent(url)
+      try {
+        html = await Promise.race([
+          fetchContent(url),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Scrape timeout')), 20000),
+          ),
+        ])
+      } catch (err) {
+        console.error(`Scrape failed for ${url}: ${err.message}`)
+        return null
+      }
     }
     if (html && !text) {
       const extracted = extractText(html)

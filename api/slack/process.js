@@ -16,6 +16,8 @@ export const config = {
 import Airtable from 'airtable'
 import {
   processArticleFromUrl,
+  isSocialMediaUrl,
+  getSocialMediaType,
   extractSourceName,
 } from '../../src/services/article-pipeline.js'
 
@@ -62,7 +64,31 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'already_processed' })
     }
 
-    // Run the shared pipeline
+    const sourceName = extractSourceName(url)
+
+    // Social media URLs can't be scraped — just save the URL to the right field
+    if (isSocialMediaUrl(url)) {
+      const socialType = getSocialMediaType(url)
+      const updateFields = {}
+      if (socialType) updateFields[socialType] = url
+      updateFields.title = `Publicación de ${sourceName}`
+      updateFields.source = sourceName
+      updateFields.article = `Enlace a publicación de ${sourceName}: ${url}`
+      updateFields.status = 'draft'
+
+      await base(TABLE_NAME).update(recordId, updateFields)
+      await sendSlackMessage(channel, null, {
+        text: `✅ Enlace de ${sourceName} guardado`,
+        color: 'good',
+        fields: [
+          { title: 'Fuente', value: sourceName, short: true },
+          { title: 'URL', value: url, short: false },
+        ],
+      })
+      return res.status(200).json({ status: 'social_saved' })
+    }
+
+    // Regular article: run the shared pipeline
     const fields = await processArticleFromUrl(url)
 
     if (!fields) {
@@ -75,7 +101,6 @@ export default async function handler(req, res) {
 
     await base(TABLE_NAME).update(recordId, fields)
 
-    const sourceName = extractSourceName(url)
     await sendSlackMessage(channel, null, {
       text: `✅ Artículo procesado`,
       color: 'good',
