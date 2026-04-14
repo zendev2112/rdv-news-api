@@ -13,7 +13,7 @@ import config from '../config/index.js'
 export async function uploadImagesOnPublish(recordId, sectionId, tableName) {
   try {
     logger.info(
-      `🚀 Publishing article ${recordId} - uploading images to Cloudinary...`
+      `🚀 Publishing article ${recordId} - uploading images to Cloudinary...`,
     )
 
     // Get Airtable API URL
@@ -21,7 +21,7 @@ export async function uploadImagesOnPublish(recordId, sectionId, tableName) {
     const apiToken =
       config.airtable?.personalAccessToken || process.env.AIRTABLE_TOKEN
     const airtableApiUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
-      tableName
+      tableName,
     )}`
 
     // Fetch current record to get Airtable image URLs
@@ -34,31 +34,48 @@ export async function uploadImagesOnPublish(recordId, sectionId, tableName) {
     const fields = response.data.fields
 
     // Extract current Airtable URLs from image field
-    let airtableUrls = []
+    let imageUrls = []
     if (
       fields.image &&
       Array.isArray(fields.image) &&
       fields.image.length > 0
     ) {
-      airtableUrls = fields.image
-        .filter((img) => img.url && img.url.includes('airtableusercontent.com'))
+      imageUrls = fields.image
+        .filter(
+          (img) =>
+            img.url &&
+            !img.url.includes('cloudinary.com') &&
+            !img.url.includes('res.cloudinary'),
+        )
         .map((img) => img.url)
     }
 
-    if (airtableUrls.length === 0) {
+    // Also check imgUrl field as fallback (pipeline stores source URL there)
+    if (imageUrls.length === 0 && fields.imgUrl) {
+      const imgUrl = fields.imgUrl
+      if (
+        imgUrl.startsWith('http') &&
+        !imgUrl.includes('cloudinary.com') &&
+        !imgUrl.includes('res.cloudinary')
+      ) {
+        imageUrls = [imgUrl]
+      }
+    }
+
+    if (imageUrls.length === 0) {
       logger.info(`No images to upload for record ${recordId}`)
       return { imgUrl: '', 'article-images': '' }
     }
 
     logger.info(
-      `📤 Uploading ${airtableUrls.length} images to Cloudinary for published article...`
+      `📤 Uploading ${imageUrls.length} images to Cloudinary for published article...`,
     )
 
     // Upload to Cloudinary
     const cloudinaryUrls = await uploadArticleImagesToCloudinary(
-      airtableUrls,
+      imageUrls,
       recordId,
-      sectionId
+      sectionId,
     )
 
     if (cloudinaryUrls.length > 0) {
@@ -68,12 +85,12 @@ export async function uploadImagesOnPublish(recordId, sectionId, tableName) {
       }
 
       logger.info(
-        `✅ Uploaded ${cloudinaryUrls.length} images to Cloudinary for record ${recordId}`
+        `✅ Uploaded ${cloudinaryUrls.length} images to Cloudinary for record ${recordId}`,
       )
       logger.info(`📝 Main image: ${cloudinaryUrls[0]}`)
       if (cloudinaryUrls.length > 1) {
         logger.info(
-          `📝 Additional images: ${cloudinaryUrls.slice(1).join(', ')}`
+          `📝 Additional images: ${cloudinaryUrls.slice(1).join(', ')}`,
         )
       }
 
@@ -85,7 +102,7 @@ export async function uploadImagesOnPublish(recordId, sectionId, tableName) {
   } catch (error) {
     logger.error(
       `❌ Error uploading images on publish for ${recordId}:`,
-      error.message
+      error.message,
     )
     throw error
   }
@@ -103,18 +120,18 @@ export async function publishArticleWithImages(
   recordId,
   sectionId,
   tableName,
-  additionalFields = {}
+  additionalFields = {},
 ) {
   try {
     logger.info(
-      `🚀 Publishing article ${recordId} with Cloudinary image upload...`
+      `🚀 Publishing article ${recordId} with Cloudinary image upload...`,
     )
 
     // Upload images to Cloudinary
     const cloudinaryFields = await uploadImagesOnPublish(
       recordId,
       sectionId,
-      tableName
+      tableName,
     )
 
     if (!cloudinaryFields) {
@@ -133,7 +150,7 @@ export async function publishArticleWithImages(
     const apiToken =
       config.airtable?.personalAccessToken || process.env.AIRTABLE_TOKEN
     const airtableApiUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
-      tableName
+      tableName,
     )}`
 
     const response = await axios.patch(
@@ -144,11 +161,11 @@ export async function publishArticleWithImages(
           Authorization: `Bearer ${apiToken}`,
           'Content-Type': 'application/json',
         },
-      }
+      },
     )
 
     logger.info(
-      `✅ Successfully published article ${recordId} with Cloudinary images`
+      `✅ Successfully published article ${recordId} with Cloudinary images`,
     )
     return response.data
   } catch (error) {

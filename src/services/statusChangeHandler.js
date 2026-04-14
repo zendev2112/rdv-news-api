@@ -58,38 +58,43 @@ export async function handlePublishStatusChange(
 
     const fields = response.data.fields
 
-    // Only proceed if status is 'published' and imgUrl contains Airtable URL
-    if (
-      fields.status !== 'published' ||
-      !fields.imgUrl ||
-      !fields.imgUrl.includes('airtableusercontent.com')
-    ) {
-      logger.info(`Record ${recordId} doesn't need processing`)
+    // Only proceed if status is 'published'
+    if (fields.status !== 'published') {
+      logger.info(`Record ${recordId} status is '${fields.status}', skipping`)
       return false
     }
 
-    // 2. Upload images to Cloudinary (this function only returns URLs)
-    const cloudinaryFields = await uploadImagesOnPublish(
-      recordId,
-      sectionId,
-      tableName,
-    )
-
-    if (!cloudinaryFields || !cloudinaryFields.imgUrl) {
-      logger.info(`No images uploaded for record ${recordId}`)
-      return false
-    }
-
-    // 3. Generate SEO slug from the current title + date
+    // 2. Generate SEO slug from the current title + date (always)
     const seoSlug = generateSeoSlug(fields.title)
     logger.info(`📝 Generated SEO slug: ${seoSlug}`)
 
-    // 4. Update Airtable record with Cloudinary URLs + SEO slug (keep status as 'published')
-    const updateData = {
-      imgUrl: cloudinaryFields.imgUrl,
-      'article-images': cloudinaryFields['article-images'],
-      url: seoSlug,
+    const updateData = { url: seoSlug }
+
+    // 3. Upload images to Cloudinary if imgUrl exists and is not already a Cloudinary URL
+    const imgUrl = fields.imgUrl || ''
+    const isAlreadyCloudinary =
+      imgUrl.includes('cloudinary.com') || imgUrl.includes('res.cloudinary')
+
+    if (imgUrl && !isAlreadyCloudinary) {
+      const cloudinaryFields = await uploadImagesOnPublish(
+        recordId,
+        sectionId,
+        tableName,
+      )
+
+      if (cloudinaryFields && cloudinaryFields.imgUrl) {
+        updateData.imgUrl = cloudinaryFields.imgUrl
+        if (cloudinaryFields['article-images']) {
+          updateData['article-images'] = cloudinaryFields['article-images']
+        }
+      }
+    } else if (!imgUrl) {
+      logger.info(`No images to upload for record ${recordId}`)
+    } else {
+      logger.info(`Images already on Cloudinary for record ${recordId}`)
     }
+
+    // 4. Update Airtable record with Cloudinary URLs + SEO slug
 
     await axios.patch(
       `${airtableApiUrl}/${recordId}`,

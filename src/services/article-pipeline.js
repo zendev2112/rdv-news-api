@@ -126,6 +126,96 @@ function extractMetaImage(html) {
   }
 }
 
+/**
+ * Extract large article images from HTML (not just captioned ones).
+ * Complements extractImagesAsMarkdown which only finds captioned images.
+ */
+function extractArticleImages(html) {
+  try {
+    const $ = cheerio.load(html)
+    const images = []
+
+    // 1. Images inside <figure> (even without figcaption)
+    $('figure img').each((i, img) => {
+      const src = $(img).attr('src') || $(img).attr('data-src')
+      if (src && isValidArticleImage(src) && !images.includes(src)) {
+        images.push(src)
+      }
+    })
+
+    // 2. Images inside article/main content areas
+    const contentSelectors =
+      'article img, [class*="article"] img, [class*="content"] img, main img, .story img, .post img'
+    $(contentSelectors).each((i, img) => {
+      const src = $(img).attr('src') || $(img).attr('data-src')
+      if (src && isValidArticleImage(src) && !images.includes(src)) {
+        // Filter out small images (icons, avatars, etc.)
+        const width = parseInt($(img).attr('width') || '0', 10)
+        const height = parseInt($(img).attr('height') || '0', 10)
+        if ((width > 0 && width < 150) || (height > 0 && height < 150)) return
+        images.push(src)
+      }
+    })
+
+    return images.slice(0, 5) // Max 5 images
+  } catch {
+    return []
+  }
+}
+
+function isValidArticleImage(url) {
+  if (!url || url.startsWith('data:')) return false
+  if (!url.startsWith('http')) return false
+  if (url.includes('.svg')) return false
+  if (url.includes('ad.') || url.includes('ads.') || url.includes('/ad/'))
+    return false
+  if (url.includes('pixel.') || url.includes('analytics')) return false
+  if (url.includes('/icons/') || url.includes('/social/')) return false
+  if (url.includes('tracking') || url.includes('beacon')) return false
+  if (url.includes('avatar') || url.includes('logo')) return false
+  if (url.includes('emoji') || url.includes('spinner')) return false
+  return true
+}
+
+/**
+ * Fetch oEmbed data for a URL (works for Instagram, Facebook, Twitter, YouTube).
+ * These platforms provide oEmbed endpoints that return metadata without scraping.
+ */
+async function fetchOembedData(url) {
+  const oembedEndpoints = [
+    {
+      match: /instagram\.com/,
+      endpoint: `https://api.instagram.com/oembed?url=${encodeURIComponent(url)}`,
+    },
+    {
+      match: /facebook\.com/,
+      endpoint: `https://www.facebook.com/plugins/post/oembed.json/?url=${encodeURIComponent(url)}`,
+    },
+    {
+      match: /twitter\.com|x\.com/,
+      endpoint: `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}`,
+    },
+    {
+      match: /youtube\.com|youtu\.be/,
+      endpoint: `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+    },
+  ]
+
+  const matched = oembedEndpoints.find((ep) => ep.match.test(url))
+  if (!matched) return null
+
+  try {
+    const res = await fetch(matched.endpoint, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
 function cleanCodeBlocks(text) {
   return text
     .trim()
@@ -479,28 +569,62 @@ export async function processArticleFromUrl(url, options = {}) {
   let images = []
   let imageMarkdown = ''
 
-  if (!html && !text) {
-    html = await fetchContent(url)
-  }
-  if (html && !text) {
-    const extracted = extractText(html)
-    text = extracted.text
-  }
-  if (html) {
-    const imgResult = extractImagesAsMarkdown(html)
-    images = imgResult.images
-    imageMarkdown = imgResult.markdown
-
-    // Fallback: extract og:image / twitter:image from meta tags
-    if (images.length === 0) {
-      const metaImage = extractMetaImage(html)
-      if (metaImage) {
-        images = [metaImage]
+  if (isSocial && !text) {
+    // Social media: platforms block scrapers, so use oEmbed API to get
+    // whatever metadata we can, then rely on the AI to flesh it out.
+    const oembed = await fetchOembedData(url)
+    if (oembed) {
+      text = oembed.title || oembed.description || oembed.author_name || url
+      if (oembed.thumbnail_url) images = [oembed.thumbnail_url]
+    }
+    // If oEmbed failed, still try a quick scrape (some Twitter links work)
+    if (!text || text.length < 20) {
+      try {
+        html = await fetchContent(url)
+        if (html) {
+          const extracted = extractText(html)
+          text = extracted.text || text
+          const metaImg = extractMetaImage(html)
+          if (metaImg && images.length === 0) images = [metaImg]
+        }
+      } catch {
+        // Social scrape failed — continue with what we have
       }
     }
-  }
+    // Minimum viable content for social: just the URL + source is enough
+    if (!text || text.length < 10) {
+      text = `Publicación de ${sourceName}: ${url}`
+    }
+  } else {
+    // Regular article: scrape the URL
+    if (!html && !text) {
+      html = await fetchContent(url)
+    }
+    if (html && !text) {
+      const extracted = extractText(html)
+      text = extracted.text
+    }
+    if (html) {
+      const imgResult = extractImagesAsMarkdown(html)
+      images = imgResult.images
+      imageMarkdown = imgResult.markdown
 
-  if (!text || text.length < 50) return null
+      // Fallback: extract all article images (not just captioned)
+      if (images.length === 0) {
+        images = extractArticleImages(html)
+      }
+
+      // Fallback: extract og:image / twitter:image from meta tags
+      if (images.length === 0) {
+        const metaImage = extractMetaImage(html)
+        if (metaImage) {
+          images = [metaImage]
+        }
+      }
+    }
+
+    if (!text || text.length < 50) return null
+  }
 
   // ── 2. Extract embeds ──────────────────────────────────────────────
   let instagramContent = ''
