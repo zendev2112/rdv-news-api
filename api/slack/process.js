@@ -14,7 +14,10 @@ export const config = {
 }
 
 import Airtable from 'airtable'
-import { processArticleFromUrl, extractSourceName } from '../../src/services/article-pipeline.js'
+import {
+  processArticleFromUrl,
+  extractSourceName,
+} from '../../src/services/article-pipeline.js'
 
 const base = new Airtable({ apiKey: process.env.AIRTABLE_TOKEN }).base(
   process.env.AIRTABLE_BASE_ID,

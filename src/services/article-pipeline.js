@@ -33,20 +33,36 @@ import {
 // ── Utility functions ────────────────────────────────────────────────
 
 const PROPER_NOUNS = [
-  'Argentina', 'Buenos Aires', 'Coronel Suárez', 'Huanguelén',
-  'Facebook', 'Instagram', 'Twitter', 'YouTube',
-  'COVID', 'AFA', 'FIFA', 'NBA', 'ATP', 'WTA',
+  'Argentina',
+  'Buenos Aires',
+  'Coronel Suárez',
+  'Huanguelén',
+  'Facebook',
+  'Instagram',
+  'Twitter',
+  'YouTube',
+  'COVID',
+  'AFA',
+  'FIFA',
+  'NBA',
+  'ATP',
+  'WTA',
 ]
 
 export function toSentenceCase(text) {
   if (!text) return ''
   const words = text.trim().split(/\s+/)
-  return words.map((word, i) => {
-    const proper = PROPER_NOUNS.find(n => word.toLowerCase() === n.toLowerCase())
-    if (proper) return proper
-    if (i === 0) return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-    return word.toLowerCase()
-  }).join(' ')
+  return words
+    .map((word, i) => {
+      const proper = PROPER_NOUNS.find(
+        (n) => word.toLowerCase() === n.toLowerCase(),
+      )
+      if (proper) return proper
+      if (i === 0)
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      return word.toLowerCase()
+    })
+    .join(' ')
 }
 
 export function stripMarkdown(text) {
@@ -65,7 +81,10 @@ export function stripMarkdown(text) {
 
 export function postProcessText(text) {
   if (!text) return ''
-  let fixed = text.split('\n').map(l => l.trim()).join('\n')
+  let fixed = text
+    .split('\n')
+    .map((l) => l.trim())
+    .join('\n')
   fixed = fixed.replace(/\n{3,}/g, '\n\n').replace(/\n\s+\n/g, '\n\n')
   fixed = fixed.replace(/^\s*-\s+/gm, '- ')
   fixed = fixed.replace(/^\s*(\d+)\.\s+/gm, '$1. ')
@@ -78,7 +97,8 @@ export function postProcessText(text) {
   return fixed
 }
 
-const EMOJI_RE = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu
+const EMOJI_RE =
+  /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu
 
 function cleanCodeBlocks(text) {
   return text
@@ -91,8 +111,14 @@ function cleanCodeBlocks(text) {
 
 function cleanFillerPhrases(text) {
   return text
-    .replace(/\b(puntos principales|incluyen los siguientes|a continuación|destacan|cabe mencionar|cabe destacar|es importante mencionar|vale la pena señalar|en este contexto|por su parte|en ese sentido)\b/gi, '')
-    .replace(/\b(en resumen|en conclusión|para finalizar|para concluir|de esta manera)\b/gi, '')
+    .replace(
+      /\b(puntos principales|incluyen los siguientes|a continuación|destacan|cabe mencionar|cabe destacar|es importante mencionar|vale la pena señalar|en este contexto|por su parte|en ese sentido)\b/gi,
+      '',
+    )
+    .replace(
+      /\b(en resumen|en conclusión|para finalizar|para concluir|de esta manera)\b/gi,
+      '',
+    )
     .replace(/\n\s*\n\s*\n/g, '\n\n')
     .replace(/ {2,}/g, ' ')
     .trim()
@@ -109,7 +135,9 @@ export function isSocialMediaUrl(url) {
       hostname.includes('youtube.com') ||
       hostname.includes('youtu.be')
     )
-  } catch { return false }
+  } catch {
+    return false
+  }
 }
 
 export function getSocialMediaType(url) {
@@ -117,8 +145,10 @@ export function getSocialMediaType(url) {
     const hostname = new URL(url).hostname
     if (hostname.includes('facebook.com')) return 'fb-post'
     if (hostname.includes('instagram.com')) return 'ig-post'
-    if (hostname.includes('twitter.com') || hostname.includes('x.com')) return 'tw-post'
-    if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) return 'yt-video'
+    if (hostname.includes('twitter.com') || hostname.includes('x.com'))
+      return 'tw-post'
+    if (hostname.includes('youtube.com') || hostname.includes('youtu.be'))
+      return 'yt-video'
   } catch {}
   return ''
 }
@@ -136,8 +166,10 @@ export function extractSourceName(url) {
 
     if (domain.includes('facebook.com')) return 'Facebook'
     if (domain.includes('instagram.com')) return 'Instagram'
-    if (domain.includes('twitter.com') || domain.includes('x.com')) return 'Twitter'
-    if (domain.includes('youtube.com') || domain.includes('youtu.be')) return 'YouTube'
+    if (domain.includes('twitter.com') || domain.includes('x.com'))
+      return 'Twitter'
+    if (domain.includes('youtube.com') || domain.includes('youtu.be'))
+      return 'YouTube'
     if (domain.includes('tiktok.com')) return 'TikTok'
     if (domain.includes('linkedin.com')) return 'LinkedIn'
     if (domain.includes('t.co')) return 'Twitter'
@@ -150,18 +182,33 @@ export function extractSourceName(url) {
     const sourceName = parts[0]
 
     const mapping = {
-      lanacion: 'La Nación', eldiario: 'El Diario', pagina12: 'Página 12',
-      larazon: 'La Razón', lavoz: 'La Voz', eleconomista: 'El Economista',
-      elpais: 'El País', ole: 'Olé', ambito: 'Ámbito', telam: 'Télam',
-      infobae: 'Infobae', eldestape: 'El Destape', cronista: 'El Cronista',
-      tiempoar: 'Tiempo Argentino', tn: 'Todo Noticias', clarin: 'Clarín',
+      lanacion: 'La Nación',
+      eldiario: 'El Diario',
+      pagina12: 'Página 12',
+      larazon: 'La Razón',
+      lavoz: 'La Voz',
+      eleconomista: 'El Economista',
+      elpais: 'El País',
+      ole: 'Olé',
+      ambito: 'Ámbito',
+      telam: 'Télam',
+      infobae: 'Infobae',
+      eldestape: 'El Destape',
+      cronista: 'El Cronista',
+      tiempoar: 'Tiempo Argentino',
+      tn: 'Todo Noticias',
+      clarin: 'Clarín',
       lapoliticaonline: 'La Política Online',
     }
     if (mapping[sourceName]) return mapping[sourceName]
 
     return sourceName
       .split(/[-_]/)
-      .map(w => w.length === 1 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .map((w) =>
+        w.length === 1
+          ? w.toUpperCase()
+          : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
+      )
       .join(' ')
   } catch {
     return 'Unknown Source'
@@ -171,11 +218,14 @@ export function extractSourceName(url) {
 // ── Fallback generators ──────────────────────────────────────────────
 
 function generateFallbackMetadata(extractedText) {
-  const paragraphs = extractedText.split(/\n+/).filter(p => p.trim().length > 30)
+  const paragraphs = extractedText
+    .split(/\n+/)
+    .filter((p) => p.trim().length > 30)
   const firstPara = paragraphs[0] || ''
   const secondPara = paragraphs[1] || ''
 
-  const firstSentence = firstPara.split(/[.!?]/)[0]?.trim() || 'Artículo procesado'
+  const firstSentence =
+    firstPara.split(/[.!?]/)[0]?.trim() || 'Artículo procesado'
   return {
     title: firstSentence.substring(0, 120),
     bajada: secondPara.substring(0, 200) || firstPara.substring(0, 200),
@@ -184,32 +234,78 @@ function generateFallbackMetadata(extractedText) {
 }
 
 function generateFallbackTags(extractedText, metadata) {
-  const text = `${metadata?.title || ''} ${metadata?.bajada || ''} ${extractedText}`.toLowerCase()
-  const stopwords = ['para', 'como', 'esta', 'esto', 'estos', 'sobre', 'desde', 'entre', 'hasta', 'porque', 'también', 'pero', 'tiene', 'tiene', 'este', 'esta']
-  const words = text.split(/\W+/).filter(w => w.length > 3 && !stopwords.includes(w))
+  const text =
+    `${metadata?.title || ''} ${metadata?.bajada || ''} ${extractedText}`.toLowerCase()
+  const stopwords = [
+    'para',
+    'como',
+    'esta',
+    'esto',
+    'estos',
+    'sobre',
+    'desde',
+    'entre',
+    'hasta',
+    'porque',
+    'también',
+    'pero',
+    'tiene',
+    'tiene',
+    'este',
+    'esta',
+  ]
+  const words = text
+    .split(/\W+/)
+    .filter((w) => w.length > 3 && !stopwords.includes(w))
   const freq = {}
-  words.forEach(w => { freq[w] = (freq[w] || 0) + 1 })
-  const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5)
+  words.forEach((w) => {
+    freq[w] = (freq[w] || 0) + 1
+  })
+  const top = Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
   if (top.length === 0) return 'Noticias, Actualidad'
   return top.map(([w]) => w.charAt(0).toUpperCase() + w.slice(1)).join(', ')
 }
 
 function formatTextAsFallback(text) {
   if (!text) return ''
-  let formatted = text.trim().replace(/\s+/g, ' ').replace(/\. /g, '.\n\n')
-    .replace(/[#*_`]/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'")
-  const paragraphs = formatted.split(/\n+/).filter(p => p.trim().length > 20).map(p => p.trim())
-  return paragraphs.map(p => /[.!?]$/.test(p) ? p : p + '.').join('\n\n')
+  let formatted = text
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\. /g, '.\n\n')
+    .replace(/[#*_`]/g, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+  const paragraphs = formatted
+    .split(/\n+/)
+    .filter((p) => p.trim().length > 20)
+    .map((p) => p.trim())
+  return paragraphs.map((p) => (/[.!?]$/.test(p) ? p : p + '.')).join('\n\n')
 }
 
 // ── Core AI steps ────────────────────────────────────────────────────
 
-async function reelaborateText(extractedText, imageMarkdown, isSocial, item, sourceName) {
+async function reelaborateText(
+  extractedText,
+  imageMarkdown,
+  isSocial,
+  item,
+  sourceName,
+) {
   try {
     const prompt = isSocial
-      ? reelaborateSocialMedia(extractedText, item || { url: '', title: '', content_text: extractedText }, sourceName || '')
-      : reelaborateArticle(imageMarkdown ? `${extractedText}\n\n${imageMarkdown}` : extractedText)
+      ? reelaborateSocialMedia(
+          extractedText,
+          item || { url: '', title: '', content_text: extractedText },
+          sourceName || '',
+        )
+      : reelaborateArticle(
+          imageMarkdown
+            ? `${extractedText}\n\n${imageMarkdown}`
+            : extractedText,
+        )
 
     const result = await generateContent(prompt, { maxTokens: 8192 })
     if (!result.text) return formatTextAsFallback(extractedText)
@@ -219,11 +315,14 @@ async function reelaborateText(extractedText, imageMarkdown, isSocial, item, sou
     if (isSocial) {
       processedText = processedText.replace(EMOJI_RE, '')
       processedText = processedText.replace(
-        /\b(según publicó|compartió en|posteó en|difundió en|anunció en|publicó en)\s+(Facebook|Instagram|Twitter|YouTube|redes sociales|la plataforma|su cuenta)\b/gi, ''
+        /\b(según publicó|compartió en|posteó en|difundió en|anunció en|publicó en)\s+(Facebook|Instagram|Twitter|YouTube|redes sociales|la plataforma|su cuenta)\b/gi,
+        '',
       )
     }
 
-    const wordCount = processedText.split(/\s+/).filter(w => w.length > 0).length
+    const wordCount = processedText
+      .split(/\s+/)
+      .filter((w) => w.length > 0).length
     if (wordCount < 80) return formatTextAsFallback(extractedText)
     if (isSocial && wordCount > 600) {
       processedText = processedText.split(/\s+/).slice(0, 500).join(' ')
@@ -237,7 +336,12 @@ async function reelaborateText(extractedText, imageMarkdown, isSocial, item, sou
   }
 }
 
-async function generateArticleMetadata(extractedText, isSocial, sourceName, item) {
+async function generateArticleMetadata(
+  extractedText,
+  isSocial,
+  sourceName,
+  item,
+) {
   try {
     const prompt = isSocial
       ? generateSocialMediaMetadataPrompt(extractedText)
@@ -249,13 +353,19 @@ async function generateArticleMetadata(extractedText, isSocial, sourceName, item
     let cleanedText = cleanCodeBlocks(result.text)
     const startIdx = cleanedText.indexOf('{')
     const endIdx = cleanedText.lastIndexOf('}')
-    if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) throw new Error('No JSON found')
+    if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx)
+      throw new Error('No JSON found')
 
-    const jsonStr = cleanedText.substring(startIdx, endIdx + 1)
-      .replace(/,\s*}/g, '}').replace(/\n/g, ' ').replace(/\r/g, '').replace(/\t/g, ' ')
+    const jsonStr = cleanedText
+      .substring(startIdx, endIdx + 1)
+      .replace(/,\s*}/g, '}')
+      .replace(/\n/g, ' ')
+      .replace(/\r/g, '')
+      .replace(/\t/g, ' ')
 
     const parsed = JSON.parse(jsonStr)
-    if (!parsed.title || !parsed.bajada || !parsed.volanta) throw new Error('Missing fields')
+    if (!parsed.title || !parsed.bajada || !parsed.volanta)
+      throw new Error('Missing fields')
 
     // Clean metadata fields
     parsed.title = stripMarkdown(parsed.title).replace(EMOJI_RE, '')
@@ -266,7 +376,8 @@ async function generateArticleMetadata(extractedText, isSocial, sourceName, item
       parsed.title = toSentenceCase(parsed.title)
       parsed.volanta = toSentenceCase(parsed.volanta)
       const volantaWords = parsed.volanta.split(/\s+/)
-      if (volantaWords.length > 4) parsed.volanta = volantaWords.slice(0, 4).join(' ')
+      if (volantaWords.length > 4)
+        parsed.volanta = volantaWords.slice(0, 4).join(' ')
     }
 
     return parsed
@@ -287,10 +398,16 @@ async function generateArticleTags(extractedText, metadata) {
     if (!jsonMatch) throw new Error('No JSON array found')
 
     const tags = JSON.parse(jsonMatch[0])
-    if (!Array.isArray(tags) || tags.length === 0) throw new Error('Invalid tags')
+    if (!Array.isArray(tags) || tags.length === 0)
+      throw new Error('Invalid tags')
 
     return tags
-      .map(tag => tag.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '))
+      .map((tag) =>
+        tag
+          .split(' ')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' '),
+      )
       .join(', ')
   } catch (error) {
     console.error('Error generating tags:', error.message)
@@ -359,7 +476,7 @@ export async function processArticleFromUrl(url, options = {}) {
   const tags = await generateArticleTags(text, metadata)
 
   // ── 4. Build record fields ─────────────────────────────────────────
-  const imageAttachments = images.map(imgUrl => ({ url: imgUrl }))
+  const imageAttachments = images.map((imgUrl) => ({ url: imgUrl }))
 
   const fields = {
     title: stripMarkdown(metadata.title || ''),
