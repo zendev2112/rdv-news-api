@@ -20,6 +20,13 @@ const base = new Airtable({ apiKey: process.env.AIRTABLE_TOKEN }).base(
 
 const TABLE_NAME = 'Slack Noticias'
 
+// Channel(s) where plain-text messages are auto-processed into articles.
+// Set SLACK_NEWS_CHANNELS as a comma-separated list of channel IDs or names.
+// Default: only #redaccion. Use '*' to allow all channels.
+const NEWS_CHANNELS = (process.env.SLACK_NEWS_CHANNELS || 'redaccion')
+  .split(',')
+  .map((c) => c.trim().replace(/^#/, ''))
+
 // --- Utility functions (Slack-specific only) ---
 
 function isUrl(text) {
@@ -435,6 +442,7 @@ router.post('/events', async (req, res) => {
   }
 
   // 5. Handle plain text messages (no files, no slash command)
+  //    Only process in designated news channel(s) to avoid capturing all chat
   if (
     event.type === 'message' &&
     !event.subtype &&
@@ -442,6 +450,13 @@ router.post('/events', async (req, res) => {
     event.text &&
     event.text.trim().length > 0
   ) {
+    // Check channel filter — resolve channel name first
+    const channelName = await getSlackChannelName(event.channel)
+    const allowed =
+      NEWS_CHANNELS.includes('*') || NEWS_CHANNELS.includes(channelName)
+    if (!allowed) {
+      return res.status(200).send()
+    }
     waitUntil(processPlainTextMessage(event))
     return res.status(200).send()
   }
@@ -607,7 +622,10 @@ async function processMessageWithFiles(event) {
 
 async function processPlainTextMessage(event) {
   try {
-    const text = event.text.trim()
+    // Slack wraps URLs in <url|label> or <url> format — extract the raw URL
+    let text = event.text
+      .trim()
+      .replace(/<(https?:\/\/[^|>]+)(?:\|[^>]*)?>/g, '$1')
     const channelId = event.channel
     const userId = event.user
 
