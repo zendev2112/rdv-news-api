@@ -50,7 +50,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { recordId, url, text, channel } = req.body
+  const { recordId, url, text, imageUrl, channel } = req.body
   if (!recordId || (!url && !text)) {
     return res.status(400).json({ error: 'Missing recordId or url/text' })
   }
@@ -86,6 +86,15 @@ export default async function handler(req, res) {
 
       delete fields.url
       fields.source = 'Slack'
+
+      // Preserve image already set on the record (uploaded from Slack file)
+      // Don't overwrite with empty pipeline images
+      const existing = await base(TABLE_NAME).find(recordId)
+      if (existing.fields.imgUrl) {
+        delete fields.image
+        delete fields.imgUrl
+        delete fields['article-images']
+      }
 
       await base(TABLE_NAME).update(recordId, fields)
 

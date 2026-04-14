@@ -614,15 +614,105 @@ async function processMessageWithFiles(event) {
   try {
     const channelId = event.channel
     const userId = event.user
+    const messageText = (event.text || '')
+      .trim()
+      .replace(/<(https?:\/\/[^|>]+)(?:\|[^>]*)?>/g, '$1')
+
+    const userName = await getSlackUserName(userId)
+    const channelName = await getSlackChannelName(channelId)
+
     logger.info(
-      `Processing message with ${event.files.length} file(s) from user ${userId}`,
+      `Processing message with ${event.files.length} file(s) from user ${userId}, text="${messageText.substring(0, 50)}"`,
     )
 
+    // Upload all image files to Cloudinary first
+    let imageUrls = []
     for (const file of event.files) {
-      const fileId = file.id
-      // file object from message event may have partial info — fetch full info
-      const fullFile = await fetchSlackFileInfo(fileId)
-      await saveFileToAirtable(fullFile, fileId, userId, channelId)
+      const fullFile = await fetchSlackFileInfo(file.id)
+      const mimeType = fullFile.mimetype || ''
+      if (
+        !mimeType.startsWith('image/') &&
+        !mimeType.startsWith('audio/') &&
+        !mimeType.startsWith('video/')
+      ) {
+        continue
+      }
+      const cloudinaryUrl = await getCloudinaryUrl(fullFile, file.id)
+      if (cloudinaryUrl && mimeType.startsWith('image/')) {
+        imageUrls.push(cloudinaryUrl)
+      } else if (cloudinaryUrl) {
+        // Audio/video without text — save directly (no AI)
+        await saveFileToAirtable(fullFile, file.id, userId, channelId)
+      }
+    }
+
+    // If we have text (and optionally images), generate an article
+    if (messageText.length > 0) {
+      const recordFields = {
+        source: 'Slack',
+        title: 'Generando artículo...',
+        article: 'Procesando...',
+        status: 'draft',
+        tags: 'Slack Import',
+        overline: '',
+        excerpt: '',
+        url: '',
+        imgUrl: imageUrls[0] || '',
+        'article-images': imageUrls.slice(1).join(', '),
+        'ig-post': '',
+        'fb-post': '',
+        'tw-post': '',
+        'yt-video': '',
+      }
+      if (imageUrls.length > 0) {
+        recordFields.image = imageUrls.map((u) => ({ url: u }))
+      }
+
+      const record = await base(TABLE_NAME).create(recordFields)
+
+      if (channelName) {
+        await sendSlackMessage(channelName, null, {
+          text: `🔄 Generando artículo desde texto de ${userName}...`,
+          color: 'warning',
+          fields: [
+            {
+              title: 'Texto',
+              value: messageText.substring(0, 200),
+              short: false,
+            },
+            { title: 'Por', value: userName, short: true },
+            ...(imageUrls.length > 0
+              ? [
+                  {
+                    title: 'Imágenes',
+                    value: `${imageUrls.length}`,
+                    short: true,
+                  },
+                ]
+              : []),
+          ],
+        })
+      }
+
+      // Fire-and-forget to the standalone function for AI processing
+      const processPayload = {
+        recordId: record.id,
+        text: messageText,
+        imageUrl: imageUrls[0] || '',
+        channel: channelName,
+      }
+      fetch('https://rdv-news-api.vercel.app/api/slack/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(processPayload),
+      }).catch((err) => logger.error('Failed to trigger process:', err.message))
+      return
+    }
+
+    // No text — just save images directly (existing behavior)
+    for (const file of event.files) {
+      const fullFile = await fetchSlackFileInfo(file.id)
+      await saveFileToAirtable(fullFile, file.id, userId, channelId)
     }
   } catch (error) {
     logger.error('Error processing message with files:', error.message)
