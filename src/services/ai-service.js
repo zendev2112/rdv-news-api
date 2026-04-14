@@ -20,6 +20,7 @@ export async function generateContent(prompt, options = {}) {
     model = process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     temperature = 0.7,
     maxTokens = 8192,
+    timeout = 60000,
   } = options
 
   try {
@@ -28,13 +29,21 @@ export async function generateContent(prompt, options = {}) {
 
     const geminiModel = genAI.getGenerativeModel({ model })
 
-    const result = await geminiModel.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature,
-        maxOutputTokens: maxTokens,
-      },
-    })
+    const result = await Promise.race([
+      geminiModel.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature,
+          maxOutputTokens: maxTokens,
+        },
+      }),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`AI generation timeout (${timeout / 1000}s)`)),
+          timeout,
+        ),
+      ),
+    ])
 
     const response = result.response
     const text = response.text()

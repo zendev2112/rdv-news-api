@@ -247,22 +247,20 @@ router.post('/add', async (req, res) => {
       ],
     })
 
-    // AFTER responding to Slack, trigger background processing
-    // The response is already flushed — this fetch runs in remaining time
+    // AFTER responding to Slack, fire-and-forget the processing call.
+    // The fetch triggers a separate Vercel function (/api/slack/process.js)
+    // which has its own 300s timeout — we don't need to wait for it.
     if (inputIsUrl) {
-      try {
-        await fetch('https://rdv-news-api.vercel.app/api/slack/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            recordId: record.id,
-            url: input,
-            channel: channel_name,
-          }),
-        })
-      } catch (err) {
-        logger.error('Failed to trigger process:', err.message)
+      const processPayload = {
+        recordId: record.id,
+        url: input,
+        channel: channel_name,
       }
+      fetch('https://rdv-news-api.vercel.app/api/slack/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(processPayload),
+      }).catch((err) => logger.error('Failed to trigger process:', err.message))
     }
   } catch (error) {
     logger.error('Slack add error:', error.message)

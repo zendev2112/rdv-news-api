@@ -9,6 +9,13 @@ import axios from 'axios' // Add axios for image downloading
 import config from '../config/index.js'
 import * as prompts from '../prompts/index.js'
 import { generateContent } from '../services/ai-service.js'
+import {
+  processArticleFromUrl,
+  isSocialMediaUrl,
+  getSocialMediaType,
+  extractSourceName,
+  stripMarkdown,
+} from '../services/article-pipeline.js'
 
 // Configure environment variables
 dotenv.config()
@@ -49,10 +56,20 @@ Force Processing: ${forceProcess ? 'Yes' : 'No'}
   `)
 
   try {
-    // IMPROVED: Include records that need OCR in the filter formula
-    let filterFormula = forceProcess
-      ? ''
-      : "OR({processingStatus} = 'needs_extraction', {isOcrNeeded} = 1)"
+    // Use the right filter for each table
+    const isSlackTable = tableName === 'Slack Noticias'
+    let filterFormula
+    if (forceProcess) {
+      filterFormula = ''
+    } else if (isSlackTable) {
+      // Slack Noticias has no processingStatus field.
+      // Find records that still need processing: placeholder articles or social URL stubs.
+      filterFormula =
+        "OR({article} = 'Procesando...', FIND('Enlace a publicación', {article}) > 0)"
+    } else {
+      filterFormula =
+        "OR({processingStatus} = 'needs_extraction', {isOcrNeeded} = 1)"
+    }
 
     console.log(
       `Fetching records from "${tableName}" with filter: ${filterFormula || 'ALL RECORDS'}`,
@@ -132,6 +149,56 @@ Force Processing: ${forceProcess ? 'Yes' : 'No'}
 }
 
 /**
+ * Process a Slack Noticias record that has a URL field.
+ * Uses the shared pipeline (same as RSS / Slack slash command).
+ */
+async function processSlackUrlRecord(record, fields) {
+  const url = fields.url
+  console.log(`Processing Slack URL record: ${url}`)
+
+  // Social media URLs can't be scraped — just ensure the URL is saved to the right field
+  if (isSocialMediaUrl(url)) {
+    const socialType = getSocialMediaType(url)
+    const sourceName = extractSourceName(url)
+    const updateFields = {}
+    if (socialType) updateFields[socialType] = url
+    updateFields.title = `Publicación de ${sourceName}`
+    updateFields.source = sourceName
+    updateFields.article = `Enlace a publicación de ${sourceName}: ${url}`
+    updateFields.status = 'draft'
+
+    try {
+      await airtableBase('Slack Noticias').update(record.id, updateFields)
+      console.log(`Social URL saved for ${sourceName}`)
+      return true
+    } catch (err) {
+      console.error(`Failed to update social URL record: ${err.message}`)
+      return false
+    }
+  }
+
+  // Regular article URL: run the full shared pipeline
+  try {
+    const pipelineFields = await processArticleFromUrl(url)
+
+    if (!pipelineFields) {
+      console.log(
+        `Pipeline returned null for ${url} — could not extract content`,
+      )
+      return false
+    }
+
+    // Update the Airtable record with all pipeline-generated fields
+    await airtableBase('Slack Noticias').update(record.id, pipelineFields)
+    console.log(`Successfully processed URL record: ${pipelineFields.title}`)
+    return true
+  } catch (err) {
+    console.error(`Pipeline processing failed for ${url}: ${err.message}`)
+    return false
+  }
+}
+
+/**
  * Process a single record
  */
 async function processRecord(record, tableName) {
@@ -139,9 +206,17 @@ async function processRecord(record, tableName) {
     const fields = record.fields
     console.log(`Processing record ${record.id}`)
 
+    const isSlackTable = tableName === 'Slack Noticias'
+
+    // ── Slack Noticias: route URL records through the shared pipeline ──
+    if (isSlackTable && fields.url) {
+      return await processSlackUrlRecord(record, fields)
+    }
+
+    // ── Standard social media processing (Instituciones or Slack text records) ──
+
     // Check if OCR is needed for this record
     const needsOcr = fields.isOcrNeeded === true
-    const isSlackTable = tableName === 'Slack Noticias'
 
     if (needsOcr) {
       console.log('Record is marked for OCR processing')
@@ -164,12 +239,17 @@ async function processRecord(record, tableName) {
     // Get content from article or contentHtml (prioritize article)
     let rawContent = ''
 
-    if (fields.article && fields.article.trim()) {
+    // For Slack records, skip placeholder text
+    const articleText = fields.article?.trim() || ''
+    const isPlaceholder =
+      articleText === 'Procesando...' ||
+      articleText.startsWith('Enlace a publicación')
+
+    if (articleText && !isPlaceholder) {
       console.log('Using existing article content')
-      rawContent = fields.article
+      rawContent = articleText
     } else if (fields.contentHtml) {
       console.log('Extracting text from HTML content')
-      // Simple HTML to text conversion
       rawContent = fields.contentHtml
         .replace(/<[^>]*>/g, ' ')
         .replace(/\s+/g, ' ')
@@ -182,12 +262,10 @@ async function processRecord(record, tableName) {
         'No article or HTML content found, checking social media fields',
       )
 
-      // Check all social media fields
       const socialFields = ['ig-post', 'fb-post', 'tw-post', 'yt-video']
 
       for (const fieldName of socialFields) {
         if (fields[fieldName] && typeof fields[fieldName] === 'string') {
-          // If it's a URL, log it but don't use it as content
           if (fields[fieldName].startsWith('http')) {
             console.log(`Field ${fieldName} contains URL: ${fields[fieldName]}`)
             continue
@@ -202,7 +280,7 @@ async function processRecord(record, tableName) {
       }
     }
 
-    // Check for OCR needs - either explicitly set or we have no content but have an image
+    // Check for OCR needs
     if (needsOcr || (!rawContent && fields.imgUrl)) {
       console.log('Attempting to extract text from image...')
 
@@ -211,19 +289,16 @@ async function processRecord(record, tableName) {
           const imageText = await extractTextFromImage(fields.imgUrl)
 
           if (imageText && imageText.trim().length > 10) {
-            // Ensure we got meaningful text
             console.log(
               `Successfully extracted ${imageText.length} characters from image`,
             )
 
-            // If we already have content, append the image text
             if (rawContent) {
               rawContent += '\n\n[Texto extraído de la imagen:]\n' + imageText
             } else {
               rawContent = imageText
             }
 
-            // Reset OCR flag since we've now processed it
             try {
               await airtableBase(tableName).update(record.id, {
                 isOcrNeeded: false,
@@ -237,7 +312,6 @@ async function processRecord(record, tableName) {
           }
         } catch (ocrError) {
           console.error(`OCR failed: ${ocrError.message}`)
-          // Continue with whatever content we have
         }
       } else {
         console.log('OCR requested but no image URL found')
@@ -299,6 +373,11 @@ async function processRecord(record, tableName) {
       updateFields.overline = strip(generatedContent.overline)
       updateFields.excerpt = strip(generatedContent.excerpt)
       updateFields.article = generatedContent.article
+
+      // Add tags if generated
+      if (generatedContent.tags) {
+        updateFields.tags = generatedContent.tags
+      }
 
       // Only set source if not already present
       if (!fields.source) {
@@ -471,9 +550,7 @@ async function generateAllContentElements(content, source) {
     // Step 2: Generate SEO metadata from the article
     const metadataSource = article.length > 100 ? article : content
     const metadataPrompt = prompts.generateSocialMediaMetadata(metadataSource)
-    const metadataResult = await generateContent(metadataPrompt, {
-      maxTokens: 1024,
-    })
+    const metadataResult = await generateContent(metadataPrompt)
 
     let title = ''
     let overline = ''
@@ -517,7 +594,8 @@ async function generateAllContentElements(content, source) {
           ? firstSentence.substring(0, firstSentence.lastIndexOf(' ', 70) || 70)
           : firstSentence
     }
-    if (!overline) overline = 'Institucionales'
+    if (!overline)
+      overline = source === 'Redes Sociales' ? 'Institucionales' : source
     if (!excerpt) {
       const plainArticle = (article || content)
         .replace(/\*\*([^*]+)\*\*/g, '$1')
@@ -530,15 +608,34 @@ async function generateAllContentElements(content, source) {
       if (excerpt && !excerpt.endsWith('.')) excerpt += '.'
     }
 
-    return { title, overline, excerpt, article }
+    // Step 3: Generate tags
+    let tags = ''
+    try {
+      const tagContext = `${title} ${overline} ${excerpt} ${article}`
+      const tagsPrompt = prompts.generateTags(tagContext, {
+        title,
+        volanta: overline,
+        bajada: excerpt,
+      })
+      const tagsResult = await generateContent(tagsPrompt)
+      tags = tagsResult.text
+        .replace(/^```[\s\S]*?\n/, '')
+        .replace(/```$/, '')
+        .trim()
+    } catch (tagErr) {
+      console.warn(`Tags generation failed: ${tagErr.message}`)
+    }
+
+    return { title, overline, excerpt, article, tags }
   } catch (error) {
     console.error('Error generating content elements:', error)
 
     return {
       title: createBasicTitle(content, source),
-      overline: 'Institucionales',
+      overline: source === 'Redes Sociales' ? 'Institucionales' : source,
       excerpt: content.substring(0, 150),
       article: formatRawContent(content, source),
+      tags: '',
     }
   }
 }
