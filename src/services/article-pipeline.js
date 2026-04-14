@@ -11,6 +11,7 @@
  */
 
 import { generateContent } from './ai-service.js'
+import cheerio from 'cheerio'
 import {
   fetchContent,
   extractText,
@@ -99,6 +100,31 @@ export function postProcessText(text) {
 
 const EMOJI_RE =
   /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu
+
+/**
+ * Extract the main image from HTML meta tags (og:image, twitter:image)
+ */
+function extractMetaImage(html) {
+  try {
+    const $ = cheerio.load(html)
+    const ogImage =
+      $('meta[property="og:image"]').attr('content') ||
+      $('meta[name="og:image"]').attr('content')
+    if (ogImage && ogImage.startsWith('http')) return ogImage
+
+    const twitterImage =
+      $('meta[name="twitter:image"]').attr('content') ||
+      $('meta[property="twitter:image"]').attr('content')
+    if (twitterImage && twitterImage.startsWith('http')) return twitterImage
+
+    const metaImage = $('meta[itemprop="image"]').attr('content')
+    if (metaImage && metaImage.startsWith('http')) return metaImage
+
+    return null
+  } catch {
+    return null
+  }
+}
 
 function cleanCodeBlocks(text) {
   return text
@@ -347,10 +373,17 @@ async function generateArticleMetadata(
       ? generateSocialMediaMetadataPrompt(extractedText)
       : generateMetadataPrompt(extractedText)
 
-    const result = await generateContent(prompt, { maxTokens: 1024 })
+    const result = await generateContent(prompt)
     if (!result.text) throw new Error('Empty AI response')
 
     let cleanedText = cleanCodeBlocks(result.text)
+
+    // Remove markdown code blocks
+    cleanedText = cleanedText
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/g, '')
+      .trim()
+
     const startIdx = cleanedText.indexOf('{')
     const endIdx = cleanedText.lastIndexOf('}')
     if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx)
@@ -363,7 +396,15 @@ async function generateArticleMetadata(
       .replace(/\r/g, '')
       .replace(/\t/g, ' ')
 
-    const parsed = JSON.parse(jsonStr)
+    let parsed
+    try {
+      parsed = JSON.parse(jsonStr)
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError.message)
+      console.error('Raw text:', cleanedText.substring(0, 300))
+      throw new Error('Invalid JSON format')
+    }
+
     if (!parsed.title || !parsed.bajada || !parsed.volanta)
       throw new Error('Missing fields')
 
@@ -390,7 +431,7 @@ async function generateArticleMetadata(
 async function generateArticleTags(extractedText, metadata) {
   try {
     const prompt = generateTagsPrompt(extractedText, metadata)
-    const result = await generateContent(prompt, { maxTokens: 1024 })
+    const result = await generateContent(prompt)
     if (!result.text) throw new Error('Empty AI response')
 
     const cleanedText = cleanCodeBlocks(result.text)
@@ -449,6 +490,14 @@ export async function processArticleFromUrl(url, options = {}) {
     const imgResult = extractImagesAsMarkdown(html)
     images = imgResult.images
     imageMarkdown = imgResult.markdown
+
+    // Fallback: extract og:image / twitter:image from meta tags
+    if (images.length === 0) {
+      const metaImage = extractMetaImage(html)
+      if (metaImage) {
+        images = [metaImage]
+      }
+    }
   }
 
   if (!text || text.length < 50) return null
@@ -465,18 +514,45 @@ export async function processArticleFromUrl(url, options = {}) {
     youtubeContent = extractYoutubeEmbeds(html)
   }
 
-  // ── 3. AI: article + metadata (parallel), then tags ────────────────
+  // ── 3. AI: article → metadata → tags (sequential to avoid rate limits) ──
   const item = options.item || { url, title: '', content_text: text }
 
-  const [article, metadata] = await Promise.all([
-    reelaborateText(text, imageMarkdown, isSocial, item, sourceName),
-    generateArticleMetadata(text, isSocial, sourceName, item),
-  ])
+  const article = await reelaborateText(
+    text,
+    imageMarkdown,
+    isSocial,
+    item,
+    sourceName,
+  )
 
-  const tags = await generateArticleTags(text, metadata)
+  const metadata = await generateArticleMetadata(
+    text,
+    isSocial,
+    sourceName,
+    item,
+  )
+
+  // For social media, use richer context for tags (metadata + article)
+  const tagText = isSocial
+    ? `${metadata.title} ${metadata.bajada} ${article}`
+    : text
+  const tags = await generateArticleTags(tagText, metadata)
 
   // ── 4. Build record fields ─────────────────────────────────────────
-  const imageAttachments = images.map((imgUrl) => ({ url: imgUrl }))
+  // Image attachments with fallback chain (matching RSS pipeline)
+  let imageAttachments = []
+  if (images.length > 0) {
+    imageAttachments = images.map((imgUrl) => ({ url: imgUrl }))
+  } else if (options.item?.image) {
+    imageAttachments = [{ url: options.item.image }]
+    images = [options.item.image]
+  } else if (options.item?.attachments?.length > 0) {
+    const attachUrl = options.item.attachments[0].url
+    if (attachUrl) {
+      imageAttachments = [{ url: attachUrl }]
+      images = [attachUrl]
+    }
+  }
 
   const fields = {
     title: stripMarkdown(metadata.title || ''),
