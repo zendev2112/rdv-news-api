@@ -315,23 +315,22 @@ router.post('/add', async (req, res) => {
       ],
     })
 
-    // AFTER responding to Slack, trigger background processing.
-    if (inputIsUrl) {
-      // URL: fire-and-forget to the separate Vercel function (own 300s timeout)
-      const processPayload = {
-        recordId: record.id,
-        url: input,
-        channel: channel_name,
-      }
-      fetch('https://rdv-news-api.vercel.app/api/slack/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(processPayload),
-      }).catch((err) => logger.error('Failed to trigger process:', err.message))
-    } else {
-      // Text: generate article via AI in the background
-      waitUntil(processTextArticle(record.id, input, channel_name))
+    // AFTER responding to Slack, fire-and-forget to the separate Vercel function
+    // (/api/slack/process.js) which has its own 300s timeout.
+    const processPayload = {
+      recordId: record.id,
+      channel: channel_name,
     }
+    if (inputIsUrl) {
+      processPayload.url = input
+    } else {
+      processPayload.text = input
+    }
+    fetch('https://rdv-news-api.vercel.app/api/slack/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(processPayload),
+    }).catch((err) => logger.error('Failed to trigger process:', err.message))
   } catch (error) {
     logger.error('Slack add error:', error.message)
     return res.json({
@@ -691,12 +690,21 @@ async function processPlainTextMessage(event) {
       })
     }
 
-    // Process URL or text
-    if (inputIsUrl) {
-      await processUrlArticle(record.id, text, channelName)
-    } else {
-      await processTextArticle(record.id, text, channelName)
+    // Fire-and-forget to the standalone Vercel function (own 300s timeout)
+    const processPayload = {
+      recordId: record.id,
+      channel: channelName,
     }
+    if (inputIsUrl) {
+      processPayload.url = text
+    } else {
+      processPayload.text = text
+    }
+    fetch('https://rdv-news-api.vercel.app/api/slack/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(processPayload),
+    }).catch((err) => logger.error('Failed to trigger process:', err.message))
   } catch (error) {
     logger.error('Error processing plain text message:', error.message)
   }

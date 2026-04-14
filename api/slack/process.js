@@ -50,9 +50,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { recordId, url, channel } = req.body
-  if (!recordId || !url) {
-    return res.status(400).json({ error: 'Missing recordId or url' })
+  const { recordId, url, text, channel } = req.body
+  if (!recordId || (!url && !text)) {
+    return res.status(400).json({ error: 'Missing recordId or url/text' })
   }
 
   try {
@@ -63,6 +63,47 @@ export default async function handler(req, res) {
       console.log(`Record ${recordId} already processed, skipping`)
       return res.status(200).json({ status: 'already_processed' })
     }
+
+    // ── Text processing (no URL) ──
+    if (!url && text) {
+      const fields = await processArticleFromUrl('', {
+        extractedText: text,
+        sourceName: 'Slack',
+      })
+
+      if (!fields) {
+        // Text too short for AI — save raw text back as-is
+        await base(TABLE_NAME).update(recordId, {
+          article: text,
+          title: text.substring(0, 70),
+        })
+        await sendSlackMessage(
+          channel,
+          '📝 Texto guardado (muy corto para generar artículo)',
+        )
+        return res.status(200).json({ status: 'saved_raw' })
+      }
+
+      delete fields.url
+      fields.source = 'Slack'
+
+      await base(TABLE_NAME).update(recordId, fields)
+
+      await sendSlackMessage(channel, null, {
+        text: '✅ Artículo generado desde texto',
+        color: 'good',
+        fields: [
+          {
+            title: 'Título',
+            value: fields.title || 'Sin título',
+            short: false,
+          },
+        ],
+      })
+      return res.status(200).json({ status: 'processed' })
+    }
+
+    // ── URL processing ──
 
     const sourceName = extractSourceName(url)
 
@@ -116,7 +157,13 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ status: 'processed' })
   } catch (error) {
-    console.error(`Error processing Slack article ${url}:`, error.message)
+    console.error(`Error processing Slack article:`, error.message)
+    // On text failure, restore the original text
+    if (!url && text) {
+      try {
+        await base(TABLE_NAME).update(recordId, { article: text })
+      } catch {}
+    }
     await sendSlackMessage(
       channel,
       `❌ Error procesando artículo: ${error.message}`,
