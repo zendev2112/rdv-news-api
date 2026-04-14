@@ -176,6 +176,67 @@ async function processUrlArticle(recordId, url, channel) {
   }
 }
 
+async function processTextArticle(recordId, text, channel) {
+  try {
+    // Guard against double-processing
+    const existing = await base(TABLE_NAME).find(recordId)
+    if (
+      existing.fields.article &&
+      existing.fields.article !== 'Procesando...'
+    ) {
+      logger.info(`Record ${recordId} already processed, skipping`)
+      return
+    }
+
+    // Run the shared pipeline with pre-extracted text (no scraping needed)
+    const fields = await processArticleFromUrl('', {
+      extractedText: text,
+      sourceName: 'Slack',
+    })
+
+    if (!fields) {
+      // Text too short for AI — save the raw text back as-is
+      await base(TABLE_NAME).update(recordId, {
+        article: text,
+        title: text.substring(0, 70),
+      })
+      await sendSlackMessage(
+        channel,
+        '📝 Texto guardado (muy corto para generar artículo)',
+      )
+      return
+    }
+
+    // Don't overwrite with empty url
+    delete fields.url
+    fields.source = 'Slack'
+
+    await base(TABLE_NAME).update(recordId, fields)
+
+    await sendSlackMessage(channel, null, {
+      text: '✅ Artículo generado desde texto',
+      color: 'good',
+      fields: [
+        {
+          title: 'Título',
+          value: fields.title || 'Sin título',
+          short: false,
+        },
+      ],
+    })
+  } catch (error) {
+    logger.error(`Error processing text article: ${error.message}`)
+    // On failure, restore the original text so it's not lost
+    try {
+      await base(TABLE_NAME).update(recordId, { article: text })
+    } catch {}
+    await sendSlackMessage(
+      channel,
+      `❌ Error generando artículo: ${error.message}`,
+    )
+  }
+}
+
 // --- Routes ---
 
 /**
@@ -204,8 +265,8 @@ router.post('/add', async (req, res) => {
     const recordFields = {
       url: inputIsUrl ? input : '',
       source: sourceName,
-      title: inputIsUrl ? `Artículo de ${sourceName}` : input.substring(0, 70),
-      article: inputIsUrl ? 'Procesando...' : input,
+      title: inputIsUrl ? `Artículo de ${sourceName}` : 'Generando artículo...',
+      article: 'Procesando...',
       status: 'draft',
       tags: 'Slack Import',
       overline: '',
@@ -231,10 +292,10 @@ router.post('/add', async (req, res) => {
       response_type: 'in_channel',
       text: inputIsUrl
         ? `🔄 Procesando artículo de ${sourceName}...`
-        : `📝 Texto guardado en Airtable por ${user_name}`,
+        : `� Generando artículo desde texto de ${user_name}...`,
       attachments: [
         {
-          color: inputIsUrl ? 'warning' : 'good',
+          color: 'warning',
           fields: [
             {
               title: inputIsUrl ? 'URL' : 'Texto',
@@ -247,10 +308,9 @@ router.post('/add', async (req, res) => {
       ],
     })
 
-    // AFTER responding to Slack, fire-and-forget the processing call.
-    // The fetch triggers a separate Vercel function (/api/slack/process.js)
-    // which has its own 300s timeout — we don't need to wait for it.
+    // AFTER responding to Slack, trigger background processing.
     if (inputIsUrl) {
+      // URL: fire-and-forget to the separate Vercel function (own 300s timeout)
       const processPayload = {
         recordId: record.id,
         url: input,
@@ -261,6 +321,9 @@ router.post('/add', async (req, res) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(processPayload),
       }).catch((err) => logger.error('Failed to trigger process:', err.message))
+    } else {
+      // Text: generate article via AI in the background
+      waitUntil(processTextArticle(record.id, input, channel_name))
     }
   } catch (error) {
     logger.error('Slack add error:', error.message)
@@ -371,7 +434,19 @@ router.post('/events', async (req, res) => {
     return res.status(200).send()
   }
 
-  // 5. Unknown event type — accept but ignore
+  // 5. Handle plain text messages (no files, no slash command)
+  if (
+    event.type === 'message' &&
+    !event.subtype &&
+    !event.bot_id &&
+    event.text &&
+    event.text.trim().length > 0
+  ) {
+    waitUntil(processPlainTextMessage(event))
+    return res.status(200).send()
+  }
+
+  // 6. Unknown event type — accept but ignore
   logger.info(`Ignoring Slack event type: ${event.type}`)
   return res.status(200).send()
 })
@@ -527,6 +602,75 @@ async function processMessageWithFiles(event) {
     }
   } catch (error) {
     logger.error('Error processing message with files:', error.message)
+  }
+}
+
+async function processPlainTextMessage(event) {
+  try {
+    const text = event.text.trim()
+    const channelId = event.channel
+    const userId = event.user
+
+    const userName = await getSlackUserName(userId)
+    const channelName = await getSlackChannelName(channelId)
+
+    logger.info(
+      `Processing plain text message from ${userName} (${text.length} chars)`,
+    )
+
+    // Check if it's a URL — route through the URL pipeline
+    const inputIsUrl = isUrl(text)
+    const sourceName = inputIsUrl ? extractSourceName(text) : 'Slack'
+
+    const recordFields = {
+      url: inputIsUrl ? text : '',
+      source: sourceName,
+      title: inputIsUrl ? `Artículo de ${sourceName}` : 'Generando artículo...',
+      article: 'Procesando...',
+      status: 'draft',
+      tags: 'Slack Import',
+      overline: '',
+      excerpt: '',
+      imgUrl: '',
+      'ig-post': '',
+      'fb-post': '',
+      'tw-post': '',
+      'yt-video': '',
+      'article-images': '',
+    }
+
+    if (inputIsUrl) {
+      const socialType = getSocialMediaType(text)
+      if (socialType) recordFields[socialType] = text
+    }
+
+    const record = await base(TABLE_NAME).create(recordFields)
+
+    if (channelName) {
+      await sendSlackMessage(channelName, null, {
+        text: inputIsUrl
+          ? `🔄 Procesando artículo de ${sourceName}...`
+          : `🔄 Generando artículo desde texto de ${userName}...`,
+        color: 'warning',
+        fields: [
+          {
+            title: inputIsUrl ? 'URL' : 'Texto',
+            value: text.substring(0, 200),
+            short: false,
+          },
+          { title: 'Por', value: userName, short: true },
+        ],
+      })
+    }
+
+    // Process URL or text
+    if (inputIsUrl) {
+      await processUrlArticle(record.id, text, channelName)
+    } else {
+      await processTextArticle(record.id, text, channelName)
+    }
+  } catch (error) {
+    logger.error('Error processing plain text message:', error.message)
   }
 }
 
