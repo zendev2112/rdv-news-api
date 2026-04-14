@@ -11,7 +11,7 @@
  */
 
 import { generateContent } from './ai-service.js'
-import cheerio from 'cheerio'
+import * as cheerio from 'cheerio'
 import {
   fetchContent,
   extractText,
