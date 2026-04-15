@@ -208,7 +208,9 @@ async function processRecord(record, tableName) {
     const isSlackTable = tableName === 'Slack Noticias'
 
     // ── Check if OCR is needed ──
-    const needsOcr = fields.isOcrNeeded === true || fields.processingStatus === 'needs_extraction'
+    const needsOcr =
+      fields.isOcrNeeded === true ||
+      fields.processingStatus === 'needs_extraction'
 
     // ── Slack Noticias: route URL records through the shared pipeline (unless OCR is flagged) ──
     if (isSlackTable && fields.url && !needsOcr) {
