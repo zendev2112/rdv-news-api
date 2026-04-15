@@ -612,10 +612,25 @@ async function generateAllContentElements(content, source) {
         bajada: excerpt,
       })
       const tagsResult = await generateContent(tagsPrompt)
-      tags = tagsResult.text
+      const rawTags = tagsResult.text
         .replace(/^```[\s\S]*?\n/, '')
         .replace(/```$/, '')
         .trim()
+      // Normalize: parse JSON array if present, otherwise split by comma.
+      // Output: plain text, no quotes, comma-separated.
+      const jsonMatch = rawTags.match(/\[[\s\S]*?\]/)
+      if (jsonMatch) {
+        try {
+          const arr = JSON.parse(jsonMatch[0])
+          tags = arr.map((t) => String(t).trim()).filter(Boolean).join(', ')
+        } catch {
+          tags = rawTags
+        }
+      } else {
+        tags = rawTags
+      }
+      // Strip any remaining quotes
+      tags = tags.replace(/["'[\]]/g, '').replace(/\s*,\s*/g, ', ').trim()
     } catch (tagErr) {
       console.warn(`Tags generation failed: ${tagErr.message}`)
     }
