@@ -29,6 +29,24 @@ const NEWS_CHANNELS = (process.env.SLACK_NEWS_CHANNELS || 'redaccion')
 
 // --- Utility functions (Slack-specific only) ---
 
+// Event deduplication — Slack can send the same event multiple times.
+// In-memory cache with TTL; safe because each Vercel invocation is short-lived
+// and Slack retries use x-slack-retry-num (already filtered).
+const processedEvents = new Map()
+function isDuplicateEvent(eventId) {
+  if (!eventId) return false
+  if (processedEvents.has(eventId)) return true
+  processedEvents.set(eventId, Date.now())
+  // Clean old entries (keep last 200)
+  if (processedEvents.size > 200) {
+    const oldest = [...processedEvents.entries()]
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, 100)
+    oldest.forEach(([k]) => processedEvents.delete(k))
+  }
+  return false
+}
+
 function isUrl(text) {
   try {
     const url = new URL(text.trim())
@@ -426,17 +444,22 @@ router.post('/events', async (req, res) => {
     `Slack event: type=${event.type}, subtype=${event.subtype || 'none'}, channel=${event.channel || 'none'}, bot_id=${event.bot_id || 'none'}, text=${(event.text || '').substring(0, 50)}`,
   )
 
-  // 3. Handle file_shared events
-  if (event.type === 'file_shared') {
-    waitUntil(
-      processFileSharedEvent(event.file_id, event.user_id, event.channel_id),
-    )
+  // 3. Deduplicate — Slack sends both file_shared AND message events for file uploads
+  const eventId = body.event_id || event.client_msg_id || event.event_ts
+  if (isDuplicateEvent(eventId)) {
+    logger.info(`Duplicate event ${eventId}, skipping`)
     return res.status(200).send()
   }
 
-  // 4. Handle message events with files (alternative event format)
+  // 4. Skip file_shared events — the message event with files[] covers
+  //    the same upload AND carries the message text for image+text combos.
+  if (event.type === 'file_shared') {
+    logger.info('Ignoring file_shared (handled via message event)')
+    return res.status(200).send()
+  }
+
+  // 5. Handle message events with files
   if (event.type === 'message' && event.files && event.files.length > 0) {
-    // Skip bot messages to avoid loops
     if (event.bot_id || event.subtype === 'bot_message') {
       return res.status(200).send()
     }
@@ -444,7 +467,7 @@ router.post('/events', async (req, res) => {
     return res.status(200).send()
   }
 
-  // 5. Handle plain text messages (no files, no slash command)
+  // 6. Handle plain text messages (no files, no slash command)
   //    Only process in designated news channel(s) to avoid capturing all chat
   if (
     event.type === 'message' &&
@@ -470,7 +493,7 @@ router.post('/events', async (req, res) => {
     return res.status(200).send()
   }
 
-  // 6. Unknown event type — accept but ignore
+  // 7. Unknown event type — accept but ignore
   logger.info(`Ignoring Slack event type: ${event.type}`)
   return res.status(200).send()
 })

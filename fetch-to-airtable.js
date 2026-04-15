@@ -1233,7 +1233,6 @@ async function processArticle(item, sectionId) {
       'fb-post': facebookContent || '',
       'tw-post': twitterContent || '',
       'yt-video': youtubeContent || '',
-      section: sectionValue,
       status: 'draft',
       tags: tags,
     }
