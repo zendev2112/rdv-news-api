@@ -473,6 +473,8 @@ router.post('/events', async (req, res) => {
     event.type === 'message' &&
     !event.subtype &&
     !event.bot_id &&
+    !event.bot_profile &&
+    !event.app_id &&
     event.text &&
     event.text.trim().length > 0
   ) {
@@ -761,6 +763,26 @@ async function processPlainTextMessage(event) {
     // Check if it's a URL — route through the URL pipeline
     const inputIsUrl = isUrl(text)
     const sourceName = inputIsUrl ? extractSourceName(text) : 'Slack'
+
+    // Dedup: if this is a URL, check if a record with the same URL already exists
+    // (e.g., created moments ago by the /noticias slash command).
+    if (inputIsUrl) {
+      try {
+        const safeUrl = text.replace(/'/g, "\\'")
+        const existing = await base(TABLE_NAME)
+          .select({
+            filterByFormula: `{url} = '${safeUrl}'`,
+            maxRecords: 1,
+          })
+          .firstPage()
+        if (existing.length > 0) {
+          logger.info(`URL already in Airtable, skipping duplicate: ${text}`)
+          return
+        }
+      } catch (err) {
+        logger.warn('URL dedup check failed, proceeding:', err.message)
+      }
+    }
 
     const recordFields = {
       url: inputIsUrl ? text : '',
