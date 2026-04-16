@@ -1,16 +1,33 @@
 {
   "version": 2,
+  "crons": [
+    { "path": "/api/cron/high", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/high", "schedule": "0 21 * * *" },
+    { "path": "/api/cron/medium", "schedule": "0 8 * * *" },
+    { "path": "/api/cron/low", "schedule": "0 13 * * 1,3,5" }
+  ],
   "builds": [
     {
       "src": "src/server.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["src/templates/**", "src/assets/**"]
+        "includeFiles": ["src/templates/**", "src/assets/**"],
+        "maxDuration": 300
+      }
+    },
+    {
+      "src": "api/cron/*.js",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 300
       }
     },
     {
       "src": "api/**/*.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 300
+      }
     },
     {
       "src": "public/**/*",
@@ -21,6 +38,18 @@
     {
       "src": "/admin",
       "dest": "/public/admin.html"
+    },
+    {
+      "src": "/api/cron/high",
+      "dest": "/api/cron/high.js"
+    },
+    {
+      "src": "/api/cron/medium",
+      "dest": "/api/cron/medium.js"
+    },
+    {
+      "src": "/api/cron/low",
+      "dest": "/api/cron/low.js"
     },
     {
       "src": "/api/fetch/all",

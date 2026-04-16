@@ -622,7 +622,10 @@ async function generateAllContentElements(content, source) {
       if (jsonMatch) {
         try {
           const arr = JSON.parse(jsonMatch[0])
-          tags = arr.map((t) => String(t).trim()).filter(Boolean).join(', ')
+          tags = arr
+            .map((t) => String(t).trim())
+            .filter(Boolean)
+            .join(', ')
         } catch {
           tags = rawTags
         }
@@ -630,7 +633,10 @@ async function generateAllContentElements(content, source) {
         tags = rawTags
       }
       // Strip any remaining quotes
-      tags = tags.replace(/["'[\]]/g, '').replace(/\s*,\s*/g, ', ').trim()
+      tags = tags
+        .replace(/["'[\]]/g, '')
+        .replace(/\s*,\s*/g, ', ')
+        .trim()
     } catch (tagErr) {
       console.warn(`Tags generation failed: ${tagErr.message}`)
     }
