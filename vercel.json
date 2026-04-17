@@ -1,14 +1,12 @@
 {
   "version": 2,
   "crons": [
-    {
-      "path": "/api/cron/test?section=instituciones&limit=3",
-      "schedule": "55 11 * * *"
-    },
-    { "path": "/api/cron/high", "schedule": "0 9 * * *" },
-    { "path": "/api/cron/high", "schedule": "0 21 * * *" },
-    { "path": "/api/cron/medium", "schedule": "0 8 * * *" },
-    { "path": "/api/cron/low", "schedule": "0 13 * * 1,3,5" }
+    { "path": "/api/cron/high", "schedule": "0 9 * * 1-5" },
+    { "path": "/api/cron/high", "schedule": "0 21 * * 1-5" },
+    { "path": "/api/cron/medium", "schedule": "0 8 * * 1-5" },
+    { "path": "/api/cron/low", "schedule": "0 13 * * 1,3,5" },
+    { "path": "/api/cron/high", "schedule": "0 12 * * 0,6" },
+    { "path": "/api/cron/medium", "schedule": "0 11 * * 0,6" }
   ],
   "builds": [
     {
