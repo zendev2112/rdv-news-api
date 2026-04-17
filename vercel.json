@@ -2,8 +2,8 @@
   "version": 2,
   "crons": [
     {
-      "path": "/api/cron/test?section=instituciones&limit=5",
-      "schedule": "15 11 17 4 *"
+      "path": "/api/cron/test?section=instituciones&limit=3",
+      "schedule": "55 11 * * *"
     },
     { "path": "/api/cron/high", "schedule": "0 9 * * *" },
     { "path": "/api/cron/high", "schedule": "0 21 * * *" },
