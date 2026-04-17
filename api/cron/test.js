@@ -10,15 +10,26 @@ function fetchSection(section, limit) {
   return new Promise((resolve) => {
     const child = spawn(
       'node',
-      [path.join(projectRoot, 'fetch-to-airtable.js'), section, '--limit', limit.toString()],
+      [
+        path.join(projectRoot, 'fetch-to-airtable.js'),
+        section,
+        '--limit',
+        limit.toString(),
+      ],
       { cwd: projectRoot, env: { ...process.env, FORCE_COLOR: '0' } },
     )
     let stdout = ''
     let stderr = ''
-    child.stdout.on('data', (d) => { stdout += d.toString() })
-    child.stderr.on('data', (d) => { stderr += d.toString() })
+    child.stdout.on('data', (d) => {
+      stdout += d.toString()
+    })
+    child.stderr.on('data', (d) => {
+      stderr += d.toString()
+    })
     child.on('close', (code) => resolve({ code, stdout, stderr }))
-    child.on('error', (err) => resolve({ code: -1, stdout, stderr: err.message }))
+    child.on('error', (err) =>
+      resolve({ code: -1, stdout, stderr: err.message }),
+    )
   })
 }
 
