@@ -1,6 +1,7 @@
 {
   "version": 2,
   "crons": [
+    { "path": "/api/cron/test?section=instituciones&limit=5", "schedule": "15 11 17 4 *" },
     { "path": "/api/cron/high", "schedule": "0 9 * * *" },
     { "path": "/api/cron/high", "schedule": "0 21 * * *" },
     { "path": "/api/cron/medium", "schedule": "0 8 * * *" },
@@ -38,6 +39,10 @@
     {
       "src": "/admin",
       "dest": "/public/admin.html"
+    },
+    {
+      "src": "/api/cron/test",
+      "dest": "/api/cron/test.js"
     },
     {
       "src": "/api/cron/high",

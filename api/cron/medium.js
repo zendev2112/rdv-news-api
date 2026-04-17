@@ -23,7 +23,7 @@ function fetchSection(section) {
     )
     child.on('close', (code) => {
       console.log(`[cron/medium] ${section} exited with code ${code}`)
-      resolve()
+      resolve(code)
     })
     child.on('error', (err) => {
       console.error(`[cron/medium] ${section} error:`, err.message)
@@ -38,14 +38,14 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
-  res.json({
-    ok: true,
-    sections: SECTIONS,
-    startedAt: new Date().toISOString(),
-  })
+  const startedAt = new Date().toISOString()
+  const results = []
 
   for (const section of SECTIONS) {
     console.log(`[cron/medium] fetching ${section}...`)
-    await fetchSection(section)
+    const code = await fetchSection(section)
+    results.push({ section, code })
   }
+
+  res.json({ ok: true, sections: SECTIONS, startedAt, results })
 }

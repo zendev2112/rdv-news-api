@@ -31,7 +31,7 @@ function fetchSection(section) {
     )
     child.on('close', (code) => {
       console.log(`[cron/high] ${section} exited with code ${code}`)
-      resolve()
+      resolve(code)
     })
     child.on('error', (err) => {
       console.error(`[cron/high] ${section} error:`, err.message)
@@ -41,21 +41,19 @@ function fetchSection(section) {
 }
 
 export default async function handler(req, res) {
-  // Vercel signs cron requests with CRON_SECRET in the Authorization header
   const authHeader = req.headers.authorization
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
-  res.json({
-    ok: true,
-    sections: SECTIONS,
-    startedAt: new Date().toISOString(),
-  })
+  const startedAt = new Date().toISOString()
+  const results = []
 
-  // Run fetches after responding (fire-and-forget within the function lifetime)
   for (const section of SECTIONS) {
     console.log(`[cron/high] fetching ${section}...`)
-    await fetchSection(section)
+    const code = await fetchSection(section)
+    results.push({ section, code })
   }
+
+  res.json({ ok: true, sections: SECTIONS, startedAt, results })
 }
