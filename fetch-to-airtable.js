@@ -1024,6 +1024,9 @@ const sectionIdToAirtableValue = {
   recetas: 'Recetas',
   'primera-plana': 'Primera Plana',
   local: 'Local',
+  'deporte-local-regional': 'Deporte Local y Regional',
+  quiniela: 'Quiniela',
+  autos: 'Autos',
 }
 
 /**

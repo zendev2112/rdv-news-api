@@ -1,5 +1,5 @@
-import dotenv from 'dotenv';
-dotenv.config();
+import dotenv from 'dotenv'
+dotenv.config()
 
 const NEWS_SECTIONS = [
   {
@@ -61,7 +61,7 @@ const NEWS_SECTIONS = [
     id: 'deportes',
     name: 'Deportes',
     tableName: 'Deportes',
-    rssUrl: 'https://rss.app/feeds/v1.1/_GaWKBBIxuHCE5tH1.json',
+    rssUrl: 'https://rss.app/feeds/v1.1/_58R3uwwevlUlsSJg.json',
     color: '#1976D2',
     icon: 'sports_soccer',
     priority: 7,
@@ -97,7 +97,7 @@ const NEWS_SECTIONS = [
     id: 'turismo',
     name: 'Turismo',
     tableName: 'Turismo',
-    rssUrl: 'https://rss.app/feeds/v1.1/_Fl3IYhnnTrOHPafk.json',
+    rssUrl: 'https://rss.app/feeds/v1.1/_GnViXLP4RjTzyK4i.json',
     color: '#9C27B0',
     icon: 'public',
     priority: 11,
@@ -124,25 +124,16 @@ const NEWS_SECTIONS = [
     id: 'recetas',
     name: 'Recetas',
     tableName: 'Recetas',
-    rssUrl: 'https://rss.app/feeds/v1.1/_6egQJZ12p1NoH7Ws.json',
+    rssUrl: 'https://rss.app/feeds/v1.1/_Aa35CHEENuTaNaIp.json',
     color: '#9C27B0',
     icon: 'public',
     priority: 14,
   },
   {
-    id: 'lifestyle',
-    name: 'Lifestyle',
-    tableName: 'Lifestyle',
-    rssUrl: 'https://rss.app/feeds/v1.1/_cnOfvOavDTApWv9j.json',
-    color: '#9C27B0',
-    icon: 'public',
-    priority: 15,
-  },
-  {
     id: 'cine-series',
     name: 'Cine y Series',
     tableName: 'Cine y Series',
-    rssUrl: 'https://rss.app/feeds/v1.1/_1N3Q0N51cSPGFvzM.json',
+    rssUrl: 'https://rss.app/feeds/v1.1/_fa7MZDPV4uuaOU5A.json',
     color: '#9C27B0',
     icon: 'public',
     priority: 16,
@@ -157,15 +148,6 @@ const NEWS_SECTIONS = [
     priority: 17,
   },
   {
-    id: 'turismo',
-    name: 'Turismo',
-    tableName: 'Turismo',
-    rssUrl: 'https://rss.app/feeds/v1.1/_Fl3IYhnnTrOHPafk.json',
-    color: '#9C27B0',
-    icon: 'public',
-    priority: 18,
-  },
-  {
     id: 'mundo',
     name: 'Mundo',
     tableName: 'Mundo',
@@ -173,6 +155,96 @@ const NEWS_SECTIONS = [
     color: '#9C27B0',
     icon: 'public',
     priority: 18,
+  },
+  {
+    id: 'deporte-local-regional',
+    name: 'Deporte Local y Regional',
+    tableName: 'Deporte Local y Regional',
+    rssUrl: 'https://rss.app/feeds/v1.1/_rgSyFMJeIGU4Ffj6.json',
+    color: '#1976D2',
+    icon: 'sports_soccer',
+    priority: 19,
+  },
+  {
+    id: 'espectaculos',
+    name: 'Espectaculos',
+    tableName: 'Espectaculos',
+    rssUrl: 'https://rss.app/feeds/v1.1/_AnFEyi5jGtMmiRuP.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 20,
+  },
+  {
+    id: 'historia-literatura',
+    name: 'Historia y Literatura',
+    tableName: 'Historia y Literatura',
+    rssUrl: 'https://rss.app/feeds/v1.1/_2CIkdqpWseC64hwR.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 21,
+  },
+  {
+    id: 'salud',
+    name: 'Salud',
+    tableName: 'Salud',
+    rssUrl: 'https://rss.app/feeds/v1.1/_gIb0yr7KMxZw6RS7.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 22,
+  },
+  {
+    id: 'tecnologia',
+    name: 'Tecnologia',
+    tableName: 'Tecnologia',
+    rssUrl: 'https://rss.app/feeds/v1.1/_qX6KdqRbHUID4YV5.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 23,
+  },
+  {
+    id: 'vinos',
+    name: 'Vinos',
+    tableName: 'Vinos',
+    rssUrl: 'https://rss.app/feeds/v1.1/_orqSEC6iGeTP8SA2.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 24,
+  },
+  {
+    id: 'quiniela',
+    name: 'Quiniela',
+    tableName: 'Quiniela',
+    rssUrl: 'https://rss.app/feeds/v1.1/_4v4Lm6fWas9Pj9xd.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 25,
+  },
+  {
+    id: 'horoscopo',
+    name: 'Horoscopo',
+    tableName: 'Horoscopo',
+    rssUrl: 'https://rss.app/feeds/v1.1/_XHHKHcsSARX14sSo.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 26,
+  },
+  {
+    id: 'efemerides',
+    name: 'Efemerides',
+    tableName: 'Efemerides',
+    rssUrl: 'https://rss.app/feeds/v1.1/_R46UEYYj5FZRxxU1.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 27,
+  },
+  {
+    id: 'autos',
+    name: 'Autos',
+    tableName: 'Autos',
+    rssUrl: 'https://rss.app/feeds/v1.1/tz2cAAHP6IuAvZ7F.json',
+    color: '#9C27B0',
+    icon: 'public',
+    priority: 28,
   },
 ]
 
@@ -201,7 +273,7 @@ const config = {
 
   cerebras: {
     apiKey: process.env.CEREBRAS_API_KEY || '',
-    model: process.env.CEREBRAS_MODEL || 'llama-3.3-70b',  // ✅ MUST match curl
+    model: process.env.CEREBRAS_MODEL || 'llama-3.3-70b', // ✅ MUST match curl
   },
   openrouter: {
     apiKey: process.env.OPENROUTER_API_KEY || '',
@@ -226,4 +298,4 @@ const config = {
   },
 }
 
-export default config;
+export default config

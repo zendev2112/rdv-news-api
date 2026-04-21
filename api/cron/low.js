@@ -14,11 +14,8 @@ const SECTIONS = [
   'lifestyle',
   'cultura',
   'turismo',
-  'tecnologia',
   'cine-series',
-  'espectaculos',
   'recetas',
-  'historia-literatura',
 ]
 
 function fetchSection(section) {
