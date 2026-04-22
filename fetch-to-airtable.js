@@ -1233,7 +1233,9 @@ async function processArticle(item, sectionId) {
         imageAttachments.length > 1
           ? imageAttachments
               .slice(1)
-              .map((u) => (typeof u === 'string' ? { url: u } : u))
+              .map((u) => (typeof u === 'string' ? u : u.url))
+              .filter(Boolean)
+              .join(', ')
           : undefined,
       url: itemUrl,
       source: sourceName,
