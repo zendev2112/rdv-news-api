@@ -1229,7 +1229,12 @@ async function processArticle(item, sectionId) {
       image: imageAttachments,
       author: item.authors?.[0]?.name || '',
       imgUrl: imageUrl || '',
-      'article-images': '',
+      'article-images':
+        imageAttachments.length > 1
+          ? imageAttachments
+              .slice(1)
+              .map((u) => (typeof u === 'string' ? { url: u } : u))
+          : undefined,
       url: itemUrl,
       source: sourceName,
       'ig-post': instagramContent || '',

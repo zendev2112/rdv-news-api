@@ -90,6 +90,26 @@ async function insertRecords(records, sectionId = 'test') {
     return null
   }
 
+  const MAX_RETRIES = 3
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await _insertRecordsOnce(records, sectionId)
+    } catch (error) {
+      const isNetworkError = !error.response && error.request
+      if (isNetworkError && attempt < MAX_RETRIES) {
+        const delay = attempt * 5000
+        logger.warn(
+          `Insert attempt ${attempt} failed (${error.code || 'no response'}), retrying in ${delay / 1000}s...`,
+        )
+        await new Promise((r) => setTimeout(r, delay))
+        continue
+      }
+      throw error
+    }
+  }
+}
+
+async function _insertRecordsOnce(records, sectionId = 'test') {
   try {
     // Get the API URL
     const airtableApiUrl = getAirtableApiUrl(sectionId)
@@ -318,7 +338,9 @@ async function insertRecords(records, sectionId = 'test') {
         )
       }
     } else if (error.request) {
-      logger.error('Error: No response received from Airtable')
+      logger.error(
+        `Error: No response received from Airtable (code: ${error.code || 'unknown'})`,
+      )
     } else {
       logger.error(`Error message: ${error.message}`)
     }
