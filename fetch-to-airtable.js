@@ -1257,8 +1257,9 @@ async function processArticle(item, sectionId) {
       recordFields[socialMediaType] = itemUrl
     }
 
-    // Social media items: add extra fields if available
-    if (isSocial) {
+    // Social media items: add extra fields if available (only for dedicated social sections)
+    const isSocialSection = sectionId === 'local-facebook'
+    if (isSocial && isSocialSection) {
       recordFields.processingStatus = 'completed'
       if (item.date_published) recordFields.postDate = item.date_published
       try {
