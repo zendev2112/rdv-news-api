@@ -23,6 +23,7 @@
     "fetch:agro": "node fetch-to-airtable.js agro",
     "fetch:agro:limited": "node fetch-to-airtable.js agro --limit 5",
     "fetch:deportes": "node fetch-to-airtable.js deportes",
+    "fetch:deportes:limited": "node fetch-to-airtable.js deportes --limit 5",
     "fetch:politica": "node fetch-to-airtable.js politica",
     "fetch:politica:limited": "node fetch-to-airtable.js politica",
     "fetch:economia": "node fetch-to-airtable.js economia",
