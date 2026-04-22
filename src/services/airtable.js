@@ -124,68 +124,10 @@ async function insertRecords(records, sectionId = 'test') {
         record.fields.excerpt = record.fields.bajada
       }
 
-      // Only add section if it's not already present AND the table should have a section field
-      if (!record.fields.section && shouldAddSectionField(sectionId)) {
-        // Map section IDs to their corresponding dropdown values that exist in Airtable
-        const sectionIdToAirtableValue = {
-          'coronel-suarez': 'Coronel Suárez',
-          'pueblos-alemanes': 'Pueblos Alemanes',
-          huanguelen: 'Huanguelén',
-          'la-sexta': 'La Sexta',
-          politica: 'Política',
-          economia: 'Economía',
-          agro: 'Agro',
-          sociedad: 'Sociedad',
-          salud: 'Salud',
-          cultura: 'Cultura',
-          opinion: 'Opinión',
-          deportes: 'Deportes',
-          lifestyle: 'Lifestyle',
-          vinos: 'Vinos',
-          'el-recetario': 'El Recetario',
-          'santa-trinidad': 'Santa Trinidad',
-          'san-jose': 'San José',
-          'santa-maria': 'Santa María',
-          iactualidad: 'IActualidad',
-          dolar: 'Dólar',
-          propiedades: 'Propiedades',
-          'pymes-emprendimientos': 'Pymes y Emprendimientos',
-          inmuebles: 'Inmuebles',
-          campos: 'Campos',
-          'construccion-diseno': 'Construcción y Diseño',
-          agricultura: 'Agricultura',
-          ganaderia: 'Ganadería',
-          'tecnologias-agro': 'Tecnologías',
-          educacion: 'Educación',
-          policiales: 'Policiales',
-          efemerides: 'Efemérides',
-          ciencia: 'Ciencia',
-          'vida-armonia': 'Vida en Armonía',
-          'nutricion-energia': 'Nutrición y Energía',
-          fitness: 'Fitness',
-          'salud-mental': 'Salud Mental',
-          turismo: 'Turismo',
-          horoscopo: 'Horóscopo',
-          feriados: 'Feriados',
-          'loterias-quinielas': 'Loterías y Quinielas',
-          'moda-belleza': 'Moda y Belleza',
-          mascotas: 'Mascotas',
-          ambiente: 'Ambiente',
-          mundo: 'Mundo',
-          clima: 'Clima',
-          tecnologia: 'Tecnología',
-          actualidad: 'Actualidad',
-          espectaculos: 'Espectáculos',
-          'cine-series': 'Cine y Series',
-          'historia-literatura': 'Historia y Literatura',
-        }
-
-        // Get section value from mapping, fall back to a default
-        let sectionValue = sectionIdToAirtableValue[sectionId] || ''
-
-        console.log(`Setting section to "${sectionValue}" for article`)
-        record.fields.section = sectionValue
-      } else if (!shouldAddSectionField(sectionId)) {
+      // Section policy requested by user: always send empty section for tables that have it.
+      if (shouldAddSectionField(sectionId)) {
+        record.fields.section = ''
+      } else {
         // This table doesn't support a section field — remove it if present
         delete record.fields.section
         console.log(
