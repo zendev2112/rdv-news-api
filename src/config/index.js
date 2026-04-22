@@ -70,7 +70,7 @@ const NEWS_SECTIONS = [
     id: 'economia',
     name: 'Economia',
     tableName: 'Economia',
-    rssUrl: 'https://rss.app/feeds/v1.1/_ifKDQanGJM3BOKGC.json',
+    rssUrl: 'https://rss.app/feeds/v1.1/_t6Iny4gMKc4VBBVK.json',
     color: '#FFC107',
     icon: 'attach_money',
     priority: 8,
