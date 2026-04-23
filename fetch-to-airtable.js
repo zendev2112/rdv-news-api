@@ -152,7 +152,7 @@ console.log(
   GEMINI_API_KEY ? 'API key found' : 'No API key',
 )
 const GEMINI_MODEL =
-  config?.gemini?.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+  config?.gemini?.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 const BATCH_SIZE = 1 // ✅ REDUCED from 2 to 1 - process ONE at a time
 const FEED_SIZE = 50
 const API_DELAY = 6000 // ✅ INCREASED from 3000 to 5000ms

@@ -31,7 +31,7 @@ const airtableBase = new Airtable({
 
 // Initialize Gemini vision model for OCR (image text extraction)
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey)
-const visionModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+const visionModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
 // Helper function to create a delay
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
