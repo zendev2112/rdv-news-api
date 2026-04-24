@@ -246,6 +246,15 @@ const NEWS_SECTIONS = [
     icon: 'public',
     priority: 28,
   },
+  {
+    id: 'clima',
+    name: 'Clima',
+    tableName: 'Clima',
+    rssUrl: 'https://rss.app/feeds/v1.1/_WrY0qsbtsopfggxr.json',
+    color: '#29B6F6',
+    icon: 'cloud',
+    priority: 29,
+  },
 ]
 
 const config = {
