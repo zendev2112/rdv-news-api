@@ -19,6 +19,63 @@
             padding: 20px;
         }
 
+        /* ── Login overlay ── */
+        #login-overlay {
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        #login-overlay.hidden {
+            display: none;
+        }
+
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .login-box h2 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+
+        .login-box p {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+
+        .login-box .input {
+            margin-bottom: 16px;
+        }
+
+        .login-error {
+            color: #ef4444;
+            font-size: 13px;
+            margin-top: 8px;
+            min-height: 18px;
+        }
+
+        /* ── Main panel (hidden until authenticated) ── */
+        #main-panel {
+            display: none;
+        }
+
+        #main-panel.visible {
+            display: block;
+        }
+
         .container {
             max-width: 1400px;
             margin: 0 auto;
@@ -30,15 +87,35 @@
             border-radius: 10px;
             margin-bottom: 30px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        h1 {
+        .header-left h1 {
             color: #333;
-            margin-bottom: 10px;
+            margin-bottom: 4px;
         }
 
-        .subtitle {
+        .header-left .subtitle {
             color: #666;
+        }
+
+        .btn-logout {
+            background: transparent;
+            border: 2px solid #ef4444;
+            color: #ef4444;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-logout:hover {
+            background: #ef4444;
+            color: white;
         }
 
         .grid {
@@ -256,118 +333,199 @@
 </head>
 
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🗞️ RDV News Admin Panel</h1>
-            <p class="subtitle">Manual article fetching and processing with Gemini AI</p>
-        </div>
-
-        <div class="card" style="margin-bottom: 20px;">
-            <h3>🔐 Authentication</h3>
-            <input type="password" class="input" id="apiToken" placeholder="Enter API token">
-            <button class="btn btn-success" onclick="saveToken()">Save Token</button>
-        </div>
-
-        <div class="grid">
-            <div class="card">
-                <h3>📰 Fetch All Sections <span class="status status-idle" id="status-all">Idle</span></h3>
-                <input type="number" class="input" id="limit-all" value="10" min="1" max="50"
-                    placeholder="Articles per section">
-                <div class="btn-group">
-                    <button class="btn btn-primary" id="btn-all" onclick="fetchAll()">Fetch All Sections</button>
-                    <button class="btn btn-danger" id="btn-cancel-all" onclick="cancelFetch('all')"
-                        style="display:none;">Cancel</button>
-                </div>
-                <div class="progress-bar" id="progress-all" style="display:none;">
-                    <div class="progress-bar-fill"></div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>📋 Fetch Specific Section <span class="status status-idle" id="status-section">Idle</span></h3>
-                <select class="input" id="section-select">
-                    <option value="primera-plana">Primera Plana</option>
-                    <option value="coronel-suarez">Coronel Suárez</option>
-                    <option value="local">Local</option>
-                    <option value="local-facebook">Local Facebook</option>
-                    <option value="pueblos-alemanes">Pueblos Alemanes</option>
-                    <option value="huanguelen">Huanguelén</option>
-                    <option value="la-sexta">La Sexta</option>
-                    <option value="instituciones">Instituciones</option>
-                    <option value="politica">Política</option>
-                    <option value="economia">Economía</option>
-                    <option value="agro">Agro</option>
-                    <option value="salud">Salud</option>
-                    <option value="cultura">Cultura</option>
-                    <option value="ciencia">Ciencia</option>
-                    <option value="cine-series">Cine y Series</option>
-                    <option value="historia-literatura">Historia y Literatura</option>
-                    <option value="lifestyle">Lifestyle</option>
-                    <option value="turismo">Turismo</option>
-                    <option value="recetas">Recetas</option>
-                </select>
-                <input type="number" class="input" id="limit-section" value="10" min="1" max="50"
-                    placeholder="Articles limit">
-                <div class="btn-group">
-                    <button class="btn btn-primary" id="btn-section" onclick="fetchSection()">Fetch Section</button>
-                    <button class="btn btn-danger" id="btn-cancel-section" onclick="cancelFetch('section')"
-                        style="display:none;">Cancel</button>
-                </div>
-                <div class="progress-bar" id="progress-section" style="display:none;">
-                    <div class="progress-bar-fill"></div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h3 style="margin: 0;">📊 Live Console Logs</h3>
-                <div class="log-controls">
-                    <button class="btn btn-primary" style="width: auto; padding: 8px 16px; margin: 0;"
-                        onclick="clearLogs()">Clear Logs</button>
-                    <button class="btn btn-success" style="width: auto; padding: 8px 16px; margin: 0;"
-                        onclick="downloadLogs()">Download Logs</button>
-                </div>
-            </div>
-            <div class="log" id="logs">
-                <div class="log-entry log-info">🚀 Admin panel ready. Enter your API token to begin.</div>
-            </div>
+    <!-- Login overlay -->
+    <div id="login-overlay">
+        <div class="login-box">
+            <h2>🗞️ RDV News Admin</h2>
+            <p>Enter your admin token to continue</p>
+            <input type="password" class="input" id="login-token" placeholder="Admin token"
+                onkeydown="if(event.key==='Enter') login()">
+            <button class="btn btn-primary" onclick="login()">Sign in</button>
+            <div class="login-error" id="login-error"></div>
         </div>
     </div>
 
+    <!-- Main panel (shown after login) -->
+    <div id="main-panel">
+        <div class="container">
+            <div class="header">
+                <div class="header-left">
+                    <h1>🗞️ RDV News Admin Panel</h1>
+                    <p class="subtitle">Manual article fetching and processing with Gemini AI</p>
+                </div>
+                <button class="btn-logout" onclick="logout()">Sign out</button>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h3>📰 Fetch All Sections <span class="status status-idle" id="status-all">Idle</span></h3>
+                    <input type="number" class="input" id="limit-all" value="10" min="1" max="50"
+                        placeholder="Articles per section">
+                    <div class="btn-group">
+                        <button class="btn btn-primary" id="btn-all" onclick="fetchAll()">Fetch All Sections</button>
+                        <button class="btn btn-danger" id="btn-cancel-all" onclick="cancelFetch('all')"
+                            style="display:none;">Cancel</button>
+                    </div>
+                    <div class="progress-bar" id="progress-all" style="display:none;">
+                        <div class="progress-bar-fill"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>📋 Fetch Specific Section <span class="status status-idle" id="status-section">Idle</span></h3>
+                    <select class="input" id="section-select">
+                        <option value="primera-plana">Primera Plana</option>
+                        <option value="instituciones">Instituciones</option>
+                        <option value="local">Local</option>
+                        <option value="local-facebook">Local Facebook</option>
+                        <option value="la-sexta">La Sexta</option>
+                        <option value="pueblos-alemanes">Pueblos Alemanes</option>
+                        <option value="huanguelen">Huanguelén</option>
+                        <option value="economia">Economía</option>
+                        <option value="politica">Política</option>
+                        <option value="agro">Agro</option>
+                        <option value="deportes">Deportes</option>
+                        <option value="deporte-local-regional">Deporte Local y Regional</option>
+                        <option value="mundo">Mundo</option>
+                        <option value="salud">Salud</option>
+                        <option value="cultura">Cultura</option>
+                        <option value="cine-series">Cine y Series</option>
+                        <option value="historia-literatura">Historia y Literatura</option>
+                        <option value="lifestyle">Lifestyle</option>
+                        <option value="turismo">Turismo</option>
+                        <option value="recetas">Recetas</option>
+                        <option value="espectaculos">Espectáculos</option>
+                        <option value="tecnologia">Tecnología</option>
+                        <option value="vinos">Vinos</option>
+                        <option value="quiniela">Quiniela</option>
+                        <option value="horoscopo">Horóscopo</option>
+                        <option value="efemerides">Efemérides</option>
+                        <option value="autos">Autos</option>
+                        <option value="clima">Clima</option>
+                    </select>
+                    <input type="number" class="input" id="limit-section" value="10" min="1" max="50"
+                        placeholder="Articles limit">
+                    <div class="btn-group">
+                        <button class="btn btn-primary" id="btn-section" onclick="fetchSection()">Fetch Section</button>
+                        <button class="btn btn-danger" id="btn-cancel-section" onclick="cancelFetch('section')"
+                            style="display:none;">Cancel</button>
+                    </div>
+                    <div class="progress-bar" id="progress-section" style="display:none;">
+                        <div class="progress-bar-fill"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>📲 Process Social Media <span class="status status-idle" id="status-social">Idle</span></h3>
+                    <p style="color:#666; font-size:13px; margin-bottom:12px;">Process pending articles from all
+                        Airtable tables and generate social media posts.</p>
+                    <div class="btn-group">
+                        <button class="btn btn-success" id="btn-social"
+                            onclick="processSocial()">process:social</button>
+                        <button class="btn btn-danger" id="btn-cancel-social" onclick="cancelFetch('social')"
+                            style="display:none;">Cancel</button>
+                    </div>
+                    <div class="progress-bar" id="progress-social" style="display:none;">
+                        <div class="progress-bar-fill"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>💬 Process Slack Noticias <span class="status status-idle" id="status-slack">Idle</span></h3>
+                    <p style="color:#666; font-size:13px; margin-bottom:12px;">Process pending articles from the Slack
+                        Noticias table only.</p>
+                    <div class="btn-group">
+                        <button class="btn btn-success" id="btn-slack" onclick="processSlack()">process:slack</button>
+                        <button class="btn btn-danger" id="btn-cancel-slack" onclick="cancelFetch('slack')"
+                            style="display:none;">Cancel</button>
+                    </div>
+                    <div class="progress-bar" id="progress-slack" style="display:none;">
+                        <div class="progress-bar-fill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">📊 Live Console Logs</h3>
+                    <div class="log-controls">
+                        <button class="btn btn-primary" style="width: auto; padding: 8px 16px; margin: 0;"
+                            onclick="clearLogs()">Clear Logs</button>
+                        <button class="btn btn-success" style="width: auto; padding: 8px 16px; margin: 0;"
+                            onclick="downloadLogs()">Download Logs</button>
+                    </div>
+                </div>
+                <div class="log" id="logs">
+                    <div class="log-entry log-info">🚀 Admin panel ready. Sign in to begin.</div>
+                </div>
+            </div>
+        </div>
+    </div> <!-- end main-panel -->
+
     <script>
         const API_BASE = window.location.origin;
-        let API_TOKEN = localStorage.getItem('rdv_api_token') || '';
+        // Token is kept only in memory — never persisted to localStorage
+        let API_TOKEN = '';
         let currentController = null;
         let allLogs = [];
 
-        if (API_TOKEN) {
-            document.getElementById('apiToken').value = API_TOKEN;
-            addLog('✅ API token loaded from storage', 'success');
+        // ── Auth ──────────────────────────────────────────────
+        async function login() {
+            const input = document.getElementById('login-token').value.trim();
+            const errorEl = document.getElementById('login-error');
+            errorEl.textContent = '';
+
+            if (!input) {
+                errorEl.textContent = 'Please enter your admin token.';
+                return;
+            }
+
+            // Verify token against the backend (401 = bad token, anything else = accepted)
+            try {
+                const res = await fetch(`${API_BASE}/api/fetch/section`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${input}`
+                    },
+                    body: JSON.stringify({ section: '__auth_check__', limit: 0 })
+                });
+                if (res.status === 401) {
+                    errorEl.textContent = 'Invalid token. Try again.';
+                    document.getElementById('login-token').value = '';
+                    return;
+                }
+            } catch (e) {
+                // Network error — allow login, backend will reject bad calls
+            }
+
+            API_TOKEN = input;
+            document.getElementById('login-overlay').classList.add('hidden');
+            document.getElementById('main-panel').classList.add('visible');
+            addLog('✅ Authenticated successfully', 'success');
         }
 
-        function saveToken() {
-            API_TOKEN = document.getElementById('apiToken').value;
-            localStorage.setItem('rdv_api_token', API_TOKEN);
-            addLog('✅ API token saved', 'success');
+        function logout() {
+            API_TOKEN = '';
+            document.getElementById('login-token').value = '';
+            document.getElementById('login-overlay').classList.remove('hidden');
+            document.getElementById('main-panel').classList.remove('visible');
+            document.getElementById('login-error').textContent = '';
         }
 
+        // ── Logging ───────────────────────────────────────────
         function addLog(message, type = 'info') {
             const logs = document.getElementById('logs');
             const entry = document.createElement('div');
             entry.className = `log-entry log-${type}`;
-
             const timestamp = new Date().toLocaleTimeString();
-            const timestampSpan = document.createElement('span');
-            timestampSpan.className = 'log-timestamp';
-            timestampSpan.textContent = `[${timestamp}]`;
-
-            entry.appendChild(timestampSpan);
+            const ts = document.createElement('span');
+            ts.className = 'log-timestamp';
+            ts.textContent = `[${timestamp}]`;
+            entry.appendChild(ts);
             entry.appendChild(document.createTextNode(` ${message}`));
-
             logs.appendChild(entry);
             logs.scrollTop = logs.scrollHeight;
-
             allLogs.push({ timestamp, message, type });
         }
 
@@ -377,8 +535,8 @@
         }
 
         function downloadLogs() {
-            const logText = allLogs.map(log => `[${log.timestamp}] ${log.message}`).join('\n');
-            const blob = new Blob([logText], { type: 'text/plain' });
+            const text = allLogs.map(l => `[${l.timestamp}] ${l.message}`).join('\n');
+            const blob = new Blob([text], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -387,6 +545,7 @@
             URL.revokeObjectURL(url);
         }
 
+        // ── UI helpers ────────────────────────────────────────
         function setStatus(id, status, text) {
             const el = document.getElementById(id);
             el.className = `status status-${status}`;
@@ -405,7 +564,7 @@
         function cancelFetch(type) {
             if (currentController) {
                 currentController.abort();
-                addLog(`⚠️ Fetch cancelled by user`, 'warning');
+                addLog(`⚠️ Cancelled`, 'warning');
                 setStatus(`status-${type}`, 'idle', 'Cancelled');
                 showProgress(type, false);
                 showCancelButton(type, false);
@@ -415,46 +574,37 @@
         function parseLogLine(line) {
             line = line.trim();
             if (!line) return null;
-
-            // Detect log type
             let type = 'info';
             if (line.includes('✅') || line.includes('SUCCESS')) type = 'success';
             else if (line.includes('❌') || line.includes('ERROR')) type = 'error';
             else if (line.includes('⚠️') || line.includes('WARN')) type = 'warning';
             else if (line.includes('🔍') || line.includes('DEBUG')) type = 'debug';
-
             return { message: line, type };
         }
 
-        async function fetchSection() {
-            if (!API_TOKEN) {
-                addLog('❌ Please enter API token first', 'error');
-                return;
-            }
-
-            const section = document.getElementById('section-select').value;
-            const limit = document.getElementById('limit-section').value;
-            setStatus('status-section', 'running', 'Running');
-            showProgress('section', true);
-            showCancelButton('section', true);
-
-            addLog(`📥 Starting fetch for section: ${section} (limit: ${limit})...`, 'info');
-
+        // ── Streaming helper ──────────────────────────────────
+        async function streamRequest(url, body, statusKey) {
             currentController = new AbortController();
+            setStatus(`status-${statusKey}`, 'running', 'Running');
+            showProgress(statusKey, true);
+            showCancelButton(statusKey, true);
 
             try {
-                const response = await fetch(`${API_BASE}/api/fetch/section`, {
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${API_TOKEN}`
                     },
-                    body: JSON.stringify({
-                        section,
-                        limit: parseInt(limit)
-                    }),
+                    body: JSON.stringify(body),
                     signal: currentController.signal
                 });
+
+                if (response.status === 401) {
+                    addLog('❌ Unauthorized — token rejected', 'error');
+                    setStatus(`status-${statusKey}`, 'error', 'Auth error');
+                    return;
+                }
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -462,132 +612,66 @@
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
-
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-
+                    const lines = decoder.decode(value).split('\n');
                     for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(line.substring(6));
-
-                                if (data.type === 'log') {
-                                    const parsed = parseLogLine(data.message);
-                                    if (parsed) {
-                                        addLog(parsed.message, parsed.type);
-                                    }
-                                } else if (data.type === 'error') {
-                                    addLog(data.message, 'error');
-                                } else if (data.type === 'complete') {
-                                    if (data.success) {
-                                        addLog(`✅ Fetch completed for ${section}!`, 'success');
-                                        setStatus('status-section', 'success', 'Success');
-                                    } else {
-                                        addLog(`❌ Fetch failed with code ${data.code}`, 'error');
-                                        setStatus('status-section', 'error', 'Error');
-                                    }
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            if (data.type === 'log') {
+                                const parsed = parseLogLine(data.message);
+                                if (parsed) addLog(parsed.message, parsed.type);
+                            } else if (data.type === 'error') {
+                                addLog(data.message, 'error');
+                            } else if (data.type === 'complete') {
+                                if (data.success) {
+                                    addLog(`✅ Completed successfully`, 'success');
+                                    setStatus(`status-${statusKey}`, 'success', 'Success');
+                                } else {
+                                    addLog(`❌ Failed (exit code ${data.code})`, 'error');
+                                    setStatus(`status-${statusKey}`, 'error', 'Error');
                                 }
-                            } catch (e) {
-                                console.error('Parse error:', e);
                             }
-                        }
+                        } catch { }
                     }
                 }
-
             } catch (error) {
                 if (error.name === 'AbortError') {
-                    addLog(`⚠️ Fetch cancelled`, 'warning');
-                    setStatus('status-section', 'idle', 'Cancelled');
+                    addLog(`⚠️ Cancelled`, 'warning');
+                    setStatus(`status-${statusKey}`, 'idle', 'Cancelled');
                 } else {
                     addLog(`❌ Request failed: ${error.message}`, 'error');
-                    setStatus('status-section', 'error', 'Error');
+                    setStatus(`status-${statusKey}`, 'error', 'Error');
                 }
             } finally {
-                showProgress('section', false);
-                showCancelButton('section', false);
+                showProgress(statusKey, false);
+                showCancelButton(statusKey, false);
                 currentController = null;
-                setTimeout(() => setStatus('status-section', 'idle', 'Idle'), 3000);
+                setTimeout(() => setStatus(`status-${statusKey}`, 'idle', 'Idle'), 3000);
             }
         }
 
+        // ── Actions ───────────────────────────────────────────
+        async function fetchSection() {
+            const section = document.getElementById('section-select').value;
+            const limit = parseInt(document.getElementById('limit-section').value);
+            addLog(`📥 Fetching section: ${section} (limit: ${limit})...`, 'info');
+            await streamRequest(`${API_BASE}/api/fetch/section`, { section, limit }, 'section');
+        }
+
         async function fetchAll() {
-            if (!API_TOKEN) {
-                addLog('❌ Please enter API token first', 'error');
-                return;
-            }
+            const limit = parseInt(document.getElementById('limit-all').value);
+            addLog(`📥 Fetching ALL sections (limit: ${limit} each)...`, 'info');
+            await streamRequest(`${API_BASE}/api/fetch/all`, { limit }, 'all');
+        }
 
-            const limit = document.getElementById('limit-all').value;
-            setStatus('status-all', 'running', 'Running');
-            showProgress('all', true);
-            showCancelButton('all', true);
+        async function processSocial() {
+            addLog(`📲 Running process:social...`, 'info');
+            await streamRequest(`${API_BASE}/api/social/process`, { mode: 'social' }, 'social');
+        }
 
-            addLog(`📥 Starting fetch for ALL sections (limit: ${limit} per section)...`, 'info');
-
-            currentController = new AbortController();
-
-            try {
-                const response = await fetch(`${API_BASE}/api/fetch/all`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${API_TOKEN}`
-                    },
-                    body: JSON.stringify({ limit: parseInt(limit) }),
-                    signal: currentController.signal
-                });
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(line.substring(6));
-
-                                if (data.type === 'log') {
-                                    const parsed = parseLogLine(data.message);
-                                    if (parsed) {
-                                        addLog(parsed.message, parsed.type);
-                                    }
-                                } else if (data.type === 'error') {
-                                    addLog(data.message, 'error');
-                                } else if (data.type === 'complete') {
-                                    if (data.success) {
-                                        addLog(`✅ Fetch all completed successfully!`, 'success');
-                                        setStatus('status-all', 'success', 'Success');
-                                    } else {
-                                        addLog(`❌ Fetch failed with code ${data.code}`, 'error');
-                                        setStatus('status-all', 'error', 'Error');
-                                    }
-                                }
-                            } catch (e) {
-                                console.error('Parse error:', e);
-                            }
-                        }
-                    }
-                }
-
-            } catch (error) {
-                if (error.name === 'AbortError') {
-                    addLog(`⚠️ Fetch cancelled`, 'warning');
-                    setStatus('status-all', 'idle', 'Cancelled');
-                } else {
-                    addLog(`❌ Request failed: ${error.message}`, 'error');
-                    setStatus('status-all', 'error', 'Error');
-                }
-            } finally {
-                showProgress('all', false);
-                showCancelButton('all', false);
-                currentController = null;
-                setTimeout(() => setStatus('status-all', 'idle', 'Idle'), 3000);
-            }
+        async function processSlack() {
+            addLog(`💬 Running process:slack...`, 'info');
+            await streamRequest(`${API_BASE}/api/social/process`, { mode: 'slack' }, 'slack');
         }
     </script>
 </body>

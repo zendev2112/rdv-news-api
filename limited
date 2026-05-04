@@ -1,0 +1,4 @@
+
+> rdv-news-api@1.0.0 fetch:clima
+> node fetch-to-airtable.js clima
+
