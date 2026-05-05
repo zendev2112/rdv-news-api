@@ -101,7 +101,8 @@
       "src": "api/**/*.js",
       "use": "@vercel/node",
       "config": {
-        "maxDuration": 300
+        "maxDuration": 300,
+        "includeFiles": ["src/**"]
       }
     },
     {
