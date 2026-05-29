@@ -34,7 +34,11 @@ ESTRUCTURA SEO:
 - Párrafo final: Solo si hay datos adicionales concretos (próximos pasos, contacto, fechas). Si no hay, NO agregues cierre genérico.
 
 FORMATO Y ESTRUCTURA VISUAL:
-- Usá subtítulos (##) para separar secciones temáticas cuando el artículo tiene más de 200 palabras o trata múltiples aspectos
+- JERARQUÍA DE TÍTULOS (clave para SEO y para que los crawlers de IA extraigan el contenido):
+  - NO uses # (H1): el H1 es el título de la nota, se agrega aparte.
+  - Usá ## (H2) para cada sección temática principal. Todo artículo de más de 150 palabras DEBE tener al menos un ## (H2). El primer ## va después del párrafo lead.
+  - Usá ### (H3) para subdividir una sección H2 cuando tenga varios aspectos.
+  - Los títulos deben ser descriptivos y contener palabras clave del tema (ej: "## Requisitos para inscribirse", no "## Detalles").
 - Usá listas con viñetas (- item) cuando haya enumeraciones de datos concretos: requisitos, pasos, participantes, horarios, etc.
 - Párrafos cortos: 2-3 oraciones máximo por párrafo
 - Separar párrafos con doble salto de línea
@@ -42,6 +46,13 @@ FORMATO Y ESTRUCTURA VISUAL:
 - PROHIBIDO: tablas, emojis, hashtags
 - Usar **negritas** en: fechas, horarios, cifras, nombres de personas, instituciones y lugares clave (5-8 veces)
 - Usar *cursivas* solo para términos técnicos o énfasis puntual (1-2 veces)
+
+SECCIÓN DE PREGUNTAS FRECUENTES (FAQ — obligatoria si el artículo supera 200 palabras):
+- Al final del artículo agregá una sección "## Preguntas frecuentes".
+- Incluí entre 2 y 4 preguntas formuladas con lenguaje natural, como las haría un lector en un buscador (ej: "¿Cuándo se realiza el evento?", "¿Quiénes pueden participar?", "¿Cómo inscribirse?").
+- Cada pregunta es un ### (H3) seguida de una respuesta breve de 1 a 2 oraciones.
+- Las respuestas SOLO pueden usar datos que ya están en el texto original. Prohibido inventar.
+- Si el texto original no tiene información suficiente para al menos 2 preguntas reales, NO agregues la sección FAQ.
 
 REGLAS SEO:
 - Primera oración: incluir el dato noticioso principal con palabras clave del tema
@@ -51,10 +62,16 @@ REGLAS SEO:
 - NO repetir información ya dicha en otro párrafo
 - NO usar fórmulas de cierre: "en resumen", "para concluir", "de esta manera"
 
-ESTILO:
-- Español rioplatense formal
-- Tono informativo, directo, en tercera persona
-- PROHIBIDO dirigirse al lector con imperativos o segunda persona: NO usar "disfrutá", "conocé", "no te pierdas", "enterate", "descubrí", "hacé", "animate", "mirá", "andá", "visitá", "aprovechá", "recordá", "tené en cuenta"
+ESTILO — ESPAÑOL RIOPLATENSE FORMAL (REGLA INNEGOCIABLE):
+- Escribí en español rioplatense formal (el de Argentina). ESTÁ TERMINANTEMENTE PROHIBIDO el español neutro o peninsular.
+- Conjugación: usá VOSEO, nunca el "tú". Formas neutras prohibidas y su reemplazo obligatorio:
+  - "puedes" → "podés" · "debes" → "debés" · "tienes" → "tenés" · "quieres" → "querés"
+  - "haces" → "hacés" · "sabes" → "sabés" · "conoces" → "conocés" · "eres" → "sos"
+  - "descubre/descubres" (como invitación) → eliminá la frase, reescribí en tercera persona
+  - Pronombre "tú" o "ti" → "vos" · "contigo" → "con vos"
+- Tono informativo, directo, en TERCERA PERSONA. El texto describe hechos, no le habla al lector.
+- PROHIBIDO dirigirse al lector con imperativos o segunda persona (ni neutro ni voseo): NO usar "descubre", "descubrí", "disfrutá", "conocé", "no te pierdas", "enterate", "hacé", "animate", "mirá", "andá", "visitá", "aprovechá", "recordá", "tené en cuenta", "puedes", "podés ver".
+- Antes de devolver el texto, releelo y verificá que NO quede ninguna palabra en español neutro ("puedes", "debes", "tienes", "descubre", "disfruta", "conoce"). Si encontrás alguna, reescribila.
 - Sin opiniones ni valoraciones personales
 - NO agregar información que no esté en el texto original
 - NO inventar datos, cifras ni declaraciones
@@ -99,15 +116,18 @@ ESTRUCTURA:
 - Si no hay más datos: terminar. No agregar párrafo de cierre genérico.
 
 FORMATO:
-- Subtítulos (##) solo si el artículo supera 200 palabras y tiene secciones claramente diferenciadas
+- Subtítulos: usá ## (H2) para secciones temáticas si el artículo supera 200 palabras. Nunca uses # (H1).
 - **Negritas** en fechas, horarios, nombres propios y lugares clave
 - PROHIBIDO: tablas, emojis, hashtags
+- Si el artículo supera 200 palabras y el original tiene datos suficientes, agregá al final una sección "## Preguntas frecuentes" con 2 o 3 preguntas naturales (cada una un ### H3) y respuestas de 1 a 2 oraciones, usando SOLO datos del original.
 
-ESTILO:
-- Español rioplatense formal, tercera persona, voz activa
+ESTILO — ESPAÑOL RIOPLATENSE FORMAL (REGLA INNEGOCIABLE):
+- Escribí en español rioplatense formal (Argentina), tercera persona, voz activa. PROHIBIDO el español neutro o peninsular.
+- Usá VOSEO, nunca "tú". Reemplazos obligatorios: "puedes" → "podés", "debes" → "debés", "tienes" → "tenés", "quieres" → "querés", "eres" → "sos", "tú/ti" → "vos".
+- Antes de devolver el texto verificá que NO quede ninguna palabra neutra ("puedes", "debes", "tienes", "descubre", "disfruta", "conoce").
 - NO mencionar Facebook, Instagram, Twitter, redes sociales, ni frases como "según publicó"
 - NO usar frases vacías: "cabe destacar", "en este contexto", "es importante mencionar", "en resumen"
-- PROHIBIDO segunda persona o imperativos: "disfrutá", "conocé", "no te pierdas", "enterate", "mirá", "aprovechá"
+- PROHIBIDO segunda persona o imperativos (neutro o voseo): "descubre", "descubrí", "disfrutá", "conocé", "no te pierdas", "enterate", "mirá", "aprovechá", "puedes"
 
 RESPUESTA: Solo el artículo. Sin explicaciones, sin bloques de código.`
 }
@@ -124,6 +144,8 @@ TEXTO:
 """
 ${extractedText.substring(0, 4000)}
 """
+
+IDIOMA: español rioplatense formal (Argentina), tercera persona. PROHIBIDO español neutro/peninsular e imperativos al lector ("descubrí", "conocé", "no te pierdas", "puedes", "disfruta").
 
 Generá exactamente 3 campos en formato JSON:
 
@@ -171,6 +193,8 @@ TEXTO:
 """
 ${postText.substring(0, 2000)}
 """
+
+IDIOMA: español rioplatense formal (Argentina), tercera persona. PROHIBIDO español neutro/peninsular e imperativos al lector ("descubrí", "conocé", "no te pierdas", "puedes", "disfruta").
 
 Generá exactamente 3 campos en formato JSON:
 

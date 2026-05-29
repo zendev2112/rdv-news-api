@@ -30,6 +30,7 @@ import {
   extractTwitterEmbeds,
   extractYoutubeEmbeds,
 } from './embeds/index.js'
+import { enforceRioplatense } from '../utils/rioplatense.js'
 
 // ── Utility functions ────────────────────────────────────────────────
 
@@ -95,6 +96,7 @@ export function postProcessText(text) {
   fixed = fixed.replace(/ {2,}/g, ' ')
   fixed = fixed.trim()
   fixed = fixed.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'")
+  fixed = enforceRioplatense(fixed)
   return fixed
 }
 
@@ -499,9 +501,9 @@ async function generateArticleMetadata(
       throw new Error('Missing fields')
 
     // Clean metadata fields
-    parsed.title = stripMarkdown(parsed.title).replace(EMOJI_RE, '')
-    parsed.bajada = stripMarkdown(parsed.bajada).replace(EMOJI_RE, '')
-    parsed.volanta = stripMarkdown(parsed.volanta).replace(EMOJI_RE, '')
+    parsed.title = enforceRioplatense(stripMarkdown(parsed.title).replace(EMOJI_RE, ''))
+    parsed.bajada = enforceRioplatense(stripMarkdown(parsed.bajada).replace(EMOJI_RE, ''))
+    parsed.volanta = enforceRioplatense(stripMarkdown(parsed.volanta).replace(EMOJI_RE, ''))
 
     if (isSocial) {
       parsed.title = toSentenceCase(parsed.title)

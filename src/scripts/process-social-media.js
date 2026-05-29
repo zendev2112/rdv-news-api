@@ -16,6 +16,7 @@ import {
   extractSourceName,
   stripMarkdown,
 } from '../services/article-pipeline.js'
+import { enforceRioplatense } from '../utils/rioplatense.js'
 
 // Configure environment variables
 dotenv.config()
@@ -641,7 +642,13 @@ async function generateAllContentElements(content, source) {
       console.warn(`Tags generation failed: ${tagErr.message}`)
     }
 
-    return { title, overline, excerpt, article, tags }
+    return {
+      title: enforceRioplatense(title),
+      overline: enforceRioplatense(overline),
+      excerpt: enforceRioplatense(excerpt),
+      article: enforceRioplatense(article),
+      tags,
+    }
   } catch (error) {
     console.error('Error generating content elements:', error)
 

@@ -11,6 +11,10 @@ import yargs from 'yargs'
 import { hideBin } from 'yargs/helpers'
 import * as prompts from './src/prompts/index.js'
 import * as scraper from './src/services/scraper.js'
+import {
+  enforceRioplatense,
+  detectNeutralSpanish,
+} from './src/utils/rioplatense.js'
 
 // Setup dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url)
@@ -272,6 +276,15 @@ function postProcessText(text) {
 
   // ✅ STEP 12: Normalize quotes
   fixed = fixed.replace(/[""]/g, '"').replace(/['']/g, "'")
+
+  // ✅ STEP 13: Enforce Rioplatense Spanish (remove neutral/peninsular leaks)
+  fixed = enforceRioplatense(fixed)
+  const residual = detectNeutralSpanish(fixed)
+  if (residual.length > 0) {
+    console.warn(
+      `⚠️ Español neutro residual tras enforce: ${residual.join(', ')}`,
+    )
+  }
 
   return fixed
 }
@@ -1222,9 +1235,9 @@ async function processArticle(item, sectionId) {
     }
 
     const recordFields = {
-      title: stripPlain(metadata ? metadata.title : item.title),
-      overline: stripPlain(metadata ? metadata.volanta : ''),
-      excerpt: stripPlain(metadata ? metadata.bajada : ''),
+      title: enforceRioplatense(stripPlain(metadata ? metadata.title : item.title)),
+      overline: enforceRioplatense(stripPlain(metadata ? metadata.volanta : '')),
+      excerpt: enforceRioplatense(stripPlain(metadata ? metadata.bajada : '')),
       article: processedText,
       image: imageAttachments,
       author: item.authors?.[0]?.name || '',
