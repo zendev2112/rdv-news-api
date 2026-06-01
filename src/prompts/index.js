@@ -47,12 +47,11 @@ FORMATO Y ESTRUCTURA VISUAL:
 - Usar **negritas** en: fechas, horarios, cifras, nombres de personas, instituciones y lugares clave (5-8 veces)
 - Usar *cursivas* solo para términos técnicos o énfasis puntual (1-2 veces)
 
-SECCIÓN DE PREGUNTAS FRECUENTES (FAQ — obligatoria si el artículo supera 200 palabras):
-- Al final del artículo agregá una sección "## Preguntas frecuentes".
-- Incluí entre 2 y 4 preguntas formuladas con lenguaje natural, como las haría un lector en un buscador (ej: "¿Cuándo se realiza el evento?", "¿Quiénes pueden participar?", "¿Cómo inscribirse?").
-- Cada pregunta es un ### (H3) seguida de una respuesta breve de 1 a 2 oraciones.
+SUBTÍTULOS EN FORMA DE PREGUNTA (para SEO y extractabilidad por IA):
+- Cuando sea natural, redactá algunos de los subtítulos ## (H2) como una pregunta que un lector escribiría en un buscador, y respondela en el párrafo siguiente (ej: "## ¿Cuándo se realiza el operativo?" y debajo el dato).
+- Estas preguntas son subtítulos NORMALES del cuerpo de la noticia, integrados en el desarrollo. NUNCA agrupes las preguntas en una sección aparte ni uses rótulos como "Preguntas frecuentes", "FAQ" o "Glosario": esto es una noticia, no un instructivo.
 - Las respuestas SOLO pueden usar datos que ya están en el texto original. Prohibido inventar.
-- Si el texto original no tiene información suficiente para al menos 2 preguntas reales, NO agregues la sección FAQ.
+- Si el tema no se presta a preguntas naturales, usá subtítulos afirmativos comunes. No fuerces preguntas.
 
 REGLAS SEO:
 - Primera oración: incluir el dato noticioso principal con palabras clave del tema
@@ -119,7 +118,7 @@ FORMATO:
 - Subtítulos: usá ## (H2) para secciones temáticas si el artículo supera 200 palabras. Nunca uses # (H1).
 - **Negritas** en fechas, horarios, nombres propios y lugares clave
 - PROHIBIDO: tablas, emojis, hashtags
-- Si el artículo supera 200 palabras y el original tiene datos suficientes, agregá al final una sección "## Preguntas frecuentes" con 2 o 3 preguntas naturales (cada una un ### H3) y respuestas de 1 a 2 oraciones, usando SOLO datos del original.
+- Cuando sea natural, algún subtítulo ## puede ir en forma de pregunta (ej: "## ¿Dónde se realiza?") respondida en el párrafo siguiente, integrado en el cuerpo. PROHIBIDO agrupar preguntas bajo un rótulo "Preguntas frecuentes" o "FAQ": es una noticia, no un instructivo.
 
 ESTILO — ESPAÑOL RIOPLATENSE FORMAL (REGLA INNEGOCIABLE):
 - Escribí en español rioplatense formal (Argentina), tercera persona, voz activa. PROHIBIDO el español neutro o peninsular.
