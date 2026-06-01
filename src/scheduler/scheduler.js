@@ -12,40 +12,13 @@ const rootDir = path.join(__dirname, '../../')
 
 console.log('Starting content scheduler...')
 
-// ── Tiered fetch strategy ─────────────────────────────────────────────
-// HIGH: Local/regional — twice a day (8am and 6pm Argentina time, UTC-3)
-// MEDIUM: National news — once a day (noon)
-// LOW: Evergreen/international — every 3 days (Monday, Wednesday, Friday at 10am)
-
-const HIGH_PRIORITY = [
-  'primera-plana',
-  'instituciones',
-  'local',
-  'local-facebook',
-  'huanguelen',
-  'pueblos-alemanes',
-  'la-sexta',
-]
-
-const MEDIUM_PRIORITY = [
-  'actualidad',
-  'politica',
-  'economia',
-  'deportes',
-  'agro',
-]
-
-const LOW_PRIORITY = [
-  'mundo',
-  'lifestyle',
-  'cultura',
-  'turismo',
-  'tecnologia',
-  'cine-series',
-  'espectaculos',
-  'recetas',
-  'historia-literatura',
-]
+// ── Active fetch strategy ─────────────────────────────────────────────
+// Only Quiniela, Horóscopo and Efemérides are generated automatically.
+// All other sections are disabled — they can still be fetched manually
+// via `node fetch-to-airtable.js <section>` or the /api/fetch endpoints.
+//   Quiniela:  twice a day
+//   Horóscopo: once a day
+//   Efemérides: once a day
 
 async function fetchSections(sections, label) {
   console.log(`📥 [${label}] Fetching ${sections.length} sections...`)
@@ -63,15 +36,14 @@ async function fetchSections(sections, label) {
   console.log(`📥 [${label}] Complete`)
 }
 
-// HIGH PRIORITY — twice a day: 6am and 6pm (Argentina UTC-3 = 9:00 and 21:00 UTC)
-cron.schedule('0 9 * * *', () => fetchSections(HIGH_PRIORITY, 'HIGH morning'))
-cron.schedule('0 21 * * *', () => fetchSections(HIGH_PRIORITY, 'HIGH evening'))
+// HORÓSCOPO + EFEMÉRIDES — once a day: 7am Argentina = 10:00 UTC
+cron.schedule('0 10 * * *', () =>
+  fetchSections(['horoscopo', 'efemerides'], 'DAILY'),
+)
 
-// MEDIUM PRIORITY — once a day: 5am Argentina = 8:00 UTC
-cron.schedule('0 8 * * *', () => fetchSections(MEDIUM_PRIORITY, 'MEDIUM'))
-
-// LOW PRIORITY — every 2-3 days: Monday, Wednesday, Friday at 10am Argentina = 13:00 UTC
-cron.schedule('0 13 * * 1,3,5', () => fetchSections(LOW_PRIORITY, 'LOW'))
+// QUINIELA — twice a day: 15:30 and 21:30 Argentina = 18:30 and 00:30 UTC
+cron.schedule('30 18 * * *', () => fetchSections(['quiniela'], 'QUINIELA midday'))
+cron.schedule('30 0 * * *', () => fetchSections(['quiniela'], 'QUINIELA evening'))
 
 // Check Airtable connection — once a day at 7am Argentina = 10:00 UTC
 cron.schedule('0 10 * * *', async () => {
@@ -87,7 +59,6 @@ cron.schedule('0 10 * * *', async () => {
   }
 })
 
-console.log('Scheduler initialized with tiered fetch strategy:')
-console.log(`  HIGH (2x/day):  ${HIGH_PRIORITY.join(', ')}`)
-console.log(`  MEDIUM (1x/day): ${MEDIUM_PRIORITY.join(', ')}`)
-console.log(`  LOW (Mon/Wed/Fri): ${LOW_PRIORITY.join(', ')}`)
+console.log('Scheduler initialized — automatic generation limited to:')
+console.log('  Quiniela (2x/day), Horóscopo (1x/day), Efemérides (1x/day)')
+console.log('  All other sections are disabled (manual fetch only).')

@@ -2,64 +2,6 @@
   "version": 2,
   "crons": [
     {
-      "path": "/api/cron/test?section=primera-plana&limit=10",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/test?section=instituciones&limit=10",
-      "schedule": "7 8 * * *"
-    },
-    {
-      "path": "/api/cron/test?section=local&limit=10",
-      "schedule": "14 8 * * *"
-    },
-    {
-      "path": "/api/cron/test?section=local-facebook&limit=10",
-      "schedule": "21 8 * * *"
-    },
-    {
-      "path": "/api/cron/test?section=huanguelen&limit=10",
-      "schedule": "28 8 * * *"
-    },
-    {
-      "path": "/api/cron/test?section=pueblos-alemanes&limit=10",
-      "schedule": "35 8 * * *"
-    },
-    {
-      "path": "/api/cron/test?section=la-sexta&limit=10",
-      "schedule": "42 8 * * *"
-    },
-
-    {
-      "path": "/api/cron/test?section=primera-plana&limit=10",
-      "schedule": "0 21 * * 1-5"
-    },
-    {
-      "path": "/api/cron/test?section=instituciones&limit=10",
-      "schedule": "7 21 * * 1-5"
-    },
-    {
-      "path": "/api/cron/test?section=local&limit=10",
-      "schedule": "14 21 * * 1-5"
-    },
-    {
-      "path": "/api/cron/test?section=local-facebook&limit=10",
-      "schedule": "21 21 * * 1-5"
-    },
-    {
-      "path": "/api/cron/test?section=huanguelen&limit=10",
-      "schedule": "28 21 * * 1-5"
-    },
-    {
-      "path": "/api/cron/test?section=pueblos-alemanes&limit=10",
-      "schedule": "35 21 * * 1-5"
-    },
-    {
-      "path": "/api/cron/test?section=la-sexta&limit=10",
-      "schedule": "42 21 * * 1-5"
-    },
-
-    {
       "path": "/api/cron/test?section=horoscopo&limit=5",
       "schedule": "0 10 * * *"
     },
@@ -68,17 +10,12 @@
       "schedule": "7 10 * * *"
     },
     {
-      "path": "/api/cron/test?section=clima&limit=5",
-      "schedule": "14 10 * * *"
+      "path": "/api/cron/test?section=quiniela&limit=5",
+      "schedule": "30 18 * * *"
     },
     {
       "path": "/api/cron/test?section=quiniela&limit=5",
-      "schedule": "35 11 * * 1-5"
-    },
-
-    {
-      "path": "/api/cron/test?section=economia&limit=10",
-      "schedule": "49 8 * * 1-5"
+      "schedule": "30 0 * * *"
     }
   ],
   "builds": [
