@@ -73,6 +73,10 @@
       "dest": "/api/fetch/all.js"
     },
     {
+      "src": "/api/frontend/coverage",
+      "dest": "/api/frontend/coverage.js"
+    },
+    {
       "src": "/api/fetch/section",
       "dest": "/api/fetch/section.js"
     },

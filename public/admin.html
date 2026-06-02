@@ -329,6 +329,132 @@
                 width: 0%;
             }
         }
+
+        /* ── Homepage coverage board ── */
+        .cov-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .cov-card {
+            border: 1px solid #e5e7eb;
+            border-left-width: 5px;
+            border-radius: 8px;
+            padding: 12px 14px;
+            cursor: pointer;
+            transition: box-shadow 0.15s;
+        }
+
+        .cov-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .cov-green {
+            border-left-color: #10b981;
+        }
+
+        .cov-yellow {
+            border-left-color: #f59e0b;
+        }
+
+        .cov-red {
+            border-left-color: #ef4444;
+        }
+
+        .cov-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .cov-label {
+            font-weight: 700;
+            color: #1f2937;
+            font-size: 14px;
+        }
+
+        .cov-count {
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .cov-green .cov-count {
+            color: #059669;
+        }
+
+        .cov-yellow .cov-count {
+            color: #b45309;
+        }
+
+        .cov-red .cov-count {
+            color: #dc2626;
+        }
+
+        .cov-meta {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #6b7280;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 10px;
+        }
+
+        .cov-fresh-old {
+            color: #dc2626;
+            font-weight: 600;
+        }
+
+        .cov-items {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #e5e7eb;
+            display: none;
+        }
+
+        .cov-card.open .cov-items {
+            display: block;
+        }
+
+        .cov-item {
+            font-size: 12px;
+            color: #374151;
+            padding: 3px 0;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .cov-item .cov-age {
+            color: #9ca3af;
+            white-space: nowrap;
+        }
+
+        .cov-empty {
+            font-size: 12px;
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        .cov-legend {
+            font-size: 12px;
+            color: #6b7280;
+            display: flex;
+            gap: 16px;
+            margin-top: 6px;
+        }
+
+        .cov-dot {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
     </style>
 </head>
 
@@ -445,6 +571,24 @@
                 </div>
             </div>
 
+            <div class="card" style="margin-bottom: 30px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0;">🗂️ Homepage Coverage <span class="status status-idle" id="status-cov">Idle</span></h3>
+                    <button class="btn btn-primary" style="width: auto; padding: 8px 16px; margin: 0;"
+                        onclick="loadCoverage()">Refresh</button>
+                </div>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Live mirror of what each homepage block is
+                    showing — same query and limit as the frontend. Click a block to see its articles.</p>
+                <div class="cov-legend">
+                    <span><span class="cov-dot" style="background:#10b981;"></span>Full &amp; fresh</span>
+                    <span><span class="cov-dot" style="background:#f59e0b;"></span>Thin or aging</span>
+                    <span><span class="cov-dot" style="background:#ef4444;"></span>Empty or stale</span>
+                </div>
+                <div class="cov-grid" id="cov-grid">
+                    <p class="cov-empty">Sign in and press Refresh to load coverage.</p>
+                </div>
+            </div>
+
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h3 style="margin: 0;">📊 Live Console Logs</h3>
@@ -503,6 +647,7 @@
             document.getElementById('login-overlay').classList.add('hidden');
             document.getElementById('main-panel').classList.add('visible');
             addLog('✅ Authenticated successfully', 'success');
+            loadCoverage();
         }
 
         function logout() {
@@ -672,6 +817,89 @@
         async function processSlack() {
             addLog(`💬 Running process:slack...`, 'info');
             await streamRequest(`${API_BASE}/api/social/process`, { mode: 'slack' }, 'slack');
+        }
+
+        // ── Homepage coverage board ───────────────────────────
+        const STALE_HOURS = 48; // a block whose newest article is older than this is "stale"
+
+        function fmtAge(h) {
+            if (h == null) return '—';
+            if (h < 1) return '<1h';
+            if (h < 48) return `${h}h`;
+            return `${Math.round(h / 24)}d`;
+        }
+
+        function covClass(b) {
+            if (b.error || !b.pool) return 'cov-red';
+            if (b.newestAgeHours == null || b.newestAgeHours > STALE_HOURS) return 'cov-red';
+            if (b.filled < b.limit) return 'cov-yellow';
+            return 'cov-green';
+        }
+
+        function renderCoverage(blocks) {
+            const grid = document.getElementById('cov-grid');
+            grid.innerHTML = '';
+            for (const b of blocks) {
+                const card = document.createElement('div');
+                card.className = `cov-card ${covClass(b)}`;
+                if (b.hidden) card.style.opacity = '0.55';
+
+                if (b.error) {
+                    card.innerHTML = `<div class="cov-head"><span class="cov-label">${b.label}</span></div>
+                        <div class="cov-meta cov-fresh-old">error: ${b.error}</div>`;
+                    grid.appendChild(card);
+                    continue;
+                }
+
+                const newestStale = b.newestAgeHours != null && b.newestAgeHours > STALE_HOURS;
+                const poolExtra = b.pool > b.limit ? `<span>pool: ${b.pool}</span>` : '';
+                const hiddenTag = b.hidden ? ' <span style="font-weight:400;color:#9ca3af;">(oculta)</span>' : '';
+
+                const itemsHtml = b.items.length
+                    ? b.items.map(it =>
+                        `<div class="cov-item"><span>${it.title || '(sin título)'}</span><span class="cov-age">${fmtAge(it.ageHours)}</span></div>`
+                    ).join('')
+                    : '<div class="cov-empty">Sin artículos publicados en este bloque.</div>';
+
+                card.innerHTML = `
+                    <div class="cov-head">
+                        <span class="cov-label">${b.label}${hiddenTag}</span>
+                        <span class="cov-count">${b.filled}/${b.limit}</span>
+                    </div>
+                    <div class="cov-meta">
+                        <span class="${newestStale ? 'cov-fresh-old' : ''}">más reciente: ${fmtAge(b.newestAgeHours)}</span>
+                        <span>+${b.last24h} hoy</span>
+                        ${poolExtra}
+                    </div>
+                    <div class="cov-items">${itemsHtml}</div>`;
+
+                card.addEventListener('click', () => card.classList.toggle('open'));
+                grid.appendChild(card);
+            }
+        }
+
+        async function loadCoverage() {
+            if (!API_TOKEN) { addLog('⚠️ Sign in first', 'warning'); return; }
+            setStatus('status-cov', 'running', 'Loading');
+            try {
+                const res = await fetch(`${API_BASE}/api/frontend/coverage`, {
+                    headers: { 'Authorization': `Bearer ${API_TOKEN}` }
+                });
+                if (res.status === 401) {
+                    setStatus('status-cov', 'error', 'Auth error');
+                    addLog('❌ Coverage: token rejected', 'error');
+                    return;
+                }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                renderCoverage(data.blocks || []);
+                const thin = (data.blocks || []).filter(b => covClass(b) !== 'cov-green').length;
+                setStatus('status-cov', thin ? 'idle' : 'success', thin ? `${thin} need attention` : 'All good');
+                addLog(`🗂️ Coverage loaded — ${thin} block(s) need attention`, thin ? 'warning' : 'success');
+            } catch (e) {
+                setStatus('status-cov', 'error', 'Error');
+                addLog(`❌ Coverage failed: ${e.message}`, 'error');
+            }
         }
     </script>
 </body>
