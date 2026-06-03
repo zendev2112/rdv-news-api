@@ -832,7 +832,7 @@
         function covClass(b) {
             if (b.error || !b.pool) return 'cov-red';
             if (b.newestAgeHours == null || b.newestAgeHours > STALE_HOURS) return 'cov-red';
-            if (b.filled < b.limit) return 'cov-yellow';
+            if (b.filled < b.slots) return 'cov-yellow';
             return 'cov-green';
         }
 
@@ -852,7 +852,7 @@
                 }
 
                 const newestStale = b.newestAgeHours != null && b.newestAgeHours > STALE_HOURS;
-                const poolExtra = b.pool > b.limit ? `<span>pool: ${b.pool}</span>` : '';
+                const poolExtra = b.pool > b.slots ? `<span>pool: ${b.pool}</span>` : '';
                 const hiddenTag = b.hidden ? ' <span style="font-weight:400;color:#9ca3af;">(oculta)</span>' : '';
 
                 const itemsHtml = b.items.length
@@ -864,7 +864,7 @@
                 card.innerHTML = `
                     <div class="cov-head">
                         <span class="cov-label">${b.label}${hiddenTag}</span>
-                        <span class="cov-count">${b.filled}/${b.limit}</span>
+                        <span class="cov-count">${b.filled}/${b.slots} slots</span>
                     </div>
                     <div class="cov-meta">
                         <span class="${newestStale ? 'cov-fresh-old' : ''}">más reciente: ${fmtAge(b.newestAgeHours)}</span>
