@@ -1,6 +1,6 @@
 import { pullSupply } from '../../src/services/curation/supply.js'
 import { filterDuplicates } from '../../src/services/curation/dedup.js'
-import config from '../../src/config/index.js'
+import appConfig from '../../src/config/index.js'
 import {
   autoFeedableBlocks,
   feedsForBlocks,
@@ -8,6 +8,11 @@ import {
 } from '../../src/config/homepage-blocks.js'
 
 const ADMIN_TOKEN = process.env.ADMIN_API_TOKEN
+
+// Vercel ignores builds[].config.maxDuration for functions — it must be declared
+// in-file. execute mode runs scrape + 3 Gemini calls per article, so without this
+// the function dies at the ~10s default and the client sees a 504.
+export const config = { maxDuration: 300 }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -80,7 +85,7 @@ export default async function handler(req, res) {
         const eligible = blocksForFeed(fid, blocks)
         const dest = eligible[0]
         if (!dest) return null
-        const section = config.getSection(fid)
+        const section = appConfig.getSection(fid)
         items.sort((a, z) => new Date(z.pubDate || 0) - new Date(a.pubDate || 0))
         return {
           feedId: fid,
