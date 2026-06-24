@@ -709,18 +709,15 @@
             </div>
 
             <div class="card" style="margin-bottom: 30px;">
-                <h3 style="margin: 0;">🤖 Curation Agent <span class="status status-idle" id="status-curate">Idle</span></h3>
-                <p style="color:#666; font-size:13px; margin-top:8px;">Propose fresh articles to fill the blocks that need them — same pipeline and Rioplatense prompts as a manual run. Review the picks, then generate drafts to Airtable. <strong>Nothing is generated until you click Generate.</strong></p>
+                <h3 style="margin: 0;">🤖 News Picker <span class="status status-idle" id="status-curate">Idle</span></h3>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Fresh RSS titles grouped by homepage block. Tick the ones you want, then send them to Airtable — same pipeline and Rioplatense prompts as a manual run. <strong>Nothing is generated until you click Send.</strong></p>
                 <div class="cur-controls">
-                    <select class="input" id="curate-scope">
-                        <option value="hungry">All hungry blocks</option>
-                    </select>
-                    <button class="btn btn-primary" id="btn-plan" onclick="runPlan()">Plan</button>
-                    <button class="btn btn-success" id="btn-generate" onclick="generateSelected()" disabled>Generate selected (0)</button>
+                    <button class="btn btn-primary" id="btn-plan" onclick="loadTitles()">Fetch titles</button>
+                    <button class="btn btn-success" id="btn-generate" onclick="generateSelected()" disabled>Send selected (0)</button>
                 </div>
                 <div class="cur-summary" id="cur-summary"></div>
                 <div id="cur-plan">
-                    <p class="cur-empty">Press Plan to propose articles for the blocks that need them.</p>
+                    <p class="cur-empty">Press Fetch titles to pull the latest news from every block's feeds.</p>
                 </div>
             </div>
 
@@ -1037,64 +1034,43 @@
             }
         }
 
-        // ── Curation agent ────────────────────────────────────
-        let lastPlan = null;
-        let frontLabel = {};
+        // ── News picker ───────────────────────────────────────
+        let titleItems = [];   // flat list of all fetched items, index = checkbox id
 
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c =>
                 ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
-        function labelFor(front) { return frontLabel[front] || front; }
-
-        function populateScope(demand) {
-            const sel = document.getElementById('curate-scope');
-            const cur = sel.value;
-            let opts = '<option value="hungry">All hungry blocks</option>';
-            demand.forEach(b => {
-                opts += `<option value="${b.front}">${b.label}${b.hungry ? ' • needs ' + b.need : ''}</option>`;
-            });
-            sel.innerHTML = opts;
-            sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'hungry';
-        }
-
         function updateGenerateBtn() {
             const n = document.querySelectorAll('.cur-cb:checked').length;
             const btn = document.getElementById('btn-generate');
-            btn.textContent = `Generate selected (${n})`;
+            btn.textContent = `Send selected (${n})`;
             btn.disabled = n === 0;
         }
 
-        function renderPlan(data) {
-            frontLabel = {};
-            (data.demand || []).forEach(b => { frontLabel[b.front] = b.label; });
-            populateScope(data.demand || []);
-
+        function renderTitles(data) {
             const box = document.getElementById('cur-plan');
-            const plan = data.plan || [];
-            if (!plan.length) {
-                box.innerHTML = '<p class="cur-empty">No proposals — nothing fresh to add, or no hungry blocks.</p>';
+            const blocks = data.blocks || [];
+            titleItems = [];
+            if (!blocks.length) {
+                box.innerHTML = '<p class="cur-empty">No fresh titles — feeds are empty or everything is already published.</p>';
                 updateGenerateBtn();
                 return;
             }
 
-            const groups = {};
-            plan.forEach((a, i) => { (groups[a.front] = groups[a.front] || []).push({ ...a, _i: i }); });
-
             let html = '';
-            for (const front of Object.keys(groups)) {
-                html += `<div class="cur-block"><div class="cur-block-head">${escapeHtml(labelFor(front))} <span class="cur-need">${groups[front].length} propuesta(s)</span></div>`;
-                for (const a of groups[front]) {
-                    const mid = a.score < 80 ? ' mid' : '';
+            for (const b of blocks) {
+                html += `<div class="cur-block"><div class="cur-block-head">${escapeHtml(b.label)} <span class="cur-need">${b.items.length} título(s)</span></div>`;
+                for (const it of b.items) {
+                    const i = titleItems.length;
+                    titleItems.push({ url: it.url, front: b.front, feedId: it.feedId });
                     html += `<div class="cur-row">
-                        <input type="checkbox" class="cur-cb" checked data-i="${a._i}" onchange="updateGenerateBtn()">
+                        <input type="checkbox" class="cur-cb" data-i="${i}" onchange="updateGenerateBtn()">
                         <div class="cur-body">
-                            <a class="cur-title" href="${encodeURI(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.title || a.url)}</a>
-                            <div class="cur-reason">${escapeHtml(a.reason || '')}</div>
-                            <div class="cur-tags"><span>feed: ${escapeHtml(a.feedId)}</span><span>order: ${escapeHtml(a.role || 'principal')}</span></div>
+                            <a class="cur-title" href="${encodeURI(it.url)}" target="_blank" rel="noopener">${escapeHtml(it.title || it.url)}</a>
+                            <div class="cur-tags"><span>feed: ${escapeHtml(it.feedId)}</span></div>
                         </div>
-                        <span class="cur-score${mid}">${a.score}</span>
                     </div>`;
                 }
                 html += '</div>';
@@ -1103,48 +1079,44 @@
             updateGenerateBtn();
         }
 
-        async function runPlan() {
+        async function loadTitles() {
             if (!API_TOKEN) { addLog('⚠️ Sign in first', 'warning'); return; }
-            const scope = document.getElementById('curate-scope').value;
-            setStatus('status-curate', 'running', 'Planning');
+            setStatus('status-curate', 'running', 'Fetching');
             document.getElementById('btn-plan').disabled = true;
             document.getElementById('cur-summary').textContent = '';
-            addLog(`🤖 Planning curation (scope: ${scope})...`, 'info');
+            addLog('🤖 Fetching RSS titles...', 'info');
             try {
                 const res = await fetch(`${API_BASE}/api/agent/curate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
-                    body: JSON.stringify({ mode: 'plan', scope })
+                    body: JSON.stringify({ mode: 'list' })
                 });
-                if (res.status === 401) { setStatus('status-curate', 'error', 'Auth error'); addLog('❌ Curation: token rejected', 'error'); return; }
+                if (res.status === 401) { setStatus('status-curate', 'error', 'Auth error'); addLog('❌ token rejected', 'error'); return; }
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
-                lastPlan = data;
-                renderPlan(data);
+                renderTitles(data);
                 const s = data.stats || {};
+                const total = (data.blocks || []).reduce((n, b) => n + b.items.length, 0);
                 document.getElementById('cur-summary').textContent =
-                    `${data.plan.length} proposed · ${s.hungryBlocks || 0} hungry blocks · ${s.candidates || 0} items pulled → ${s.afterPrefilter || 0} after filter → ${s.scored || 0} scored`;
-                setStatus('status-curate', data.plan.length ? 'success' : 'idle', `${data.plan.length} proposed`);
-                addLog(`🤖 Plan ready — ${data.plan.length} proposed from ${s.candidates || 0} items`, data.plan.length ? 'success' : 'warning');
+                    `${total} título(s) en ${(data.blocks || []).length} bloque(s) · ${s.pulled || 0} ítems desde ${s.feedsPulled || 0} feeds`;
+                setStatus('status-curate', total ? 'success' : 'idle', `${total} titles`);
+                addLog(`🤖 ${total} titles ready across ${(data.blocks || []).length} blocks`, total ? 'success' : 'warning');
                 (data.feedErrors || []).forEach(fe => addLog(`⚠️ Feed error ${fe.feedId}: ${fe.error}`, 'warning'));
-                const sensitive = (data.skipped || []).filter(x => x.reason === 'sensitive').length;
-                if (sensitive) addLog(`🛡️ ${sensitive} item(s) flagged sensitive and skipped`, 'warning');
             } catch (e) {
                 setStatus('status-curate', 'error', 'Error');
-                addLog(`❌ Plan failed: ${e.message}`, 'error');
+                addLog(`❌ Fetch failed: ${e.message}`, 'error');
             } finally {
                 document.getElementById('btn-plan').disabled = false;
             }
         }
 
         async function generateSelected() {
-            if (!lastPlan) return;
-            const checked = [...document.querySelectorAll('.cur-cb:checked')].map(cb => lastPlan.plan[+cb.dataset.i]);
+            const checked = [...document.querySelectorAll('.cur-cb:checked')].map(cb => titleItems[+cb.dataset.i]);
             if (!checked.length) return;
-            const assignments = checked.map(a => ({ url: a.url, front: a.front, role: a.role || 'principal', feedId: a.feedId }));
-            setStatus('status-curate', 'running', 'Generating');
+            const assignments = checked.map(a => ({ url: a.url, front: a.front, role: 'principal', feedId: a.feedId }));
+            setStatus('status-curate', 'running', 'Sending');
             document.getElementById('btn-generate').disabled = true;
-            addLog(`🛠️ Generating ${assignments.length} draft(s)...`, 'info');
+            addLog(`🛠️ Sending ${assignments.length} title(s) to Airtable...`, 'info');
             try {
                 const res = await fetch(`${API_BASE}/api/agent/curate`, {
                     method: 'POST',
@@ -1152,16 +1124,22 @@
                     body: JSON.stringify({ mode: 'execute', assignments })
                 });
                 const data = await res.json().catch(() => ({}));
-                if (res.status === 501) { addLog(`⏳ ${data.error || 'Generation not implemented yet (Phase 4)'}`, 'warning'); setStatus('status-curate', 'idle', 'Plan only'); return; }
                 if (res.status === 401) { addLog('❌ token rejected', 'error'); setStatus('status-curate', 'error', 'Auth error'); return; }
                 if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                const ok = (data.results || []).filter(r => r.status === 'drafted').length;
-                const fail = (data.results || []).filter(r => r.status === 'failed').length;
-                addLog(`✅ Drafted ${ok}, failed ${fail}`, fail ? 'warning' : 'success');
+                const results = data.results || [];
+                const ok = results.filter(r => r.status === 'drafted').length;
+                const fail = results.filter(r => r.status === 'failed').length;
+                const deferred = results.filter(r => r.status === 'deferred').length;
+                addLog(`✅ Drafted ${ok}, failed ${fail}${deferred ? `, deferred ${deferred} (run again)` : ''}`, fail ? 'warning' : 'success');
                 setStatus('status-curate', 'success', `Drafted ${ok}`);
-                loadCoverage();
+                // Uncheck the ones that made it so a re-send doesn't duplicate.
+                const done = new Set(results.filter(r => r.status === 'drafted').map(r => r.url));
+                document.querySelectorAll('.cur-cb:checked').forEach(cb => {
+                    if (done.has(titleItems[+cb.dataset.i].url)) cb.checked = false;
+                });
+                if (typeof loadCoverage === 'function') loadCoverage();
             } catch (e) {
-                addLog(`❌ Generate failed: ${e.message}`, 'error');
+                addLog(`❌ Send failed: ${e.message}`, 'error');
                 setStatus('status-curate', 'error', 'Error');
             } finally {
                 updateGenerateBtn();
