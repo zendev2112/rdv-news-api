@@ -455,6 +455,125 @@
             margin-right: 5px;
             vertical-align: middle;
         }
+
+        /* ── Curation agent ── */
+        .cur-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .cur-controls select {
+            margin: 0;
+            width: auto;
+            min-width: 220px;
+        }
+
+        .cur-controls .btn {
+            width: auto;
+            margin: 0;
+            padding: 10px 20px;
+        }
+
+        .cur-summary {
+            font-size: 13px;
+            color: #6b7280;
+            margin-top: 12px;
+            min-height: 18px;
+        }
+
+        .cur-block {
+            margin-top: 16px;
+        }
+
+        .cur-block-head {
+            font-weight: 700;
+            color: #1f2937;
+            font-size: 14px;
+            margin-bottom: 6px;
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+        }
+
+        .cur-block-head .cur-need {
+            font-weight: 400;
+            color: #9ca3af;
+            font-size: 12px;
+        }
+
+        .cur-row {
+            display: flex;
+            gap: 10px;
+            padding: 8px 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            margin-bottom: 6px;
+        }
+
+        .cur-row input[type=checkbox] {
+            margin-top: 3px;
+            width: 16px;
+            height: 16px;
+            flex: 0 0 auto;
+            cursor: pointer;
+        }
+
+        .cur-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .cur-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #1f2937;
+            text-decoration: none;
+        }
+
+        .cur-title:hover {
+            text-decoration: underline;
+        }
+
+        .cur-reason {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 3px;
+        }
+
+        .cur-tags {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: 3px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .cur-score {
+            flex: 0 0 auto;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #ecfdf5;
+            color: #059669;
+            height: fit-content;
+        }
+
+        .cur-score.mid {
+            background: #fffbeb;
+            color: #b45309;
+        }
+
+        .cur-empty {
+            font-size: 13px;
+            color: #9ca3af;
+            font-style: italic;
+            margin-top: 12px;
+        }
     </style>
 </head>
 
@@ -586,6 +705,22 @@
                 </div>
                 <div class="cov-grid" id="cov-grid">
                     <p class="cov-empty">Sign in and press Refresh to load coverage.</p>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 30px;">
+                <h3 style="margin: 0;">🤖 Curation Agent <span class="status status-idle" id="status-curate">Idle</span></h3>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Propose fresh articles to fill the blocks that need them — same pipeline and Rioplatense prompts as a manual run. Review the picks, then generate drafts to Airtable. <strong>Nothing is generated until you click Generate.</strong></p>
+                <div class="cur-controls">
+                    <select class="input" id="curate-scope">
+                        <option value="hungry">All hungry blocks</option>
+                    </select>
+                    <button class="btn btn-primary" id="btn-plan" onclick="runPlan()">Plan</button>
+                    <button class="btn btn-success" id="btn-generate" onclick="generateSelected()" disabled>Generate selected (0)</button>
+                </div>
+                <div class="cur-summary" id="cur-summary"></div>
+                <div id="cur-plan">
+                    <p class="cur-empty">Press Plan to propose articles for the blocks that need them.</p>
                 </div>
             </div>
 
@@ -899,6 +1034,137 @@
             } catch (e) {
                 setStatus('status-cov', 'error', 'Error');
                 addLog(`❌ Coverage failed: ${e.message}`, 'error');
+            }
+        }
+
+        // ── Curation agent ────────────────────────────────────
+        let lastPlan = null;
+        let frontLabel = {};
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c =>
+                ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function labelFor(front) { return frontLabel[front] || front; }
+
+        function populateScope(demand) {
+            const sel = document.getElementById('curate-scope');
+            const cur = sel.value;
+            let opts = '<option value="hungry">All hungry blocks</option>';
+            demand.forEach(b => {
+                opts += `<option value="${b.front}">${b.label}${b.hungry ? ' • needs ' + b.need : ''}</option>`;
+            });
+            sel.innerHTML = opts;
+            sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'hungry';
+        }
+
+        function updateGenerateBtn() {
+            const n = document.querySelectorAll('.cur-cb:checked').length;
+            const btn = document.getElementById('btn-generate');
+            btn.textContent = `Generate selected (${n})`;
+            btn.disabled = n === 0;
+        }
+
+        function renderPlan(data) {
+            frontLabel = {};
+            (data.demand || []).forEach(b => { frontLabel[b.front] = b.label; });
+            populateScope(data.demand || []);
+
+            const box = document.getElementById('cur-plan');
+            const plan = data.plan || [];
+            if (!plan.length) {
+                box.innerHTML = '<p class="cur-empty">No proposals — nothing fresh to add, or no hungry blocks.</p>';
+                updateGenerateBtn();
+                return;
+            }
+
+            const groups = {};
+            plan.forEach((a, i) => { (groups[a.front] = groups[a.front] || []).push({ ...a, _i: i }); });
+
+            let html = '';
+            for (const front of Object.keys(groups)) {
+                html += `<div class="cur-block"><div class="cur-block-head">${escapeHtml(labelFor(front))} <span class="cur-need">${groups[front].length} propuesta(s)</span></div>`;
+                for (const a of groups[front]) {
+                    const mid = a.score < 80 ? ' mid' : '';
+                    html += `<div class="cur-row">
+                        <input type="checkbox" class="cur-cb" checked data-i="${a._i}" onchange="updateGenerateBtn()">
+                        <div class="cur-body">
+                            <a class="cur-title" href="${encodeURI(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.title || a.url)}</a>
+                            <div class="cur-reason">${escapeHtml(a.reason || '')}</div>
+                            <div class="cur-tags"><span>feed: ${escapeHtml(a.feedId)}</span><span>order: ${escapeHtml(a.role || 'principal')}</span></div>
+                        </div>
+                        <span class="cur-score${mid}">${a.score}</span>
+                    </div>`;
+                }
+                html += '</div>';
+            }
+            box.innerHTML = html;
+            updateGenerateBtn();
+        }
+
+        async function runPlan() {
+            if (!API_TOKEN) { addLog('⚠️ Sign in first', 'warning'); return; }
+            const scope = document.getElementById('curate-scope').value;
+            setStatus('status-curate', 'running', 'Planning');
+            document.getElementById('btn-plan').disabled = true;
+            document.getElementById('cur-summary').textContent = '';
+            addLog(`🤖 Planning curation (scope: ${scope})...`, 'info');
+            try {
+                const res = await fetch(`${API_BASE}/api/agent/curate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
+                    body: JSON.stringify({ mode: 'plan', scope })
+                });
+                if (res.status === 401) { setStatus('status-curate', 'error', 'Auth error'); addLog('❌ Curation: token rejected', 'error'); return; }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                lastPlan = data;
+                renderPlan(data);
+                const s = data.stats || {};
+                document.getElementById('cur-summary').textContent =
+                    `${data.plan.length} proposed · ${s.hungryBlocks || 0} hungry blocks · ${s.candidates || 0} items pulled → ${s.afterPrefilter || 0} after filter → ${s.scored || 0} scored`;
+                setStatus('status-curate', data.plan.length ? 'success' : 'idle', `${data.plan.length} proposed`);
+                addLog(`🤖 Plan ready — ${data.plan.length} proposed from ${s.candidates || 0} items`, data.plan.length ? 'success' : 'warning');
+                (data.feedErrors || []).forEach(fe => addLog(`⚠️ Feed error ${fe.feedId}: ${fe.error}`, 'warning'));
+                const sensitive = (data.skipped || []).filter(x => x.reason === 'sensitive').length;
+                if (sensitive) addLog(`🛡️ ${sensitive} item(s) flagged sensitive and skipped`, 'warning');
+            } catch (e) {
+                setStatus('status-curate', 'error', 'Error');
+                addLog(`❌ Plan failed: ${e.message}`, 'error');
+            } finally {
+                document.getElementById('btn-plan').disabled = false;
+            }
+        }
+
+        async function generateSelected() {
+            if (!lastPlan) return;
+            const checked = [...document.querySelectorAll('.cur-cb:checked')].map(cb => lastPlan.plan[+cb.dataset.i]);
+            if (!checked.length) return;
+            const assignments = checked.map(a => ({ url: a.url, front: a.front, role: a.role || 'principal', feedId: a.feedId }));
+            setStatus('status-curate', 'running', 'Generating');
+            document.getElementById('btn-generate').disabled = true;
+            addLog(`🛠️ Generating ${assignments.length} draft(s)...`, 'info');
+            try {
+                const res = await fetch(`${API_BASE}/api/agent/curate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
+                    body: JSON.stringify({ mode: 'execute', assignments })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 501) { addLog(`⏳ ${data.error || 'Generation not implemented yet (Phase 4)'}`, 'warning'); setStatus('status-curate', 'idle', 'Plan only'); return; }
+                if (res.status === 401) { addLog('❌ token rejected', 'error'); setStatus('status-curate', 'error', 'Auth error'); return; }
+                if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                const ok = (data.results || []).filter(r => r.status === 'drafted').length;
+                const fail = (data.results || []).filter(r => r.status === 'failed').length;
+                addLog(`✅ Drafted ${ok}, failed ${fail}`, fail ? 'warning' : 'success');
+                setStatus('status-curate', 'success', `Drafted ${ok}`);
+                loadCoverage();
+            } catch (e) {
+                addLog(`❌ Generate failed: ${e.message}`, 'error');
+                setStatus('status-curate', 'error', 'Error');
+            } finally {
+                updateGenerateBtn();
             }
         }
     </script>

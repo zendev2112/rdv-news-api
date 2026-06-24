@@ -77,6 +77,10 @@
       "dest": "/api/frontend/coverage.js"
     },
     {
+      "src": "/api/agent/curate",
+      "dest": "/api/agent/curate.js"
+    },
+    {
       "src": "/api/fetch/section",
       "dest": "/api/fetch/section.js"
     },

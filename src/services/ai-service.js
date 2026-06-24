@@ -21,6 +21,7 @@ export async function generateContent(prompt, options = {}) {
     temperature = 0.7,
     maxTokens = 8192,
     timeout = 60000,
+    thinkingBudget, // optional: 0 disables 2.5 "thinking" so output isn't starved
   } = options
 
   try {
@@ -29,13 +30,18 @@ export async function generateContent(prompt, options = {}) {
 
     const geminiModel = genAI.getGenerativeModel({ model })
 
+    const generationConfig = {
+      temperature,
+      maxOutputTokens: maxTokens,
+    }
+    if (thinkingBudget !== undefined) {
+      generationConfig.thinkingConfig = { thinkingBudget }
+    }
+
     const result = await Promise.race([
       geminiModel.generateContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature,
-          maxOutputTokens: maxTokens,
-        },
+        generationConfig,
       }),
       new Promise((_, reject) =>
         setTimeout(
