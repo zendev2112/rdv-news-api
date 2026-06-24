@@ -1,8 +1,10 @@
 import { pullSupply } from '../../src/services/curation/supply.js'
 import { filterDuplicates } from '../../src/services/curation/dedup.js'
+import config from '../../src/config/index.js'
 import {
   autoFeedableBlocks,
   feedsForBlocks,
+  blocksForFeed,
 } from '../../src/config/homepage-blocks.js'
 
 const ADMIN_TOKEN = process.env.ADMIN_API_TOKEN
@@ -46,13 +48,13 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `unknown mode: ${mode}` })
   }
 
-  // ── List as many fresh RSS titles as possible, grouped by homepage block ──
+  // ── List fresh RSS titles, grouped by source feed (each headline once) ──
   try {
     const blocks = autoFeedableBlocks()
     const feedIds = feedsForBlocks(blocks)
     const { candidates, feedErrors } = await pullSupply({ feedIds })
 
-    // In-run dedup by url (a feed can feed several blocks; keep one record each).
+    // In-run dedup by url.
     const seen = new Set()
     const deduped = []
     for (const c of candidates) {
@@ -70,31 +72,34 @@ export default async function handler(req, res) {
       byFeed.get(c.feedId).push(c)
     }
 
-    const out = blocks
-      .map((b) => {
-        const items = []
-        const urls = new Set()
-        for (const f of b.eligibleFeeds) {
-          for (const c of byFeed.get(f) || []) {
-            if (urls.has(c.url)) continue
-            urls.add(c.url)
-            items.push({
-              url: c.url,
-              title: c.title,
-              feedId: c.feedId,
-              image: c.image,
-              pubDate: c.pubDate,
-            })
-          }
-        }
+    // One group per source feed; destination block auto-derived (first eligible).
+    const feeds = feedIds
+      .map((fid) => {
+        const items = byFeed.get(fid) || []
+        if (!items.length) return null
+        const eligible = blocksForFeed(fid, blocks)
+        const dest = eligible[0]
+        if (!dest) return null
+        const section = config.getSection(fid)
         items.sort((a, z) => new Date(z.pubDate || 0) - new Date(a.pubDate || 0))
-        return { front: b.front, label: b.label, items }
+        return {
+          feedId: fid,
+          feedName: section?.name || fid,
+          front: dest.front,
+          blockLabel: dest.label,
+          items: items.map((c) => ({
+            url: c.url,
+            title: c.title,
+            image: c.image,
+            pubDate: c.pubDate,
+          })),
+        }
       })
-      .filter((b) => b.items.length)
+      .filter(Boolean)
 
     return res.status(200).json({
       generatedAt: new Date().toISOString(),
-      blocks: out,
+      feeds,
       feedErrors,
       stats: {
         feedsPulled: feedIds.length,

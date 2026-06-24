@@ -498,10 +498,40 @@
             align-items: baseline;
         }
 
+        .cur-block-head {
+            justify-content: space-between;
+        }
+
+        .cur-feedtoggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .cur-feedtoggle input {
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
+        }
+
         .cur-block-head .cur-need {
             font-weight: 400;
             color: #9ca3af;
             font-size: 12px;
+        }
+
+        .cur-thumb {
+            flex: 0 0 auto;
+            width: 56px;
+            height: 42px;
+            object-fit: cover;
+            border-radius: 6px;
+            background: #f3f4f6;
+        }
+
+        .cur-thumb-empty {
+            border: 1px dashed #e5e7eb;
         }
 
         .cur-row {
@@ -1061,33 +1091,56 @@
             btn.disabled = n === 0;
         }
 
+        function relTime(ts) {
+            if (!ts) return '';
+            const diff = (Date.now() - new Date(ts).getTime()) / 1000;
+            if (isNaN(diff)) return '';
+            if (diff < 3600) return `hace ${Math.max(1, Math.round(diff / 60))}m`;
+            if (diff < 86400) return `hace ${Math.round(diff / 3600)}h`;
+            return `hace ${Math.round(diff / 86400)}d`;
+        }
+
+        // Check/uncheck every box in one feed group.
+        function toggleFeed(feedIdx, checked) {
+            document.querySelectorAll(`.cur-cb[data-feed="${feedIdx}"]`).forEach(cb => { cb.checked = checked; });
+            updateGenerateBtn();
+        }
+
         function renderTitles(data) {
             const box = document.getElementById('cur-plan');
-            const blocks = data.blocks || [];
+            const feeds = data.feeds || [];
             titleItems = [];
-            if (!blocks.length) {
+            if (!feeds.length) {
                 box.innerHTML = '<p class="cur-empty">No fresh titles — feeds are empty or everything is already published.</p>';
                 updateGenerateBtn();
                 return;
             }
 
             let html = '';
-            for (const b of blocks) {
-                html += `<div class="cur-block"><div class="cur-block-head">${escapeHtml(b.label)} <span class="cur-need">${b.items.length} título(s)</span></div>`;
-                for (const it of b.items) {
+            feeds.forEach((f, fi) => {
+                html += `<div class="cur-block">
+                    <div class="cur-block-head">
+                        <label class="cur-feedtoggle"><input type="checkbox" onchange="toggleFeed(${fi}, this.checked)"> ${escapeHtml(f.feedName)}</label>
+                        <span class="cur-need">${f.items.length} · → ${escapeHtml(f.blockLabel)}</span>
+                    </div>`;
+                for (const it of f.items) {
                     const i = titleItems.length;
-                    titleItems.push({ url: it.url, front: b.front, feedId: it.feedId });
+                    titleItems.push({ url: it.url, front: f.front, feedId: f.feedId });
+                    const thumb = it.image
+                        ? `<img class="cur-thumb" src="${encodeURI(it.image)}" loading="lazy" alt="">`
+                        : '<div class="cur-thumb cur-thumb-empty"></div>';
                     html += `<div class="cur-row" id="cur-row-${i}">
-                        <input type="checkbox" class="cur-cb" data-i="${i}" onchange="updateGenerateBtn()">
+                        <input type="checkbox" class="cur-cb" data-i="${i}" data-feed="${fi}" onchange="updateGenerateBtn()">
+                        ${thumb}
                         <div class="cur-body">
                             <a class="cur-title" href="${encodeURI(it.url)}" target="_blank" rel="noopener">${escapeHtml(it.title || it.url)}</a>
-                            <div class="cur-tags"><span>feed: ${escapeHtml(it.feedId)}</span></div>
+                            <div class="cur-tags"><span>${relTime(it.pubDate)}</span></div>
                         </div>
                         <span class="cur-rowstatus" id="cur-st-${i}"></span>
                     </div>`;
                 }
                 html += '</div>';
-            }
+            });
             box.innerHTML = html;
             updateGenerateBtn();
         }
@@ -1109,11 +1162,12 @@
                 const data = await res.json();
                 renderTitles(data);
                 const s = data.stats || {};
-                const total = (data.blocks || []).reduce((n, b) => n + b.items.length, 0);
+                const feeds = data.feeds || [];
+                const total = feeds.reduce((n, f) => n + f.items.length, 0);
                 document.getElementById('cur-summary').textContent =
-                    `${total} título(s) en ${(data.blocks || []).length} bloque(s) · ${s.pulled || 0} ítems desde ${s.feedsPulled || 0} feeds`;
+                    `${total} título(s) en ${feeds.length} feed(s) · ${s.pulled || 0} ítems pulidos desde ${s.feedsPulled || 0} feeds`;
                 setStatus('status-curate', total ? 'success' : 'idle', `${total} titles`);
-                addLog(`🤖 ${total} titles ready across ${(data.blocks || []).length} blocks`, total ? 'success' : 'warning');
+                addLog(`🤖 ${total} titles ready across ${feeds.length} feeds`, total ? 'success' : 'warning');
                 (data.feedErrors || []).forEach(fe => addLog(`⚠️ Feed error ${fe.feedId}: ${fe.error}`, 'warning'));
             } catch (e) {
                 setStatus('status-curate', 'error', 'Error');
