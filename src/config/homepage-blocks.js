@@ -16,8 +16,8 @@
 
 export const HOMEPAGE_BLOCKS = [
   // ── Layer 1: curated locals (propose, human approves) ──────────────────
-  { front: 'PrincipalSection',          label: 'Principal',            slots: 6,  layer: 1, requiresImage: true,  eligibleFeeds: ['primera-plana', 'instituciones', 'local', 'local-facebook'] },
-  { front: 'NoticiasImportantesSection', label: 'Noticias Importantes', slots: 4,  layer: 1, requiresImage: true,  eligibleFeeds: ['primera-plana', 'instituciones', 'local', 'local-facebook'] },
+  { front: 'PrincipalSection',          label: 'Principal',            slots: 6,  layer: 1, requiresImage: true,  eligibleFeeds: ['instituciones', 'local', 'local-facebook'] },
+  { front: 'NoticiasImportantesSection', label: 'Noticias Importantes', slots: 4,  layer: 1, requiresImage: true,  eligibleFeeds: ['instituciones', 'local', 'local-facebook'] },
   { front: 'PueblosAlemanesSection',    label: 'Pueblos Alemanes',     slots: 4,  layer: 1, requiresImage: true,  eligibleFeeds: ['pueblos-alemanes', 'instituciones', 'local'] },
   { front: 'HuanguelenSection',         label: 'Huanguelén',           slots: 3,  layer: 1, requiresImage: true,  eligibleFeeds: ['huanguelen'] },
   { front: 'LaSextaSection',            label: 'La Sexta',             slots: 8,  layer: 1, requiresImage: true,  eligibleFeeds: ['la-sexta'] },
