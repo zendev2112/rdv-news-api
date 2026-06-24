@@ -568,6 +568,18 @@
             color: #b45309;
         }
 
+        .cur-rowstatus {
+            flex: 0 0 auto;
+            font-size: 14px;
+            font-weight: 700;
+            width: 18px;
+            text-align: center;
+            align-self: center;
+        }
+
+        .cur-rowstatus.ok { color: #059669; }
+        .cur-rowstatus.err { color: #dc2626; }
+
         .cur-empty {
             font-size: 13px;
             color: #9ca3af;
@@ -1065,12 +1077,13 @@
                 for (const it of b.items) {
                     const i = titleItems.length;
                     titleItems.push({ url: it.url, front: b.front, feedId: it.feedId });
-                    html += `<div class="cur-row">
+                    html += `<div class="cur-row" id="cur-row-${i}">
                         <input type="checkbox" class="cur-cb" data-i="${i}" onchange="updateGenerateBtn()">
                         <div class="cur-body">
                             <a class="cur-title" href="${encodeURI(it.url)}" target="_blank" rel="noopener">${escapeHtml(it.title || it.url)}</a>
                             <div class="cur-tags"><span>feed: ${escapeHtml(it.feedId)}</span></div>
                         </div>
+                        <span class="cur-rowstatus" id="cur-st-${i}"></span>
                     </div>`;
                 }
                 html += '</div>';
@@ -1110,40 +1123,54 @@
             }
         }
 
+        // Generate ONE title per request and loop in the browser. Each draft is a
+        // scrape + 3 Gemini calls (~20-40s); batching them in a single request blew
+        // past Vercel's gateway timeout (504). One-at-a-time also gives live progress.
         async function generateSelected() {
-            const checked = [...document.querySelectorAll('.cur-cb:checked')].map(cb => titleItems[+cb.dataset.i]);
-            if (!checked.length) return;
-            const assignments = checked.map(a => ({ url: a.url, front: a.front, role: 'principal', feedId: a.feedId }));
+            const boxes = [...document.querySelectorAll('.cur-cb:checked')];
+            if (!boxes.length) return;
             setStatus('status-curate', 'running', 'Sending');
+            document.getElementById('btn-plan').disabled = true;
             document.getElementById('btn-generate').disabled = true;
-            addLog(`🛠️ Sending ${assignments.length} title(s) to Airtable...`, 'info');
-            try {
-                const res = await fetch(`${API_BASE}/api/agent/curate`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
-                    body: JSON.stringify({ mode: 'execute', assignments })
-                });
-                const data = await res.json().catch(() => ({}));
-                if (res.status === 401) { addLog('❌ token rejected', 'error'); setStatus('status-curate', 'error', 'Auth error'); return; }
-                if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                const results = data.results || [];
-                const ok = results.filter(r => r.status === 'drafted').length;
-                const fail = results.filter(r => r.status === 'failed').length;
-                const deferred = results.filter(r => r.status === 'deferred').length;
-                addLog(`✅ Drafted ${ok}, failed ${fail}${deferred ? `, deferred ${deferred} (run again)` : ''}`, fail ? 'warning' : 'success');
-                setStatus('status-curate', 'success', `Drafted ${ok}`);
-                // Uncheck the ones that made it so a re-send doesn't duplicate.
-                const done = new Set(results.filter(r => r.status === 'drafted').map(r => r.url));
-                document.querySelectorAll('.cur-cb:checked').forEach(cb => {
-                    if (done.has(titleItems[+cb.dataset.i].url)) cb.checked = false;
-                });
-                if (typeof loadCoverage === 'function') loadCoverage();
-            } catch (e) {
-                addLog(`❌ Send failed: ${e.message}`, 'error');
-                setStatus('status-curate', 'error', 'Error');
-            } finally {
+            addLog(`🛠️ Sending ${boxes.length} title(s) to Airtable, one at a time...`, 'info');
+            let ok = 0, fail = 0;
+            for (let n = 0; n < boxes.length; n++) {
+                const cb = boxes[n];
+                const i = +cb.dataset.i;
+                const a = titleItems[i];
+                const st = document.getElementById('cur-st-' + i);
+                if (st) { st.textContent = '⏳'; st.className = 'cur-rowstatus'; }
+                setStatus('status-curate', 'running', `Sending ${n + 1}/${boxes.length}`);
+                try {
+                    const res = await fetch(`${API_BASE}/api/agent/curate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
+                        body: JSON.stringify({ mode: 'execute', assignments: [{ url: a.url, front: a.front, role: 'principal', feedId: a.feedId }] })
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (res.status === 401) { addLog('❌ token rejected', 'error'); setStatus('status-curate', 'error', 'Auth error'); break; }
+                    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                    const r = (data.results || [])[0] || {};
+                    if (r.status === 'drafted') {
+                        ok++; cb.checked = false;
+                        if (st) { st.textContent = '✓'; st.className = 'cur-rowstatus ok'; }
+                    } else {
+                        fail++;
+                        if (st) { st.textContent = '✗'; st.className = 'cur-rowstatus err'; }
+                        addLog(`⚠️ ${a.url}: ${r.error || r.reason || r.status || 'failed'}`, 'warning');
+                    }
+                } catch (e) {
+                    fail++;
+                    if (st) { st.textContent = '✗'; st.className = 'cur-rowstatus err'; }
+                    addLog(`❌ ${a.url}: ${e.message}`, 'error');
+                }
                 updateGenerateBtn();
             }
+            addLog(`✅ Drafted ${ok}, failed ${fail}`, fail ? 'warning' : 'success');
+            setStatus('status-curate', 'success', `Drafted ${ok}`);
+            if (typeof loadCoverage === 'function') loadCoverage();
+            document.getElementById('btn-plan').disabled = false;
+            updateGenerateBtn();
         }
     </script>
 </body>
