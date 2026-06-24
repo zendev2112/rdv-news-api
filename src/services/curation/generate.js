@@ -1,28 +1,94 @@
+import axios from 'axios'
 import {
   processArticleFromUrl,
   isSocialMediaUrl,
   getSocialMediaType,
-  extractSourceName,
 } from '../article-pipeline.js'
+import { extractFromContentHtml } from '../scraper.js'
 import airtableService from '../airtable.js'
 import { filterDuplicates } from './dedup.js'
 import { getBlock } from '../../config/homepage-blocks.js'
+import config from '../../config/index.js'
 
-// Social posts (Facebook/Instagram/…) can't be scraped, so the article pipeline
-// returns null. Mirror the Instituciones/Slack path: save a minimal draft with
-// the post URL in its social field instead of failing. The editor finishes it at
-// the Airtable review gate.
-function buildSocialDraft(url) {
-  const sourceName = extractSourceName(url)
-  const socialType = getSocialMediaType(url)
-  const fields = {
-    title: `Publicación de ${sourceName}`,
-    source: sourceName,
-    article: `Enlace a publicación de ${sourceName}: ${url}`,
-    url,
-    status: 'draft',
+// Fetch a feed's raw rss.app items (with content_text/content_html intact, which
+// the trimmed supply shape drops). Cached per run so multiple social items from
+// the same feed only hit the network once.
+async function fetchRawFeedItems(feedId, cache) {
+  if (cache.has(feedId)) return cache.get(feedId)
+  const section = config.getSection(feedId)
+  let items = []
+  if (section?.rssUrl) {
+    try {
+      const { data } = await axios.get(section.rssUrl, { timeout: 15000 })
+      items = Array.isArray(data?.items) ? data.items : []
+    } catch (err) {
+      console.error(`Failed to fetch raw feed ${feedId}: ${err.message}`)
+    }
   }
+  cache.set(feedId, items)
+  return items
+}
+
+// Replicates fetch-to-airtable.js processArticle()'s social branch: the post text
+// comes from the RSS item (content_text → content_html → summary/title), then the
+// SAME shared pipeline reelaborates it with the social prompts (voseo, no emojis,
+// no "publicó en Facebook"). Image comes from item.image. The post URL is written
+// into its fb-post/ig-post field so the frontend embeds it.
+async function generateSocialDraft(url, feedId, cache) {
+  const items = await fetchRawFeedItems(feedId, cache)
+  const rawItem =
+    items.find((it) => (it.url || it.id) === url) ||
+    { url, title: '', content_text: '' }
+
+  let postText = rawItem.content_text || ''
+  if ((!postText || postText.length < 100) && rawItem.content_html) {
+    const htmlText = extractFromContentHtml(rawItem.content_html)
+    if (htmlText && htmlText.length > postText.length) postText = htmlText
+  }
+  if (!postText || postText.length < 50) {
+    postText = rawItem.summary || rawItem.title || postText
+  }
+  if (!postText || postText.length < 50) return null // nothing to reelaborate
+
+  // Source name from the hostname (matches fetch-to-airtable.js).
+  let sourceName
+  try {
+    const domain = new URL(url).hostname.replace(/^www\./, '')
+    const first = domain.split('.')[0]
+    sourceName = first.charAt(0).toUpperCase() + first.slice(1)
+  } catch {
+    sourceName = rawItem.authors?.[0]?.name || 'Social Media'
+  }
+
+  const fields = await processArticleFromUrl(url, {
+    extractedText: postText,
+    item: rawItem,
+    sourceName,
+  })
+  if (!fields) return null
+
+  // Embed the post in its social field (frontend renders the embed).
+  const socialType = getSocialMediaType(url)
   if (socialType) fields[socialType] = url
+
+  // Dedicated social-section extras (mirror fetch-to-airtable local-facebook).
+  if (feedId === 'local-facebook') {
+    fields.processingStatus = 'completed'
+    if (rawItem.date_published) {
+      fields.postDate = rawItem.date_published
+      try {
+        fields.postDateFormatted = new Date(
+          rawItem.date_published,
+        ).toLocaleDateString('es-AR', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      } catch {}
+    }
+    if (rawItem.content_html) fields.contentHtml = rawItem.content_html
+    if (rawItem.id) fields.postId = rawItem.id
+  }
   return fields
 }
 
@@ -71,20 +137,18 @@ export async function generateDrafts({ assignments = [] } = {}) {
   const batch = toGenerate.slice(0, EXECUTE_BATCH)
   const deferred = toGenerate.slice(EXECUTE_BATCH)
 
+  const rawCache = new Map()
   for (const a of batch) {
     try {
-      let fields = await processArticleFromUrl(a.url)
-      let social = false
+      const social = isSocialMediaUrl(a.url)
+      // Social posts can't be scraped — generate from the RSS post text using the
+      // same social prompts as the main RSS pipeline. Regular URLs scrape as usual.
+      const fields = social
+        ? await generateSocialDraft(a.url, a.feedId, rawCache)
+        : await processArticleFromUrl(a.url)
       if (!fields) {
-        // Social URL → save as a social draft (like Instituciones). A non-social
-        // URL with no extractable content genuinely can't be drafted.
-        if (isSocialMediaUrl(a.url)) {
-          fields = buildSocialDraft(a.url)
-          social = true
-        } else {
-          results.push({ url: a.url, front: a.front, status: 'failed', error: 'insufficient-content' })
-          continue
-        }
+        results.push({ url: a.url, front: a.front, status: 'failed', error: 'insufficient-content' })
+        continue
       }
       // The agent's editorial decision, carried to the homepage at publish time.
       fields.front = a.front
