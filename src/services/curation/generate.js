@@ -1,7 +1,30 @@
-import { processArticleFromUrl } from '../article-pipeline.js'
+import {
+  processArticleFromUrl,
+  isSocialMediaUrl,
+  getSocialMediaType,
+  extractSourceName,
+} from '../article-pipeline.js'
 import airtableService from '../airtable.js'
 import { filterDuplicates } from './dedup.js'
 import { getBlock } from '../../config/homepage-blocks.js'
+
+// Social posts (Facebook/Instagram/…) can't be scraped, so the article pipeline
+// returns null. Mirror the Instituciones/Slack path: save a minimal draft with
+// the post URL in its social field instead of failing. The editor finishes it at
+// the Airtable review gate.
+function buildSocialDraft(url) {
+  const sourceName = extractSourceName(url)
+  const socialType = getSocialMediaType(url)
+  const fields = {
+    title: `Publicación de ${sourceName}`,
+    source: sourceName,
+    article: `Enlace a publicación de ${sourceName}: ${url}`,
+    url,
+    status: 'draft',
+  }
+  if (socialType) fields[socialType] = url
+  return fields
+}
 
 // Each generation scrapes + runs 3 Gemini calls (~10-30s). Vercel maxDuration is
 // 300s, so cap how many we generate per request; the rest come back "deferred"
@@ -50,10 +73,18 @@ export async function generateDrafts({ assignments = [] } = {}) {
 
   for (const a of batch) {
     try {
-      const fields = await processArticleFromUrl(a.url)
+      let fields = await processArticleFromUrl(a.url)
+      let social = false
       if (!fields) {
-        results.push({ url: a.url, front: a.front, status: 'failed', error: 'social-or-insufficient-content' })
-        continue
+        // Social URL → save as a social draft (like Instituciones). A non-social
+        // URL with no extractable content genuinely can't be drafted.
+        if (isSocialMediaUrl(a.url)) {
+          fields = buildSocialDraft(a.url)
+          social = true
+        } else {
+          results.push({ url: a.url, front: a.front, status: 'failed', error: 'insufficient-content' })
+          continue
+        }
       }
       // The agent's editorial decision, carried to the homepage at publish time.
       fields.front = a.front
@@ -63,7 +94,7 @@ export async function generateDrafts({ assignments = [] } = {}) {
       const id = res?.records?.[0]?.id || null
       results.push(
         id
-          ? { url: a.url, front: a.front, status: 'drafted', airtableId: id }
+          ? { url: a.url, front: a.front, status: 'drafted', social, airtableId: id }
           : { url: a.url, front: a.front, status: 'failed', error: 'insert-returned-no-id' },
       )
     } catch (err) {
