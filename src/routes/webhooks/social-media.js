@@ -2,6 +2,7 @@ import express from 'express';
 import Airtable from 'airtable';
 import config from '../../config/index.js';
 import logger from '../../utils/logger.js';
+import { requireWebhookAuth } from '../../middleware/webhookAuth.js';
 
 const router = express.Router();
 
@@ -51,7 +52,7 @@ router.use((req, res, next) => {
 /**
  * Webhook handler for social media exports to Redes Sociales table
  */
-router.post('/social-media', async (req, res) => {
+router.post('/social-media', requireWebhookAuth, async (req, res) => {
   try {
     const payload = req.body;
     logger.info('Received social media export request', { 

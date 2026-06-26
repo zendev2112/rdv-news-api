@@ -4,6 +4,7 @@ import supabaseService from '../services/supabase.js'
 import logger from '../utils/logger.js'
 import socialMediaRouter from './webhooks/social-media.js'
 import { handlePublishStatusChange } from '../services/statusChangeHandler.js'
+import { requireWebhookAuth } from '../middleware/webhookAuth.js'
 
 const router = express.Router()
 
@@ -30,7 +31,7 @@ router.get('/airtable/publish', (req, res) => {
  * Webhook endpoint to receive publish events from Airtable
  * This is triggered when the "publish" button is clicked in Airtable
  */
-router.post('/airtable/publish', async (req, res) => {
+router.post('/airtable/publish', requireWebhookAuth, async (req, res) => {
   try {
     logger.info('Received publish webhook from Airtable')
 
