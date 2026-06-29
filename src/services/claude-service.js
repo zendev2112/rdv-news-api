@@ -103,7 +103,9 @@ export async function listBatches(limit = 20) {
  */
 export async function getBatchResults(batchId) {
   const out = []
-  for await (const r of client().messages.batches.results(batchId)) {
+  // results() returns Promise<JSONLDecoder> — must await before iterating.
+  const decoder = await client().messages.batches.results(batchId)
+  for await (const r of decoder) {
     out.push(r)
   }
   return out

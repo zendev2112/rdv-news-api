@@ -139,37 +139,60 @@ export default async function handler(req, res) {
   }
 
   // ── 3. Submit: one batch for unreviewed drafts (capped) ───────────────────
+  // CLAIM-FIRST: write a provisional PENDING marker BEFORE submitting, and only
+  // batch drafts we could actually write to. A table missing the aiReview field
+  // fails the claim and is excluded — so an unwritable draft never reaches the
+  // (paid) batch and never triggers the resubmit loop. The marker is patched
+  // with the real batch id after submit.
   let submittedBatchId = null
   let submittedCount = 0
+  const skippedNoField = []
   const batch = unreviewed.slice(0, MAX_PER_RUN)
   if (batch.length > 0) {
-    const requests = batch.map((d) =>
-      buildReviewRequest(d.recordId, d.fields),
-    )
-    try {
-      const created = await submitBatch(requests)
+    const provisional = `${PENDING_PREFIX} claiming · ${new Date().toISOString()}`
+    const claimable = []
+    for (const d of batch) {
+      try {
+        await airtableService.updateRecord(
+          d.recordId,
+          { aiReview: provisional },
+          d.tableName,
+        )
+        claimable.push(d)
+      } catch (err) {
+        skippedNoField.push({ table: d.tableName, recordId: d.recordId })
+        console.error(
+          `[cron/review] cannot claim ${d.tableName}/${d.recordId} — skipping, not batched (aiReview field missing?): ${err.message}`,
+        )
+      }
+    }
+
+    if (claimable.length > 0) {
+      let created
+      try {
+        created = await submitBatch(
+          claimable.map((d) => buildReviewRequest(d.recordId, d.fields)),
+        )
+      } catch (err) {
+        // Revert provisional claims so they retry next run instead of orphaning.
+        for (const d of claimable) {
+          try {
+            await airtableService.updateRecord(d.recordId, { aiReview: '' }, d.tableName)
+          } catch {}
+        }
+        console.error('[cron/review] submitBatch failed:', err.message)
+        return res.status(502).json({ ok: false, error: err.message })
+      }
       submittedBatchId = created.id
-      const stamp = new Date().toISOString()
-      const marker = `${PENDING_PREFIX} ${created.id} · ${stamp}`
-      // Claim each draft so the next run doesn't resubmit it.
-      for (const d of batch) {
+      const marker = `${PENDING_PREFIX} ${created.id} · ${new Date().toISOString()}`
+      for (const d of claimable) {
         try {
-          await airtableService.updateRecord(
-            d.recordId,
-            { aiReview: marker },
-            d.tableName,
-          )
+          await airtableService.updateRecord(d.recordId, { aiReview: marker }, d.tableName)
           submittedCount++
         } catch (err) {
-          console.error(
-            `[cron/review] claim failed ${d.recordId}:`,
-            err.message,
-          )
+          console.error(`[cron/review] batch-id update failed ${d.recordId}: ${err.message}`)
         }
       }
-    } catch (err) {
-      console.error('[cron/review] submitBatch failed:', err.message)
-      return res.status(502).json({ ok: false, error: err.message })
     }
   }
 
@@ -183,6 +206,7 @@ export default async function handler(req, res) {
     submittedBatchId,
     submittedCount,
     deferred: Math.max(0, unreviewed.length - batch.length),
+    skippedNoField,
     retrieveErrors,
   })
 }
