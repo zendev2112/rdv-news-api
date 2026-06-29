@@ -98,6 +98,7 @@
   "license": "ISC",
   "description": "API for publishing Airtable records to Supabase",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.106.0",
     "@google-cloud/storage": "^7.16.0",
     "@google/generative-ai": "^0.24.0",
     "@mozilla/readability": "^0.6.0",

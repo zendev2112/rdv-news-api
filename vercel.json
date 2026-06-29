@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/test?section=quiniela&limit=5",
       "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/cron/review",
+      "schedule": "0 * * * *"
     }
   ],
   "builds": [
@@ -67,6 +71,10 @@
     {
       "src": "/api/cron/low",
       "dest": "/api/cron/low.js"
+    },
+    {
+      "src": "/api/cron/review",
+      "dest": "/api/cron/review.js"
     },
     {
       "src": "/api/fetch/all",
