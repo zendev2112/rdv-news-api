@@ -405,6 +405,10 @@ function formatTextAsFallback(text) {
 
 // ── Core AI steps ────────────────────────────────────────────────────
 
+// Returns { text, fallback } where fallback is:
+//   null      → real reelaboration succeeded
+//   'error'   → AI call threw or returned empty (key dead, API disabled, timeout)
+//   'content' → AI worked but output was too thin (legit: source had little to say)
 async function reelaborateText(
   extractedText,
   imageMarkdown,
@@ -426,7 +430,8 @@ async function reelaborateText(
         )
 
     const result = await generateContent(prompt, { maxTokens: 8192 })
-    if (!result.text) return formatTextAsFallback(extractedText)
+    if (!result.text)
+      return { text: formatTextAsFallback(extractedText), fallback: 'error' }
 
     let processedText = cleanCodeBlocks(result.text)
 
@@ -441,16 +446,17 @@ async function reelaborateText(
     const wordCount = processedText
       .split(/\s+/)
       .filter((w) => w.length > 0).length
-    if (wordCount < 80) return formatTextAsFallback(extractedText)
+    if (wordCount < 80)
+      return { text: formatTextAsFallback(extractedText), fallback: 'content' }
     if (isSocial && wordCount > 600) {
       processedText = processedText.split(/\s+/).slice(0, 500).join(' ')
     }
 
     processedText = cleanFillerPhrases(processedText)
-    return postProcessText(processedText)
+    return { text: postProcessText(processedText), fallback: null }
   } catch (error) {
     console.error('Error reelaborating text:', error.message)
-    return formatTextAsFallback(extractedText)
+    return { text: formatTextAsFallback(extractedText), fallback: 'error' }
   }
 }
 
@@ -513,10 +519,11 @@ async function generateArticleMetadata(
         parsed.volanta = volantaWords.slice(0, 4).join(' ')
     }
 
+    parsed.fallback = null
     return parsed
   } catch (error) {
     console.error('Error generating metadata:', error.message)
-    return generateFallbackMetadata(extractedText)
+    return { ...generateFallbackMetadata(extractedText), fallback: 'error' }
   }
 }
 
@@ -534,7 +541,7 @@ async function generateArticleTags(extractedText, metadata) {
     if (!Array.isArray(tags) || tags.length === 0)
       throw new Error('Invalid tags')
 
-    return tags
+    const formatted = tags
       .map((tag) =>
         tag
           .split(' ')
@@ -542,9 +549,10 @@ async function generateArticleTags(extractedText, metadata) {
           .join(' '),
       )
       .join(', ')
+    return { tags: formatted, fallback: null }
   } catch (error) {
     console.error('Error generating tags:', error.message)
-    return generateFallbackTags(extractedText, metadata)
+    return { tags: generateFallbackTags(extractedText, metadata), fallback: 'error' }
   }
 }
 
@@ -633,13 +641,14 @@ export async function processArticleFromUrl(url, options = {}) {
   // ── 3. AI: article → metadata → tags (sequential to avoid rate limits) ──
   const item = options.item || { url, title: '', content_text: text }
 
-  const article = await reelaborateText(
+  const articleResult = await reelaborateText(
     text,
     imageMarkdown,
     isSocial,
     item,
     sourceName,
   )
+  const article = articleResult.text
 
   const metadata = await generateArticleMetadata(
     text,
@@ -652,7 +661,26 @@ export async function processArticleFromUrl(url, options = {}) {
   const tagText = isSocial
     ? `${metadata.title} ${metadata.bajada} ${article}`
     : text
-  const tags = await generateArticleTags(tagText, metadata)
+  const tagsResult = await generateArticleTags(tagText, metadata)
+  const tags = tagsResult.tags
+
+  // Surface generation health to callers that opt in (curation passes a
+  // diagnostics object). `aiError` means a Gemini call actually failed —
+  // distinct from a thin-content fallback, which is legitimate. This lets the
+  // curation pipeline refuse to save silently-degraded drafts.
+  if (options.diagnostics && typeof options.diagnostics === 'object') {
+    const steps = {
+      reelaborate: articleResult.fallback,
+      metadata: metadata.fallback ?? null,
+      tags: tagsResult.fallback,
+    }
+    options.diagnostics.steps = steps
+    options.diagnostics.aiError = Object.values(steps).some(
+      (f) => f === 'error',
+    )
+    // The article body is the part that matters most for publish quality.
+    options.diagnostics.contentFallback = articleResult.fallback !== null
+  }
 
   // ── 4. Build record fields ─────────────────────────────────────────
   // Image attachments with fallback chain (matching RSS pipeline)

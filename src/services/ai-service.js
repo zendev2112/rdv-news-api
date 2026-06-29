@@ -69,6 +69,31 @@ export async function generateContent(prompt, options = {}) {
 }
 
 /**
+ * Cheap liveness probe for the Gemini key/API. One tiny call, thinking disabled.
+ *
+ * Returns { ok: true } when generation works, or { ok: false, error } when the
+ * key is invalid, the Generative Language API is disabled on the project, or the
+ * service is unreachable. Callers use this to abort a run loudly instead of
+ * silently producing fallback (non-reelaborated) drafts — the exact failure mode
+ * that hid a disabled API in production.
+ */
+export async function checkGeminiHealth() {
+  try {
+    const result = await generateContent('Respondé únicamente con: OK', {
+      maxTokens: 16,
+      thinkingBudget: 0, // no thinking — don't starve a 16-token budget
+      timeout: 15000,
+    })
+    if (!result.text || !result.text.trim()) {
+      return { ok: false, error: 'Gemini returned an empty response' }
+    }
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error.message }
+  }
+}
+
+/**
  * Batch generate content for multiple prompts
  */
 export async function batchGenerateContent(prompts, options = {}) {

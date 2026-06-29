@@ -41,7 +41,16 @@ export default async function handler(req, res) {
     try {
       // Lazy import: keeps the heavy generation pipeline out of list-mode cold start.
       const { generateDrafts } = await import('../../src/services/curation/generate.js')
-      const { results } = await generateDrafts({ assignments })
+      const { results, aborted, error: genError } = await generateDrafts({ assignments })
+      // Liveness gate tripped (Gemini down) — report 503 so the caller knows the
+      // run produced nothing usable, rather than a 200 full of fallback drafts.
+      if (aborted) {
+        return res.status(503).json({
+          generatedAt: new Date().toISOString(),
+          error: genError,
+          results,
+        })
+      }
       return res.status(200).json({ generatedAt: new Date().toISOString(), results })
     } catch (error) {
       console.error('curate execute error:', error)

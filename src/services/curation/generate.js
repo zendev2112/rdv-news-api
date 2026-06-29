@@ -9,6 +9,7 @@ import airtableService from '../airtable.js'
 import { filterDuplicates } from './dedup.js'
 import { getBlock } from '../../config/homepage-blocks.js'
 import config from '../../config/index.js'
+import { checkGeminiHealth } from '../ai-service.js'
 
 // Fetch a feed's raw rss.app items (with content_text/content_html intact, which
 // the trimmed supply shape drops). Cached per run so multiple social items from
@@ -34,7 +35,7 @@ async function fetchRawFeedItems(feedId, cache) {
 // SAME shared pipeline reelaborates it with the social prompts (voseo, no emojis,
 // no "publicó en Facebook"). Image comes from item.image. The post URL is written
 // into its fb-post/ig-post field so the frontend embeds it.
-async function generateSocialDraft(url, feedId, cache) {
+async function generateSocialDraft(url, feedId, cache, diagnostics) {
   const items = await fetchRawFeedItems(feedId, cache)
   const rawItem =
     items.find((it) => (it.url || it.id) === url) ||
@@ -64,6 +65,7 @@ async function generateSocialDraft(url, feedId, cache) {
     extractedText: postText,
     item: rawItem,
     sourceName,
+    diagnostics,
   })
   if (!fields) return null
 
@@ -137,17 +139,43 @@ export async function generateDrafts({ assignments = [] } = {}) {
   const batch = toGenerate.slice(0, EXECUTE_BATCH)
   const deferred = toGenerate.slice(EXECUTE_BATCH)
 
+  // Liveness gate: one cheap Gemini probe before generating anything. If the key
+  // is dead or the Generative Language API is disabled, abort the whole run with a
+  // clear error instead of silently writing fallback (non-reelaborated) drafts —
+  // the failure mode that hid a disabled API in production.
+  if (batch.length > 0) {
+    const health = await checkGeminiHealth()
+    if (!health.ok) {
+      for (const a of toGenerate) {
+        results.push({
+          url: a.url,
+          front: a.front,
+          status: 'failed',
+          error: `gemini-unavailable: ${health.error}`,
+        })
+      }
+      return { results, aborted: true, error: `gemini-unavailable: ${health.error}` }
+    }
+  }
+
   const rawCache = new Map()
   for (const a of batch) {
     try {
       const social = isSocialMediaUrl(a.url)
+      const diagnostics = {}
       // Social posts can't be scraped — generate from the RSS post text using the
       // same social prompts as the main RSS pipeline. Regular URLs scrape as usual.
       const fields = social
-        ? await generateSocialDraft(a.url, a.feedId, rawCache)
-        : await processArticleFromUrl(a.url)
+        ? await generateSocialDraft(a.url, a.feedId, rawCache, diagnostics)
+        : await processArticleFromUrl(a.url, { diagnostics })
       if (!fields) {
         results.push({ url: a.url, front: a.front, status: 'failed', error: 'insufficient-content' })
+        continue
+      }
+      // Loud failure: a Gemini call errored mid-run (rate limit, timeout, key
+      // revoked between probe and now). Refuse to save a silently-degraded draft.
+      if (diagnostics.aiError) {
+        results.push({ url: a.url, front: a.front, status: 'failed', error: 'generation-failed (gemini error mid-run)' })
         continue
       }
       // The agent's editorial decision, carried to the homepage at publish time.
