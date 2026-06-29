@@ -10,7 +10,7 @@
  *   - src/routes/slack-integration.js (Express fallback)
  */
 
-import { generateContent } from './ai-service.js'
+import { generateContent, classifyImageForUse } from './ai-service.js'
 import * as cheerio from 'cheerio'
 import {
   fetchContent,
@@ -31,7 +31,7 @@ import {
   extractYoutubeEmbeds,
 } from './embeds/index.js'
 import { enforceRioplatense } from '../utils/rioplatense.js'
-import { classifySource } from '../config/source-registry.js'
+import { classifySource, imageDecision } from '../config/source-registry.js'
 
 // ── Utility functions ────────────────────────────────────────────────
 
@@ -719,6 +719,29 @@ export async function processArticleFromUrl(url, options = {}) {
       imageAttachments = [{ url: attachUrl }]
       images = [attachUrl]
     }
+  }
+
+  // ── Image rights gate ──────────────────────────────────────────────
+  // Institutional sources (imagePolicy 'all') keep their images untouched. For
+  // otros medios / unknown (flyers-only), a vision check decides flyer (keep)
+  // vs. their own photograph (drop, publish text-only). Checks the lead image;
+  // drops all on a photo. Fails open — vision errors never silently lose images.
+  let imageNote = null
+  if (images.length > 0 && source.imagePolicy !== 'all') {
+    const vision = await classifyImageForUse(images[0])
+    const decision = imageDecision(source, vision.isFlyer)
+    if (decision.allowed === false) {
+      imageNote = `imagen descartada: ${decision.reason}${vision.watermark ? `; marca: ${vision.watermark}` : ''}`
+      images = []
+      imageAttachments = []
+    } else if (vision.watermark) {
+      imageNote = `imagen con marca de agua: ${vision.watermark}`
+    } else if (decision.allowed === null) {
+      imageNote = `imagen sin verificar: ${decision.reason}`
+    }
+  }
+  if (options.diagnostics && typeof options.diagnostics === 'object') {
+    options.diagnostics.imageNote = imageNote
   }
 
   const fields = {
