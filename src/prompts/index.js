@@ -31,6 +31,8 @@ export function formatSourceDate(d) {
  * @param {string} extractedText - Raw text extracted from the source URL
  * @param {Object} [opts]
  * @param {string} [opts.sourceDate] - Source publish date (for relative→absolute conversion)
+ * @param {boolean} [opts.attribute]  - Source is another medio → require attribution
+ * @param {string} [opts.sourceName]  - Name to attribute to (e.g. "La Nueva Radio Suárez")
  * @returns {string}
  */
 export function reelaborateArticle(extractedText, opts = {}) {
@@ -41,13 +43,20 @@ FECHA DE PUBLICACIÓN DE LA FUENTE: ${sourceDate}
 CONVERSIÓN DE FECHAS (OBLIGATORIO): la fuente se publicó en esa fecha. Convertí TODA referencia temporal relativa ("ayer", "hoy", "mañana", "anoche", "este viernes", "el próximo lunes", "esta semana", "el fin de semana") a su fecha absoluta (ej.: "el martes 24 de junio"). Si una referencia no se puede resolver con certeza a partir de esa fecha, omitila o reformulala sin inventar una fecha.
 `
     : ''
+  const attributionBlock =
+    opts.attribute && opts.sourceName
+      ? `
+ATRIBUCIÓN (OBLIGATORIO): la información proviene de ${opts.sourceName}, otro medio. Atribuíla explícitamente al menos una vez (ej.: "según informó ${opts.sourceName}"). NO la presentes como reporteo propio de Radio del Volga.
+INTEGRIDAD DE FUENTES (OBLIGATORIO): si el texto trae citas textuales de una entrevista hecha por otro medio (señaladas con "en diálogo con", "dijo a", "declaró a", "en una entrevista con", "consultó a", "respondió"), NO reproduzcas esas citas entre comillas: parafraseá el hecho informado y atribuilo a ${opts.sourceName}. Nunca presentes una entrevista realizada por otro medio como si fuera propia.
+`
+      : ''
   return `Sos un redactor SEO de un medio digital argentino llamado Radio del Volga. Tu tarea es reescribir el siguiente artículo para máximo rendimiento en buscadores y legibilidad web.
 
 TEXTO ORIGINAL:
 """
 ${extractedText.substring(0, 6000)}
 """
-${dateBlock}
+${dateBlock}${attributionBlock}
 OBJETIVO: Artículo periodístico optimizado para SEO, conciso, atractivo y escaneable. NO inflés ni rellenes. Si la información original es breve, el artículo debe ser breve. Calidad > cantidad.
 
 EXTENSIÓN ADAPTATIVA:

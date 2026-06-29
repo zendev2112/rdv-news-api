@@ -31,6 +31,7 @@ import {
   extractYoutubeEmbeds,
 } from './embeds/index.js'
 import { enforceRioplatense } from '../utils/rioplatense.js'
+import { classifySource } from '../config/source-registry.js'
 
 // ── Utility functions ────────────────────────────────────────────────
 
@@ -416,6 +417,7 @@ async function reelaborateText(
   item,
   sourceName,
   sourceDate,
+  sourceOpts = {},
 ) {
   try {
     const prompt = isSocial
@@ -428,7 +430,11 @@ async function reelaborateText(
           imageMarkdown
             ? `${extractedText}\n\n${imageMarkdown}`
             : extractedText,
-          { sourceDate },
+          {
+            sourceDate,
+            attribute: sourceOpts.attribute,
+            sourceName: sourceOpts.attributionName,
+          },
         )
 
     const result = await generateContent(prompt, { maxTokens: 8192 })
@@ -575,6 +581,15 @@ export async function processArticleFromUrl(url, options = {}) {
   const isSocial = isSocialMediaUrl(url)
   const sourceName = options.sourceName || extractSourceName(url)
 
+  // Classify the origin (institutional vs. otro medio) to drive attribution and
+  // the no-lifted-interviews rule. Use the registry's proper name when known
+  // (e.g. "La Nueva Radio Suárez") so attribution reads correctly.
+  const source = classifySource(url, options.feedId)
+  const attribute = source.requireAttribution === true
+  const isNamedSource =
+    source.id !== 'unknown' && !String(source.id).startsWith('feed:')
+  const attributionName = isNamedSource ? source.name : sourceName
+
   // ── 1. Scrape ──────────────────────────────────────────────────────
   let html = options.html || ''
   let text = options.extractedText || ''
@@ -654,6 +669,7 @@ export async function processArticleFromUrl(url, options = {}) {
     item,
     sourceName,
     sourceDate,
+    { attribute, attributionName },
   )
   const article = articleResult.text
 
