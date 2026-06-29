@@ -167,7 +167,11 @@ export async function generateDrafts({ assignments = [] } = {}) {
       // same social prompts as the main RSS pipeline. Regular URLs scrape as usual.
       const fields = social
         ? await generateSocialDraft(a.url, a.feedId, rawCache, diagnostics)
-        : await processArticleFromUrl(a.url, { diagnostics })
+        : await processArticleFromUrl(a.url, {
+            diagnostics,
+            sourceDate: a.pubDate,
+            feedId: a.feedId,
+          })
       if (!fields) {
         results.push({ url: a.url, front: a.front, status: 'failed', error: 'insufficient-content' })
         continue

@@ -6,18 +6,48 @@
  */
 
 /**
+ * Format a source publish date as an absolute Spanish (es-AR) date, or null.
+ * Used to let the model resolve relative references ("ayer", "hoy") that are
+ * relative to when the SOURCE published — wrong once we republish later.
+ */
+export function formatSourceDate(d) {
+  if (!d) return null
+  try {
+    const date = new Date(d)
+    if (Number.isNaN(date.getTime())) return null
+    return date.toLocaleDateString('es-AR', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+  } catch {
+    return null
+  }
+}
+
+/**
  * Prompt for rewriting a regular article from extracted web content.
  * @param {string} extractedText - Raw text extracted from the source URL
+ * @param {Object} [opts]
+ * @param {string} [opts.sourceDate] - Source publish date (for relative→absolute conversion)
  * @returns {string}
  */
-export function reelaborateArticle(extractedText) {
+export function reelaborateArticle(extractedText, opts = {}) {
+  const sourceDate = formatSourceDate(opts.sourceDate)
+  const dateBlock = sourceDate
+    ? `
+FECHA DE PUBLICACIÓN DE LA FUENTE: ${sourceDate}
+CONVERSIÓN DE FECHAS (OBLIGATORIO): la fuente se publicó en esa fecha. Convertí TODA referencia temporal relativa ("ayer", "hoy", "mañana", "anoche", "este viernes", "el próximo lunes", "esta semana", "el fin de semana") a su fecha absoluta (ej.: "el martes 24 de junio"). Si una referencia no se puede resolver con certeza a partir de esa fecha, omitila o reformulala sin inventar una fecha.
+`
+    : ''
   return `Sos un redactor SEO de un medio digital argentino llamado Radio del Volga. Tu tarea es reescribir el siguiente artículo para máximo rendimiento en buscadores y legibilidad web.
 
 TEXTO ORIGINAL:
 """
 ${extractedText.substring(0, 6000)}
 """
-
+${dateBlock}
 OBJETIVO: Artículo periodístico optimizado para SEO, conciso, atractivo y escaneable. NO inflés ni rellenes. Si la información original es breve, el artículo debe ser breve. Calidad > cantidad.
 
 EXTENSIÓN ADAPTATIVA:
@@ -87,7 +117,11 @@ RESPUESTA: Devolver ÚNICAMENTE el artículo reescrito. Sin explicaciones, sin c
  */
 export function reelaborateSocialMedia(postText, item, sourceName) {
   const author = item.authors?.[0]?.name || sourceName || 'Institución local'
-  const date = item.date_published || 'Reciente'
+  const absoluteDate = formatSourceDate(item.date_published)
+  const date = absoluteDate || item.date_published || 'Reciente'
+  const dateRule = absoluteDate
+    ? `\nCONVERSIÓN DE FECHAS (OBLIGATORIO): la publicación es de la FECHA indicada. Convertí toda referencia relativa ("ayer", "hoy", "mañana", "este viernes", "esta semana") a su fecha absoluta. No inventes fechas que no se puedan deducir.`
+    : ''
 
   return `Sos un redactor SEO de un medio digital argentino llamado Radio del Volga. Reescribí esta publicación como artículo periodístico. Tu única fuente es el texto a continuación — no agregues ni inventes nada.
 
@@ -97,7 +131,7 @@ ${postText.substring(0, 3000)}
 """
 
 FUENTE: ${author}
-FECHA: ${date}
+FECHA: ${date}${dateRule}
 
 REGLA FUNDAMENTAL: El artículo solo puede contener información que esté explícitamente en la publicación original. Si la publicación tiene 3 datos, el artículo tiene 3 datos. Prohibido agregar contexto, antecedentes, proyecciones ni información externa.
 

@@ -415,6 +415,7 @@ async function reelaborateText(
   isSocial,
   item,
   sourceName,
+  sourceDate,
 ) {
   try {
     const prompt = isSocial
@@ -427,6 +428,7 @@ async function reelaborateText(
           imageMarkdown
             ? `${extractedText}\n\n${imageMarkdown}`
             : extractedText,
+          { sourceDate },
         )
 
     const result = await generateContent(prompt, { maxTokens: 8192 })
@@ -641,12 +643,17 @@ export async function processArticleFromUrl(url, options = {}) {
   // ── 3. AI: article → metadata → tags (sequential to avoid rate limits) ──
   const item = options.item || { url, title: '', content_text: text }
 
+  // Source publish date drives relative→absolute date conversion in the prompt.
+  const sourceDate =
+    options.sourceDate || item.date_published || item.pubDate || null
+
   const articleResult = await reelaborateText(
     text,
     imageMarkdown,
     isSocial,
     item,
     sourceName,
+    sourceDate,
   )
   const article = articleResult.text
 
