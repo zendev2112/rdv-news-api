@@ -41,7 +41,12 @@ const PROPER_NOUNS = [
   'Argentina',
   'Buenos Aires',
   'Coronel Suárez',
+  'Suárez',
+  'Sarmiento',
   'Huanguelén',
+  'Pueblos Alemanes',
+  'Santa Trinidad',
+  'Villa Belgrano',
   'Facebook',
   'Instagram',
   'Twitter',
@@ -54,18 +59,29 @@ const PROPER_NOUNS = [
   'WTA',
 ]
 
+// Sentence-case helper. CRITICAL: it must NOT lowercase proper nouns the model
+// already capitalized ("Suárez", "Sarmiento"). So we TRUST the model's casing and
+// only intervene on a pathological ALL-CAPS string (rare). The previous version
+// force-lowercased every non-first word, turning "Ambiente Suárez" → "Ambiente
+// suárez" — the bug this fixes.
 export function toSentenceCase(text) {
   if (!text) return ''
-  const words = text.trim().split(/\s+/)
-  return words
+  const trimmed = text.trim()
+  const letters = trimmed.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g, '')
+  const isAllCaps = letters.length > 1 && letters === letters.toUpperCase()
+  const base = isAllCaps ? trimmed.toLowerCase() : trimmed
+  return base
+    .split(/\s+/)
     .map((word, i) => {
       const proper = PROPER_NOUNS.find(
         (n) => word.toLowerCase() === n.toLowerCase(),
       )
       if (proper) return proper
-      if (i === 0)
-        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-      return word.toLowerCase()
+      // Capitalize the first word if the model left it lowercase; otherwise keep
+      // the model's casing verbatim (preserves proper nouns mid-sentence).
+      if (i === 0 && /^[a-záéíóúüñ]/.test(word))
+        return word.charAt(0).toUpperCase() + word.slice(1)
+      return word
     })
     .join(' ')
 }
@@ -579,7 +595,9 @@ async function generateArticleTags(extractedText, metadata) {
     if (!Array.isArray(tags) || tags.length === 0)
       throw new Error('Invalid tags')
 
+    // Hard cap: 4 tags max, even if the model overshoots.
     const formatted = tags
+      .slice(0, 4)
       .map((tag) =>
         tag
           .split(' ')

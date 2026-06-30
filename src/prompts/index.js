@@ -261,10 +261,10 @@ Generá exactamente 3 campos en formato JSON:
 3. "volanta" — Cintillo superior:
    - Máximo 3 palabras
    - Indica el tema general o categoría
-   - Sentence case
+   - Sentence case, PERO con los nombres propios en mayúscula (lugares, personas, instituciones). PROHIBIDO escribir todo en mayúsculas y PROHIBIDO dejar un nombre propio en minúscula (ej. correcto: "Ambiente Suárez", "Cultura local"; MAL: "ambiente suárez", "AMBIENTE SUÁREZ")
    - No repetir palabras del título
    - SIN MARKDOWN
-   - Ejemplos: "Economía nacional", "Salud pública", "Política local"
+   - Ejemplos: "Economía nacional", "Salud pública", "Pueblos Alemanes"
 
 RESPUESTA: Devolver SOLO el JSON, sin explicaciones ni bloques de código.
 
@@ -308,9 +308,9 @@ Generá exactamente 3 campos en formato JSON:
 
 3. "volanta" — Cintillo superior:
    - Máximo 3 palabras
-   - Sentence case
+   - Sentence case, PERO con los nombres propios en mayúscula (lugares, personas, instituciones). PROHIBIDO todo en mayúsculas y PROHIBIDO dejar un nombre propio en minúscula (ej. correcto: "Ambiente Suárez", "Cultura local"; MAL: "ambiente suárez")
    - SIN MARKDOWN
-   - Ejemplos: "Cultura local", "Actividades municipales", "Convocatorias"
+   - Ejemplos: "Cultura local", "Actividades municipales", "Pueblos Alemanes"
 
 PROHIBIDO mencionar: Facebook, Instagram, Twitter, YouTube, redes sociales, "según publicó", "compartió en"
 
@@ -329,23 +329,25 @@ export function generateTags(extractedText, metadata) {
   const title = metadata?.title || ''
   const bajada = metadata?.bajada || ''
 
-  return `Analizá este artículo y generá entre 5 y 8 etiquetas (tags) relevantes.
+  return `Analizá este artículo y generá entre 3 y 4 etiquetas (tags) ESPECÍFICAS y útiles para clasificar y buscar la nota.
 
 TÍTULO: ${title}
 BAJADA: ${bajada}
 CONTENIDO: "${extractedText.substring(0, 3000)}"
 
+QUÉ ES UNA BUENA ETIQUETA:
+- Un nombre propio concreto del texto: persona, lugar, institución o evento (ej.: "Coronel Suárez", "Orquesta Escuela", "Plan FinEs", "Boca Juniors").
+- El tema o categoría real de la nota (ej.: "Educación", "Obras públicas", "Vóley", "Salud").
+- Algo que sirva para AGRUPAR esta nota con otras del mismo protagonista o tema. Si una etiqueta no sirve para agrupar, no va.
+
 REGLAS:
-1. Identificá nombres propios (personas, lugares, organizaciones, eventos)
-2. Identificá temas principales
-3. Cada etiqueta: 1 a 3 palabras
-4. NO usar hashtags (#)
-5. Priorizar sustantivos y conceptos concretos
-6. NO incluir palabras genéricas como "noticia", "actualidad", "información"
-7. Incluir al menos 1 nombre propio si existe en el texto
-8. Incluir al menos 1 tema/categoría temática
+1. MÁXIMO 4 etiquetas. Mejor 3 buenas que 4 con relleno. Si solo hay 2 que valen, devolvé 2.
+2. Cada etiqueta: 1 a 3 palabras. Capitalizá bien los nombres propios.
+3. PROHIBIDAS las etiquetas genéricas o inútiles: "noticia", "noticias", "actualidad", "información", "novedades", "interés general", "comunidad", "local", "hoy", "Argentina" (salvo que el país sea el tema central).
+4. Nada de hashtags (#), nada de verbos, nada de frases ni oraciones.
+5. Priorizá nombres propios y conceptos concretos por sobre términos vagos.
 
-Responder SOLO con un array JSON. Sin explicaciones.
+Responder SOLO con un array JSON, sin explicaciones.
 
-["etiqueta1", "etiqueta2", "etiqueta3", "etiqueta4", "etiqueta5"]`
+["Etiqueta1", "Etiqueta2", "Etiqueta3"]`
 }
