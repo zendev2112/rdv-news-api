@@ -32,7 +32,7 @@ import {
   extractYoutubeEmbeds,
 } from './embeds/index.js'
 import { enforceRioplatense } from '../utils/rioplatense.js'
-import { classifySource, imageDecision } from '../config/source-registry.js'
+import { classifySource, imageDecision, sources as registrySources } from '../config/source-registry.js'
 import { detectInterview } from './curation/content-type.js'
 
 // ── Utility functions ────────────────────────────────────────────────
@@ -84,6 +84,66 @@ export function toSentenceCase(text) {
       return word
     })
     .join(' ')
+}
+
+// Proper-noun map (lowercase form → canonical casing) for sentence-case
+// enforcement. Built from the base list above + the source registry (local
+// institutions/medios and their significant name tokens), so local names like
+// "Sarmiento", "Centro Deportivo Sarmiento", "Coronel Suárez" keep their capitals
+// while ordinary words get lowercased.
+const PROPER_NOUN_MAP = (() => {
+  const map = new Map()
+  const minor = /^(de|del|la|el|los|las|y|e|o|u|en|a|con|por|para|un|una)$/i
+  const add = (phrase) => {
+    if (phrase && phrase.length > 1) map.set(phrase.toLowerCase(), phrase)
+  }
+  for (const p of PROPER_NOUNS) add(p)
+  for (const extra of [
+    'San Martín', 'El Progreso', 'Santa Trinidad', 'Villa Belgrano',
+    'Estudiantes', 'Ferroviario', 'Mitre',
+  ]) add(extra)
+  for (const s of registrySources || []) {
+    add(s.name)
+    for (const tok of String(s.name || '').split(/\s+/)) {
+      if (/^[A-ZÁÉÍÓÚÑ]/.test(tok) && tok.length > 2 && !minor.test(tok)) add(tok)
+    }
+  }
+  return map
+})()
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Enforce Argentine sentence case: lowercase everything, then restore the first
+// letter and any known proper nouns. This kills Title Case ("Fútbol Inferiores
+// Sarmiento" → "Fútbol inferiores Sarmiento") and ALL-CAPS without lowercasing
+// known proper nouns ("Sarmiento", "San Martín").
+export function enforceSentenceCase(text) {
+  if (!text) return text
+  let out = text.toLowerCase()
+  // Longest phrases first so multiword proper nouns win over their tokens.
+  const phrases = [...PROPER_NOUN_MAP.keys()].sort((a, b) => b.length - a.length)
+  for (const ph of phrases) {
+    const re = new RegExp(`(^|[^\\p{L}])(${escapeRegExp(ph)})(?![\\p{L}])`, 'giu')
+    out = out.replace(re, (m, pre) => pre + PROPER_NOUN_MAP.get(ph))
+  }
+  // Capitalize the first letter of the string.
+  out = out.replace(/^(\s*)(\p{Ll})/u, (m, sp, ch) => sp + ch.toUpperCase())
+  return out
+}
+
+// Heuristic: does this look Title-Cased (most content words capitalized)? Used to
+// decide whether to force a title into sentence case without touching titles that
+// are already correct (which carry only a few proper-noun capitals).
+function looksTitleCased(text) {
+  const words = String(text || '').split(/\s+/).filter((w) => /\p{L}/u.test(w))
+  if (words.length < 3) return false
+  const minor = /^(de|del|la|el|los|las|y|e|o|u|en|a|con|por|para|un|una|que|su|sus|al)$/i
+  const content = words.slice(1).filter((w) => !minor.test(w))
+  if (content.length < 2) return false
+  const capped = content.filter((w) => /^[A-ZÁÉÍÓÚÑ]/.test(w)).length
+  return capped / content.length > 0.7
 }
 
 export function stripMarkdown(text) {
@@ -588,13 +648,17 @@ async function generateArticleMetadata(
     parsed.bajada = enforceRioplatense(stripEmojis(stripMarkdown(parsed.bajada)))
     parsed.volanta = enforceRioplatense(stripEmojis(stripMarkdown(parsed.volanta)))
 
-    if (isSocial) {
-      parsed.title = toSentenceCase(parsed.title)
-      parsed.volanta = toSentenceCase(parsed.volanta)
-      const volantaWords = parsed.volanta.split(/\s+/)
-      if (volantaWords.length > 4)
-        parsed.volanta = volantaWords.slice(0, 4).join(' ')
+    // Argentine sentence case — NO Title Case. The overline is always enforced
+    // (Gemini tends to Title-Case short labels). The title is only forced when it
+    // clearly looks Title-Cased, so correct sentence-case titles (with their few
+    // proper-noun capitals) are left untouched.
+    parsed.volanta = enforceSentenceCase(parsed.volanta)
+    if (looksTitleCased(parsed.title)) {
+      parsed.title = enforceSentenceCase(parsed.title)
     }
+    const volantaWords = parsed.volanta.split(/\s+/)
+    if (volantaWords.length > 4)
+      parsed.volanta = volantaWords.slice(0, 4).join(' ')
 
     parsed.fallback = null
     return parsed
@@ -618,17 +682,13 @@ async function generateArticleTags(extractedText, metadata) {
     if (!Array.isArray(tags) || tags.length === 0)
       throw new Error('Invalid tags')
 
-    // Hard cap: 4 tags max, even if the model overshoots. Strip emojis too.
+    // Hard cap: 4 tags max, even if the model overshoots. Strip emojis, and use
+    // sentence case (no Title Case) — proper nouns keep their capitals.
     const formatted = tags
       .slice(0, 4)
-      .map((tag) => stripEmojis(String(tag)))
+      .map((tag) => stripEmojis(String(tag)).trim())
       .filter((tag) => tag.length > 0)
-      .map((tag) =>
-        tag
-          .split(' ')
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(' '),
-      )
+      .map((tag) => enforceSentenceCase(tag))
       .join(', ')
     return { tags: formatted, fallback: null }
   } catch (error) {
