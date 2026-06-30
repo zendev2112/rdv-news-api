@@ -34,7 +34,9 @@ const FACTS_ONLY_RULE = `SOLO HECHOS (REGLA INNEGOCIABLE): redactá ÚNICAMENTE 
 - Frases motivacionales, de aliento o de orgullo (ej.: "con trabajo, compromiso y orgullo de defender nuestros colores, nuestros chicos irán por la clasificación").
 - Lenguaje de hinchada o promocional y primera persona del plural ("nuestros chicos", "nuestros colores", "nuestro equipo", "vamos").
 - Llamados a la acción al lector ("los esperamos", "no te lo pierdas", "acompañá").
-Si el texto original es mayormente arenga, opinión o promoción, quedate SOLO con el hecho concreto y descartá el resto. Si no hay ningún hecho concreto, no inventes para rellenar.`
+Si el texto original es mayormente arenga, opinión o promoción, quedate SOLO con el hecho concreto y descartá el resto. Si no hay ningún hecho concreto, no inventes para rellenar.
+
+FUENTE COMO PROTAGONISTA, NO COMO EMISOR: nombrá a la institución solo como protagonista del hecho (ej.: "el equipo de Centro Deportivo Sarmiento ganó…"), NUNCA como quien comunica la nota. PROHIBIDAS las fórmulas de atribución a la fuente: "informó", "anunció", "comunicó", "difundió", "dio a conocer", "según informó", "la información difundida por…". El lector no necesita saber quién publicó la información.`
 
 /**
  * Prompt for extracting only the reportable FACTS from another medio's interview.
@@ -125,7 +127,7 @@ EXTENSIÓN ADAPTATIVA:
 
 ESTRUCTURA SEO:
 
-- Párrafo 1 (LEAD SEO — máximo 2 oraciones): Respondé qué pasó, quién, cuándo y dónde. Este párrafo es el snippet de Google. Debe funcionar como resumen autónomo.
+- Párrafo 1 (LEAD SEO — máximo 2 oraciones): Respondé qué pasó, quién, cuándo y dónde. Este párrafo es el snippet de Google. Debe funcionar como resumen autónomo. EMPEZÁ POR EL HECHO, no por la fuente: PROHIBIDO abrir con "[institución/medio/fuente] informó/anunció/comunicó/difundió/dio a conocer que…" o con "La fuente … informó". Tampoco uses "Radio del Volga informó". Entrá directo a la noticia.
 - EVENTOS Y FECHAS: Si el artículo menciona fechas futuras, horarios, lugares de eventos o plazos, resaltá esa información con **negritas** y ubicala en un párrafo dedicado cerca del inicio.
 - Párrafos centrales (DESARROLLO): Un párrafo por cada dato o aspecto relevante. Oraciones cortas y directas. Integrá palabras clave naturalmente.
 - Párrafo final: Solo si hay datos adicionales concretos (próximos pasos, contacto, fechas). Si no hay, NO agregues cierre genérico.
@@ -226,7 +228,7 @@ EXTENSIÓN:
 - Mínimo: lo que haya. Si hay poco, el artículo es corto. No hay mínimo obligatorio.
 
 ESTRUCTURA:
-- Párrafo 1: quién informó qué, cuándo y dónde (máximo 2 oraciones, debe funcionar como snippet de Google)
+- Párrafo 1: EL HECHO directo — qué pasó, cuándo y dónde (máximo 2 oraciones, snippet de Google). EMPEZÁ POR LA NOTICIA, nunca por la fuente: PROHIBIDO abrir con "[institución/medio/fuente] informó/anunció/comunicó/dio a conocer que…", con "La fuente … informó" ni con "Radio del Volga informó". Entrá directo al hecho.
 - Si hay fechas, horarios o lugares: resaltarlos con **negritas** en un párrafo propio
 - Si hay requisitos, pasos o ítems: usar lista con viñetas (- item)
 - Si hay datos de contacto o inscripción en el original: incluirlos al final

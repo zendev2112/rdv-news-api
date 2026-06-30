@@ -88,9 +88,12 @@ const DEFAULT = { id: 'unknown', name: 'Desconocido', type: 'unknown', imagePoli
  * @param {string} [feedId]
  * @returns {{id,name,type,imagePolicy,requireAttribution,aliases?}}
  */
-export function classifySource(url, feedId) {
-  const full = String(url || '').toLowerCase()
-  if (full) {
+export function classifySource(url, feedId, hints = '') {
+  // Search the URL plus any hints (e.g. the RSS author/handle "verdirrojo") so an
+  // opaque permalink (instagram.com/p/XXXX) still resolves to the right source by
+  // its handle or alias.
+  const full = `${url || ''} ${hints || ''}`.toLowerCase()
+  if (full.trim()) {
     for (const s of sources) {
       if (s.match.some((tok) => full.includes(tok.toLowerCase()))) return s
     }

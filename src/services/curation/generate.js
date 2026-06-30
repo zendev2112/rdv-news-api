@@ -61,11 +61,18 @@ async function generateSocialDraft(url, feedId, cache, diagnostics) {
     sourceName = rawItem.authors?.[0]?.name || 'Social Media'
   }
 
+  // The author handle (e.g. "verdirrojo") lets the registry resolve the source
+  // even when the post URL is an opaque permalink.
+  const sourceHints = [rawItem.authors?.[0]?.name, rawItem.author, url]
+    .filter(Boolean)
+    .join(' ')
+
   const fields = await processArticleFromUrl(url, {
     extractedText: postText,
     item: rawItem,
     sourceName,
     feedId,
+    sourceHints,
     diagnostics,
   })
   if (!fields) return null

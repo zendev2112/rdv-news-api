@@ -654,7 +654,7 @@ export async function processArticleFromUrl(url, options = {}) {
   // Otros medios (and unknown sources) are competitors: for their regular notes we
   // report the public fact as our own WITHOUT naming them; only their INTERVIEWS
   // get attributed (by name) when we extract the fact. Institutions may be named.
-  const source = classifySource(url, options.feedId)
+  const source = classifySource(url, options.feedId, options.sourceHints)
   const isOtroMedio = source.type !== 'institutional'
   const isNamedSource =
     source.id !== 'unknown' && !String(source.id).startsWith('feed:')
