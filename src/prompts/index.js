@@ -26,6 +26,16 @@ export function formatSourceDate(d) {
   }
 }
 
+// Shared "facts only" rule — keep verifiable facts, drop opinion/cheerleading.
+// Local institutions (clubs especially) post arenga and promotion; we scrape the
+// fact, not the sentiment.
+const FACTS_ONLY_RULE = `SOLO HECHOS (REGLA INNEGOCIABLE): redactá ÚNICAMENTE hechos verificables (qué pasó, quién, cuándo, dónde, resultados, cifras, fechas, lugares, datos concretos). PROHIBIDO incluir:
+- Opiniones, valoraciones, interpretaciones o adjetivación emotiva/épica.
+- Frases motivacionales, de aliento o de orgullo (ej.: "con trabajo, compromiso y orgullo de defender nuestros colores, nuestros chicos irán por la clasificación").
+- Lenguaje de hinchada o promocional y primera persona del plural ("nuestros chicos", "nuestros colores", "nuestro equipo", "vamos").
+- Llamados a la acción al lector ("los esperamos", "no te lo pierdas", "acompañá").
+Si el texto original es mayormente arenga, opinión o promoción, quedate SOLO con el hecho concreto y descartá el resto. Si no hay ningún hecho concreto, no inventes para rellenar.`
+
 /**
  * Prompt for extracting only the reportable FACTS from another medio's interview.
  *
@@ -103,6 +113,8 @@ TEXTO ORIGINAL:
 ${extractedText.substring(0, 6000)}
 """
 ${dateBlock}${competitorBlock}${institutionBlock}
+${FACTS_ONLY_RULE}
+
 OBJETIVO: Artículo periodístico optimizado para SEO, conciso, atractivo y escaneable. NO inflés ni rellenes. Si la información original es breve, el artículo debe ser breve. Calidad > cantidad.
 
 EXTENSIÓN ADAPTATIVA:
@@ -204,6 +216,8 @@ ${fuenteLine}
 FECHA: ${date}${dateRule}${competitorRule}${institutionRule}
 
 REGLA FUNDAMENTAL: El artículo solo puede contener información que esté explícitamente en la publicación original. Si la publicación tiene 3 datos, el artículo tiene 3 datos. Prohibido agregar contexto, antecedentes, proyecciones ni información externa.
+
+${FACTS_ONLY_RULE}
 
 EXTENSIÓN:
 - Contá los datos concretos que tiene la publicación (fecha, lugar, quién, qué, requisitos, contacto, etc.)

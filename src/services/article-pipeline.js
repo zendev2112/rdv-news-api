@@ -119,8 +119,21 @@ export function postProcessText(text) {
   return fixed
 }
 
+// Broad emoji/pictograph coverage. Deliberately excludes the  -⁯ block
+// (it holds the em dash — and real punctuation we must keep).
 const EMOJI_RE =
-  /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu
+  /[\u{1F000}-\u{1FAFF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{2190}-\u{21FF}\u{2122}\u{2139}\u{20E3}\u{FE00}-\u{FE0F}\u{200D}]/gu
+
+// Strip every emoji/pictograph and tidy the whitespace they leave behind.
+function stripEmojis(text) {
+  if (!text) return text
+  return text
+    .replace(EMOJI_RE, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ +([,.;:!?])/g, '$1')
+    .replace(/[ \t]+\n/g, '\n')
+    .trim()
+}
 
 /**
  * Extract the main image from HTML meta tags (og:image, twitter:image)
@@ -453,7 +466,7 @@ async function reelaborateText(
         maxTokens: 1024,
         thinkingBudget: 0,
       })
-      const raw = cleanCodeBlocks((result.text || '').trim()).trim()
+      const raw = stripEmojis(cleanCodeBlocks((result.text || '').trim()).trim())
       if (!raw) return { text: '', fallback: 'error', brief: true }
       if (/^NO_FACT\b/i.test(raw)) return { text: '', fallback: 'no-fact', brief: true }
       const wordCount = raw.split(/\s+/).filter((w) => w.length > 0).length
@@ -493,8 +506,10 @@ async function reelaborateText(
 
     let processedText = cleanCodeBlocks(result.text)
 
+    // Strip emojis from EVERY article body (web and social) — never publish one.
+    processedText = stripEmojis(processedText)
+
     if (isSocial) {
-      processedText = processedText.replace(EMOJI_RE, '')
       processedText = processedText.replace(
         /\b(según publicó|compartió en|posteó en|difundió en|anunció en|publicó en)\s+(Facebook|Instagram|Twitter|YouTube|redes sociales|la plataforma|su cuenta)\b/gi,
         '',
@@ -565,9 +580,9 @@ async function generateArticleMetadata(
       throw new Error('Missing fields')
 
     // Clean metadata fields
-    parsed.title = enforceRioplatense(stripMarkdown(parsed.title).replace(EMOJI_RE, ''))
-    parsed.bajada = enforceRioplatense(stripMarkdown(parsed.bajada).replace(EMOJI_RE, ''))
-    parsed.volanta = enforceRioplatense(stripMarkdown(parsed.volanta).replace(EMOJI_RE, ''))
+    parsed.title = enforceRioplatense(stripEmojis(stripMarkdown(parsed.title)))
+    parsed.bajada = enforceRioplatense(stripEmojis(stripMarkdown(parsed.bajada)))
+    parsed.volanta = enforceRioplatense(stripEmojis(stripMarkdown(parsed.volanta)))
 
     if (isSocial) {
       parsed.title = toSentenceCase(parsed.title)
@@ -599,9 +614,11 @@ async function generateArticleTags(extractedText, metadata) {
     if (!Array.isArray(tags) || tags.length === 0)
       throw new Error('Invalid tags')
 
-    // Hard cap: 4 tags max, even if the model overshoots.
+    // Hard cap: 4 tags max, even if the model overshoots. Strip emojis too.
     const formatted = tags
       .slice(0, 4)
+      .map((tag) => stripEmojis(String(tag)))
+      .filter((tag) => tag.length > 0)
       .map((tag) =>
         tag
           .split(' ')
