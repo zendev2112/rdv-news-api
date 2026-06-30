@@ -11,6 +11,7 @@ import yargs from 'yargs'
 import { hideBin } from 'yargs/helpers'
 import * as prompts from './src/prompts/index.js'
 import * as scraper from './src/services/scraper.js'
+import { processArticleFromUrl } from './src/services/article-pipeline.js'
 import {
   enforceRioplatense,
   detectNeutralSpanish,
@@ -1052,42 +1053,31 @@ async function processArticle(item, sectionId) {
     console.log(`Processing article: ${itemUrl} for section ${sectionId}`)
 
     const isSocial = isSocialMediaUrl(itemUrl)
-    const socialMediaType = isSocial ? getSocialMediaType(itemUrl) : ''
 
-    // ── STEP 1: Extract content ──────────────────────────────────────────
+    // ── STEP 1: Get the source text ──────────────────────────────────────
+    // Social posts come from the RSS fields (can't be scraped); web articles use
+    // this script's scraper (with its RSS fallback). Everything after this —
+    // reelaboration, metadata, tags, source classification, institution naming,
+    // interview→brief, emoji stripping, date conversion — is delegated to the
+    // SHARED pipeline (processArticleFromUrl) so this script and the curation
+    // crons behave identically. (This file used to have its own duplicate logic,
+    // which is why fixes there never reached the fetch output.)
     let extractedText = ''
-    let htmlContent = ''
-    let sourceName = ''
+    let html
+    let sourceName
 
     if (isSocial) {
-      // Social media: content comes from the RSS feed fields
       let postText = item.content_text || ''
       if ((!postText || postText.length < 100) && item.content_html) {
         const htmlText = scraper.extractFromContentHtml(item.content_html)
-        if (htmlText && htmlText.length > postText.length) {
-          console.log(
-            `📝 Using content_html (${htmlText.length} chars) over content_text (${postText.length} chars)`,
-          )
-          postText = htmlText
-        }
+        if (htmlText && htmlText.length > postText.length) postText = htmlText
       }
       if (!postText || postText.length < 50) {
         postText = item.summary || item.title || postText
       }
       extractedText = postText
-      htmlContent = item.content_html || ''
-
-      // Determine source name from URL hostname
-      try {
-        const hostname = new URL(itemUrl).hostname
-        const domain = hostname.replace(/^www\./, '')
-        const parts = domain.split('.')
-        sourceName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1)
-      } catch {
-        sourceName = item.authors?.[0]?.name || 'Social Media'
-      }
+      sourceName = item.authors?.[0]?.name || undefined
     } else {
-      // Regular article: scrape the URL with RSS fallback
       const scrapeResult = await scraper.scrapeArticle(itemUrl, {
         timeout: 15000,
         rssContentText: item.content_text || '',
@@ -1095,7 +1085,7 @@ async function processArticle(item, sectionId) {
         rssTitle: item.title || '',
       })
       extractedText = scrapeResult.text
-      htmlContent = scrapeResult.html
+      html = scrapeResult.html
       sourceName = extractSourceName(itemUrl)
       console.log(
         `📰 Scraped ${extractedText?.length || 0} chars via ${scrapeResult.method} for: ${itemUrl}`,
@@ -1109,191 +1099,61 @@ async function processArticle(item, sectionId) {
       return null
     }
 
-    // ── STEP 2: Extract images and embeds from HTML ──────────────────────
-    let imageMarkdown = ''
-    let images = []
-    let instagramContent = ''
-    let facebookContent = ''
-    let twitterContent = ''
-    let youtubeContent = ''
+    // ── STEP 2: Delegate to the shared pipeline ──────────────────────────
+    // The author handle (e.g. "verdirrojo") lets the registry resolve the source
+    // even when the post URL is an opaque permalink.
+    const sourceHints = [item.authors?.[0]?.name, item.author]
+      .filter(Boolean)
+      .join(' ')
+    const diagnostics = {}
+    const fields = await processArticleFromUrl(itemUrl, {
+      html,
+      extractedText,
+      item,
+      sourceName,
+      feedId: sectionId,
+      sourceHints,
+      sourceDate: item.date_published || item.pubDate || null,
+      diagnostics,
+    })
 
-    if (htmlContent) {
-      const imgResult = extractImagesAsMarkdown(htmlContent)
-      images = imgResult.images
-      imageMarkdown = imgResult.markdown
-      console.log(`Found ${images.length} images in article: ${itemUrl}`)
-
-      instagramContent = embeds.extractInstagramEmbeds(htmlContent)
-      facebookContent = embeds.extractFacebookEmbeds(htmlContent)
-      twitterContent = embeds.extractTwitterEmbeds(htmlContent)
-      youtubeContent = embeds.extractYoutubeEmbeds(htmlContent)
+    if (!fields) {
+      console.warn(
+        `No draft for ${itemUrl} — ${diagnostics.skipReason || 'insufficient content / generation failed'}`,
+      )
+      return null
     }
 
-    // For social media items, also check item.image and attachments
-    let imageUrl = ''
-    if (isSocial) {
-      imageUrl = item.image || ''
-      if (!imageUrl && item.attachments && item.attachments.length > 0) {
-        imageUrl = item.attachments[0].url || ''
-      }
+    // ── STEP 3: Re-add fields the shared pipeline doesn't emit ───────────
+    // Byline uses the resolved source name (registry-correct), not the raw handle.
+    fields.author = fields.source || item.authors?.[0]?.name || ''
+    // Primera Plana: audio URL filled manually in Airtable.
+    if (sectionId === 'primera-plana' && fields.audio === undefined) {
+      fields.audio = ''
     }
-
-    // ── STEP 3: Reelaborate text ────────────────────────────────────────
-    console.log(`Reelaborating text for: ${itemUrl}`)
-    let reelaboratedText = null
-    try {
-      if (isSocial) {
-        reelaboratedText = await reelaborateSocialMediaContent(
-          extractedText,
-          item,
-          sourceName,
-        )
-      } else {
-        reelaboratedText = await reelaborateText(extractedText, imageMarkdown)
-      }
-    } catch (textError) {
-      console.error(`Error reelaborating text: ${textError.message}`)
-      reelaboratedText = isSocial
-        ? formatSocialMediaAsFallback(extractedText, sourceName, item)
-        : formatTextAsFallback(extractedText, imageMarkdown)
-    }
-
-    if (!reelaboratedText) {
-      reelaboratedText = isSocial
-        ? formatSocialMediaAsFallback(extractedText, sourceName, item)
-        : formatTextAsFallback(extractedText, imageMarkdown)
-      console.warn(`Using fallback formatting for: ${itemUrl}`)
-    }
-
-    // ── STEP 4: Generate metadata ───────────────────────────────────────
-    console.log(`Generating metadata for: ${itemUrl}`)
-    let metadata = null
-    try {
-      if (isSocial) {
-        metadata = await generateSocialMediaMetadata(
-          extractedText,
-          sourceName,
-          item,
-        )
-      } else {
-        metadata = await generateMetadata(extractedText)
-      }
-    } catch (metaError) {
-      console.error(`Error generating metadata: ${metaError.message}`)
-      metadata = isSocial
-        ? generateFallbackSocialMetadata(extractedText, sourceName, item)
-        : generateFallbackMetadata(extractedText)
-    }
-
-    if (!metadata) {
-      metadata = isSocial
-        ? generateFallbackSocialMetadata(extractedText, sourceName, item)
-        : generateFallbackMetadata(extractedText)
-    }
-
-    // ── STEP 5: Generate tags ───────────────────────────────────────────
-    console.log(`Generating tags for: ${itemUrl}`)
-    let tags = ''
-    try {
-      const tagText = isSocial
-        ? `${metadata.title} ${metadata.bajada} ${reelaboratedText}`
-        : extractedText
-      tags = await generateTags(tagText, metadata)
-    } catch (tagError) {
-      console.error(`Error generating tags: ${tagError.message}`)
-      tags = generateFallbackTags(extractedText, metadata)
-    }
-
-    // ── STEP 6: Build record fields ─────────────────────────────────────
-    const processedText = postProcessText(reelaboratedText)
-    const sectionValue = sectionIdToAirtableValue[sectionId] || ''
-
-    // Strip ALL markdown from plain-text fields before Airtable
-    const stripPlain = (s) =>
-      (s || '')
-        .replace(/\*\*([^*]+)\*\*/g, '$1')
-        .replace(/\*([^*]+)\*/g, '$1')
-        .replace(/__([^_]+)__/g, '$1')
-        .replace(/_([^_]+)_/g, '$1')
-        .replace(/`([^`]+)`/g, '$1')
-        .replace(/^#+\s*/gm, '')
-        .replace(/ {2,}/g, ' ')
-        .trim()
-
-    // Image attachments for Airtable
-    let imageAttachments = []
-    if (images.length > 0) {
-      imageAttachments = images.map((url) => ({ url }))
-    } else if (imageUrl) {
-      imageAttachments = [{ url: imageUrl }]
-    } else {
-      const attachments = item.attachments || []
-      const attachmentUrls = attachments.map((a) => a.url).filter(Boolean)
-      if (attachmentUrls.length > 0) {
-        imageAttachments = [{ url: attachmentUrls[0] }]
-      }
-    }
-
-    const recordFields = {
-      title: enforceRioplatense(stripPlain(metadata ? metadata.title : item.title)),
-      overline: enforceRioplatense(stripPlain(metadata ? metadata.volanta : '')),
-      excerpt: enforceRioplatense(stripPlain(metadata ? metadata.bajada : '')),
-      article: processedText,
-      image: imageAttachments,
-      author: item.authors?.[0]?.name || '',
-      imgUrl: imageUrl || '',
-      'article-images':
-        imageAttachments.length > 1
-          ? imageAttachments
-              .slice(1)
-              .map((u) => (typeof u === 'string' ? u : u.url))
-              .filter(Boolean)
-              .join(', ')
-          : undefined,
-      url: itemUrl,
-      source: sourceName,
-      'ig-post': instagramContent || '',
-      'fb-post': facebookContent || '',
-      'tw-post': twitterContent || '',
-      'yt-video': youtubeContent || '',
-      status: 'draft',
-      tags: tags,
-    }
-
-    // Primera Plana: include audio field (single line text URL, filled manually in Airtable)
-    if (sectionId === 'primera-plana') {
-      recordFields.audio = ''
-    }
-
-    // Social media items: set the specific social type field to the URL
-    if (socialMediaType && itemUrl) {
-      recordFields[socialMediaType] = itemUrl
-    }
-
-    // Social media items: add extra fields if available (only for dedicated social sections)
-    const isSocialSection = sectionId === 'local-facebook'
-    if (isSocial && isSocialSection) {
-      recordFields.processingStatus = 'completed'
-      if (item.date_published) recordFields.postDate = item.date_published
-      try {
-        if (item.date_published) {
-          recordFields.postDateFormatted = new Date(
+    // Dedicated social section extras.
+    if (isSocial && sectionId === 'local-facebook') {
+      fields.processingStatus = 'completed'
+      if (item.date_published) {
+        fields.postDate = item.date_published
+        try {
+          fields.postDateFormatted = new Date(
             item.date_published,
           ).toLocaleDateString('es-AR', {
             year: 'numeric',
             month: 'long',
             day: 'numeric',
           })
-        }
-      } catch {}
-      if (item.content_html) recordFields.contentHtml = item.content_html
-      if (item.id) recordFields.postId = item.id
+        } catch {}
+      }
+      if (item.content_html) fields.contentHtml = item.content_html
+      if (item.id) fields.postId = item.id
     }
 
     console.log(
       `Successfully processed article: ${itemUrl} for section ${sectionId}`,
     )
-    return { fields: recordFields }
+    return { fields }
   } catch (error) {
     console.error(`Error processing article ${item.url}:`, error.message)
     return null

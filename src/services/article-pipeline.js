@@ -501,8 +501,10 @@ async function reelaborateText(
         )
 
     const result = await generateContent(prompt, { maxTokens: 8192 })
-    if (!result.text)
-      return { text: formatTextAsFallback(extractedText), fallback: 'error' }
+    // NEVER fall back to the raw source text — that would publish the original
+    // (emojis, arenga, source handles, untransformed). If generation fails or
+    // returns almost nothing, return empty so the caller SKIPS the item.
+    if (!result.text) return { text: '', fallback: 'error' }
 
     let processedText = cleanCodeBlocks(result.text)
 
@@ -519,8 +521,10 @@ async function reelaborateText(
     const wordCount = processedText
       .split(/\s+/)
       .filter((w) => w.length > 0).length
-    if (wordCount < 80)
-      return { text: formatTextAsFallback(extractedText), fallback: 'content' }
+    // Brevity is fine for a local newsroom — keep short reelaborated notes. Only
+    // when generation produced almost nothing do we treat it as a content failure
+    // (and skip), rather than dumping the raw source.
+    if (wordCount < 12) return { text: '', fallback: 'content' }
     if (isSocial && wordCount > 600) {
       processedText = processedText.split(/\s+/).slice(0, 500).join(' ')
     }
@@ -529,7 +533,7 @@ async function reelaborateText(
     return { text: postProcessText(processedText), fallback: null }
   } catch (error) {
     console.error('Error reelaborating text:', error.message)
-    return { text: formatTextAsFallback(extractedText), fallback: 'error' }
+    return { text: '', fallback: 'error' }
   }
 }
 
@@ -790,6 +794,21 @@ export async function processArticleFromUrl(url, options = {}) {
   }
   if (briefMode && options.diagnostics && typeof options.diagnostics === 'object') {
     options.diagnostics.contentType = 'breve'
+  }
+
+  // Non-brief: if reelaboration produced no usable text (error or near-empty), do
+  // NOT build a draft from raw source — skip the item so nothing un-reelaborated
+  // (emojis, arenga, source handles) ever gets published.
+  if (!briefMode && (!article || article.trim().length === 0)) {
+    if (options.diagnostics && typeof options.diagnostics === 'object') {
+      options.diagnostics.skipReason =
+        articleResult.fallback === 'error' ? 'generation-failed' : 'content-empty'
+      options.diagnostics.aiError = articleResult.fallback === 'error'
+    }
+    console.log(
+      `⏭️  Skipped (${options.diagnostics?.skipReason || 'empty'}): ${url}`,
+    )
+    return null
   }
 
   // Brief mode derives title/tags from the FACT brief, not the raw interview, so
