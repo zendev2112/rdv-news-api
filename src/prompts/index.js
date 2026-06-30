@@ -75,10 +75,16 @@ RESPUESTA: devolvé ÚNICAMENTE el breve redactado, o NO_FACT. Sin explicaciones
  * @param {Object} [opts]
  * @param {string} [opts.sourceDate] - Source publish date (for relative→absolute conversion)
  * @param {boolean} [opts.competitor] - Source is another medio (competitor) → never name it
+ * @param {string} [opts.institutionName] - Institution that published it → use this exact name
  * @returns {string}
  */
 export function reelaborateArticle(extractedText, opts = {}) {
   const sourceDate = formatSourceDate(opts.sourceDate)
+  const institutionBlock = opts.institutionName
+    ? `
+INSTITUCIÓN DE ORIGEN: la información proviene de "${opts.institutionName}". Cuando te refieras a la institución, usá ESE nombre exacto, con la ortografía y mayúsculas correctas. NO uses el nombre de la red social (Facebook, Instagram) como fuente, ni abreviaturas, ni una versión en minúsculas.
+`
+    : ''
   const dateBlock = sourceDate
     ? `
 FECHA DE PUBLICACIÓN DE LA FUENTE: ${sourceDate}
@@ -96,7 +102,7 @@ TEXTO ORIGINAL:
 """
 ${extractedText.substring(0, 6000)}
 """
-${dateBlock}${competitorBlock}
+${dateBlock}${competitorBlock}${institutionBlock}
 OBJETIVO: Artículo periodístico optimizado para SEO, conciso, atractivo y escaneable. NO inflés ni rellenes. Si la información original es breve, el artículo debe ser breve. Calidad > cantidad.
 
 EXTENSIÓN ADAPTATIVA:
@@ -164,10 +170,13 @@ RESPUESTA: Devolver ÚNICAMENTE el artículo reescrito. Sin explicaciones, sin c
  * @param {string} sourceName - Name of the source/author
  * @param {Object} [opts]
  * @param {boolean} [opts.competitor] - Source is another medio (competitor) → never name it
+ * @param {string} [opts.institutionName] - Institution that published it → use this exact name
  * @returns {string}
  */
 export function reelaborateSocialMedia(postText, item, sourceName, opts = {}) {
-  const author = item.authors?.[0]?.name || sourceName || 'Institución local'
+  // Prefer the registry's institution name over the FB/IG author handle.
+  const author =
+    opts.institutionName || item.authors?.[0]?.name || sourceName || 'Institución local'
   const absoluteDate = formatSourceDate(item.date_published)
   const date = absoluteDate || item.date_published || 'Reciente'
   const dateRule = absoluteDate
@@ -179,6 +188,10 @@ export function reelaborateSocialMedia(postText, item, sourceName, opts = {}) {
   const competitorRule = opts.competitor
     ? `\nFUENTE DE OTRO MEDIO (OBLIGATORIO): la publicación proviene de otro medio local, que es COMPETENCIA. PROHIBIDO mencionar, nombrar, citar o atribuir nada a ese medio o a cualquier otro medio, radio, diario o sitio de noticias. Redactá el hecho como información propia de Radio del Volga, sin atribuirlo a nadie.`
     : ''
+  const institutionRule =
+    !opts.competitor && opts.institutionName
+      ? `\nINSTITUCIÓN DE ORIGEN: la publicación es de "${opts.institutionName}". Cuando menciones a la institución usá ESE nombre exacto, con ortografía y mayúsculas correctas. NUNCA uses el nombre de la red social (Facebook, Instagram) como fuente ni una versión en minúsculas.`
+      : ''
 
   return `Sos un redactor SEO de un medio digital argentino llamado Radio del Volga. Reescribí esta publicación como artículo periodístico. Tu única fuente es el texto a continuación — no agregues ni inventes nada.
 
@@ -188,7 +201,7 @@ ${postText.substring(0, 3000)}
 """
 
 ${fuenteLine}
-FECHA: ${date}${dateRule}${competitorRule}
+FECHA: ${date}${dateRule}${competitorRule}${institutionRule}
 
 REGLA FUNDAMENTAL: El artículo solo puede contener información que esté explícitamente en la publicación original. Si la publicación tiene 3 datos, el artículo tiene 3 datos. Prohibido agregar contexto, antecedentes, proyecciones ni información externa.
 

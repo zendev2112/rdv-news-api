@@ -62,7 +62,7 @@ export const sources = [
     match: ['basquetsudoeste'] },
   { id: 'cefm', name: 'CEFM', ...INSTITUTIONAL,
     match: ['_cefm_'] },
-  { id: 'centro-blanco-y-negro', name: 'Centro Blanco y Negro de Coronel Suárez', ...INSTITUTIONAL,
+  { id: 'centro-blanco-y-negro', name: 'Centro Blanco y Negro', ...INSTITUTIONAL,
     aliases: ['albinegro', 'decano', 'blanco y negro'],
     match: ['centroblancoynegro_cs', 'centroblancoynegro'] },
   { id: 'centro-deportivo-sarmiento', name: 'Centro Deportivo Sarmiento', ...INSTITUTIONAL,

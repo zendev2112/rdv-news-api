@@ -471,7 +471,10 @@ async function reelaborateText(
           extractedText,
           item || { url: '', title: '', content_text: extractedText },
           sourceName || '',
-          { competitor: sourceOpts.competitor },
+          {
+            competitor: sourceOpts.competitor,
+            institutionName: sourceOpts.institutionName,
+          },
         )
       : reelaborateArticle(
           imageMarkdown
@@ -480,6 +483,7 @@ async function reelaborateText(
           {
             sourceDate,
             competitor: sourceOpts.competitor,
+            institutionName: sourceOpts.institutionName,
           },
         )
 
@@ -638,6 +642,12 @@ export async function processArticleFromUrl(url, options = {}) {
   const isNamedSource =
     source.id !== 'unknown' && !String(source.id).startsWith('feed:')
   const attributionName = isNamedSource ? source.name : sourceName
+  // Use the registry's proper name (e.g. "Centro Blanco y Negro") instead of the
+  // URL-derived guess ("Facebook"). For a named INSTITUTION this is also the name
+  // generation must use verbatim in the copy.
+  const resolvedSourceName = isNamedSource ? source.name : sourceName
+  const institutionName =
+    !isOtroMedio && isNamedSource ? source.name : null
 
   // ── 1. Scrape ──────────────────────────────────────────────────────
   let html = options.html || ''
@@ -736,9 +746,9 @@ export async function processArticleFromUrl(url, options = {}) {
     imageMarkdown,
     isSocial,
     item,
-    sourceName,
+    resolvedSourceName,
     sourceDate,
-    { competitor: isOtroMedio, attributionName, briefMode },
+    { competitor: isOtroMedio, attributionName, institutionName, briefMode },
   )
   const article = articleResult.text
 
@@ -771,7 +781,7 @@ export async function processArticleFromUrl(url, options = {}) {
   const metadata = await generateArticleMetadata(
     metaSource,
     isSocial,
-    sourceName,
+    resolvedSourceName,
     item,
   )
 
@@ -850,7 +860,7 @@ export async function processArticleFromUrl(url, options = {}) {
     imgUrl: images.length > 0 ? images[0] : '',
     'article-images': images.slice(1).join(', '),
     url,
-    source: sourceName,
+    source: resolvedSourceName,
     'ig-post': instagramContent || '',
     'fb-post': facebookContent || '',
     'tw-post': twitterContent || '',

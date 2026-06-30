@@ -65,6 +65,7 @@ async function generateSocialDraft(url, feedId, cache, diagnostics) {
     extractedText: postText,
     item: rawItem,
     sourceName,
+    feedId,
     diagnostics,
   })
   if (!fields) return null
