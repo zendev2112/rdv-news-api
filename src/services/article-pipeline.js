@@ -19,6 +19,7 @@ import {
 } from './scraper.js'
 import {
   reelaborateArticle,
+  extractFactsBrief,
   reelaborateSocialMedia,
   generateMetadata as generateMetadataPrompt,
   generateSocialMediaMetadata as generateSocialMediaMetadataPrompt,
@@ -32,6 +33,7 @@ import {
 } from './embeds/index.js'
 import { enforceRioplatense } from '../utils/rioplatense.js'
 import { classifySource, imageDecision } from '../config/source-registry.js'
+import { detectInterview } from './curation/content-type.js'
 
 // ── Utility functions ────────────────────────────────────────────────
 
@@ -419,6 +421,34 @@ async function reelaborateText(
   sourceDate,
   sourceOpts = {},
 ) {
+  // Brief mode: otros-medios interview → extract only the reportable fact.
+  // CRITICAL: never fall back to formatTextAsFallback here — that would emit the
+  // raw lifted interview, the exact thing we must not publish. On any failure or
+  // when there's no reportable fact, return empty text so the caller SKIPS.
+  if (sourceOpts.briefMode) {
+    try {
+      const prompt = extractFactsBrief(extractedText, {
+        sourceDate,
+        sourceName: sourceOpts.attributionName,
+      })
+      // thinkingBudget: 0 — a short structured extraction; "thinking" would
+      // starve the output and truncate the brief mid-sentence.
+      const result = await generateContent(prompt, {
+        maxTokens: 1024,
+        thinkingBudget: 0,
+      })
+      const raw = cleanCodeBlocks((result.text || '').trim()).trim()
+      if (!raw) return { text: '', fallback: 'error', brief: true }
+      if (/^NO_FACT\b/i.test(raw)) return { text: '', fallback: 'no-fact', brief: true }
+      const wordCount = raw.split(/\s+/).filter((w) => w.length > 0).length
+      if (wordCount < 20) return { text: '', fallback: 'no-fact', brief: true }
+      return { text: postProcessText(cleanFillerPhrases(raw)), fallback: null, brief: true }
+    } catch (error) {
+      console.error('Error extracting interview facts:', error.message)
+      return { text: '', fallback: 'error', brief: true }
+    }
+  }
+
   try {
     const prompt = isSocial
       ? reelaborateSocialMedia(
@@ -643,6 +673,26 @@ export async function processArticleFromUrl(url, options = {}) {
     if (!text || text.length < 50) return null
   }
 
+  // ── 1b. Interview gate (otros medios only) ─────────────────────────
+  // We cannot republish another medio's interview "by no means" — their Q&A is
+  // owned expression. When detected, switch to BRIEF mode: extract only the
+  // reportable fact into a short attributed brief; the conversation is discarded.
+  // If the interview carries no reportable fact, brief mode yields nothing and the
+  // item is skipped. Detection runs BEFORE generation so a full reelaboration
+  // (which would launder the interview) is never spent.
+  let briefMode = false
+  if (attribute) {
+    const ct = await detectInterview(text)
+    if (ct.isInterview) {
+      briefMode = true
+      if (options.diagnostics && typeof options.diagnostics === 'object') {
+        options.diagnostics.contentType = 'interview'
+        options.diagnostics.interviewVia = ct.via
+      }
+      console.log(`📝 Otros-medios interview → fact-brief mode (via ${ct.via}): ${url}`)
+    }
+  }
+
   // ── 2. Extract embeds ──────────────────────────────────────────────
   let instagramContent = ''
   let facebookContent = ''
@@ -669,12 +719,38 @@ export async function processArticleFromUrl(url, options = {}) {
     item,
     sourceName,
     sourceDate,
-    { attribute, attributionName },
+    { attribute, attributionName, briefMode },
   )
   const article = articleResult.text
 
+  // Brief mode skip: no reportable fact, or extraction failed. NEVER fall through
+  // to publish the raw interview — drop the item entirely.
+  if (
+    briefMode &&
+    (!article ||
+      articleResult.fallback === 'no-fact' ||
+      articleResult.fallback === 'error')
+  ) {
+    if (options.diagnostics && typeof options.diagnostics === 'object') {
+      options.diagnostics.skipReason =
+        articleResult.fallback === 'no-fact'
+          ? 'interview-no-fact'
+          : 'interview-brief-failed'
+    }
+    console.log(
+      `⏭️  Interview brief skipped (${options.diagnostics?.skipReason || 'no-fact'}): ${url}`,
+    )
+    return null
+  }
+  if (briefMode && options.diagnostics && typeof options.diagnostics === 'object') {
+    options.diagnostics.contentType = 'breve'
+  }
+
+  // Brief mode derives title/tags from the FACT brief, not the raw interview, so
+  // interview framing never leaks into the headline or tags.
+  const metaSource = briefMode ? article : text
   const metadata = await generateArticleMetadata(
-    text,
+    metaSource,
     isSocial,
     sourceName,
     item,
@@ -683,7 +759,9 @@ export async function processArticleFromUrl(url, options = {}) {
   // For social media, use richer context for tags (metadata + article)
   const tagText = isSocial
     ? `${metadata.title} ${metadata.bajada} ${article}`
-    : text
+    : briefMode
+      ? article
+      : text
   const tagsResult = await generateArticleTags(tagText, metadata)
   const tags = tagsResult.tags
 

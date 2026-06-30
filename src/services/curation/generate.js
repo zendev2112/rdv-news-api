@@ -173,7 +173,21 @@ export async function generateDrafts({ assignments = [] } = {}) {
             feedId: a.feedId,
           })
       if (!fields) {
-        results.push({ url: a.url, front: a.front, status: 'failed', error: 'insufficient-content' })
+        // An otros-medios interview with no reportable fact is skipped by policy
+        // (not a failure): no draft, reported as 'skipped' so the count is visible.
+        if (diagnostics.skipReason === 'interview-no-fact') {
+          results.push({
+            url: a.url,
+            front: a.front,
+            status: 'skipped',
+            reason: 'interview-no-fact',
+            via: diagnostics.interviewVia,
+          })
+        } else if (diagnostics.skipReason === 'interview-brief-failed') {
+          results.push({ url: a.url, front: a.front, status: 'failed', error: 'interview-brief-failed' })
+        } else {
+          results.push({ url: a.url, front: a.front, status: 'failed', error: 'insufficient-content' })
+        }
         continue
       }
       // Loud failure: a Gemini call errored mid-run (rate limit, timeout, key
@@ -188,9 +202,10 @@ export async function generateDrafts({ assignments = [] } = {}) {
 
       const res = await airtableService.insertRecords([{ fields }], a.feedId)
       const id = res?.records?.[0]?.id || null
+      const brief = diagnostics.contentType === 'breve'
       results.push(
         id
-          ? { url: a.url, front: a.front, status: 'drafted', social, airtableId: id }
+          ? { url: a.url, front: a.front, status: 'drafted', social, brief, airtableId: id }
           : { url: a.url, front: a.front, status: 'failed', error: 'insert-returned-no-id' },
       )
     } catch (err) {

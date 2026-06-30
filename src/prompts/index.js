@@ -27,6 +27,49 @@ export function formatSourceDate(d) {
 }
 
 /**
+ * Prompt for extracting only the reportable FACTS from another medio's interview.
+ *
+ * We cannot republish another medio's interview "by no means" — the Q&A is their
+ * owned expression. But the underlying news fact is free. This prompt produces a
+ * short, attributed brief of the fact only (no quotes, no Q&A, no reconstruction),
+ * or the literal token NO_FACT when the interview carries no reportable news
+ * (pure opinion/color) — in which case the caller skips it.
+ *
+ * @param {string} extractedText
+ * @param {Object} [opts]
+ * @param {string} [opts.sourceDate]  - Source publish date (relative→absolute conversion)
+ * @param {string} [opts.sourceName]  - Medio to attribute to (e.g. "La Nueva Radio Suárez")
+ * @returns {string}
+ */
+export function extractFactsBrief(extractedText, opts = {}) {
+  const sourceDate = formatSourceDate(opts.sourceDate)
+  const dateLine = sourceDate
+    ? `\nFECHA DE PUBLICACIÓN DE LA FUENTE: ${sourceDate}. Convertí toda referencia temporal relativa ("ayer", "hoy", "mañana", "este viernes") a su fecha absoluta. No inventes fechas.`
+    : ''
+  const src = opts.sourceName || 'otro medio'
+  return `Sos editor de Radio del Volga, un medio digital argentino. El siguiente texto es una ENTREVISTA publicada por ${src} (otro medio). NO podemos reproducir la entrevista: las preguntas, las respuestas, las citas textuales y el formato de diálogo son contenido de ${src}, no nuestro.
+
+TU TAREA: extraer ÚNICAMENTE el HECHO noticioso concreto que surge de la entrevista (qué pasó, quién, cuándo, dónde, qué se anunció o decidió) y redactar un BREVE informativo propio, corto y atribuido.
+
+TEXTO ORIGINAL (entrevista de ${src}):
+"""
+${extractedText.substring(0, 6000)}
+"""${dateLine}
+
+REGLAS INNEGOCIABLES:
+- PROHIBIDO reproducir citas textuales, preguntas, respuestas o el formato de diálogo. Nada entre comillas tomado de la entrevista.
+- PROHIBIDO reconstruir o parafrasear la conversación entera. Solo el hecho noticioso.
+- ATRIBUCIÓN OBLIGATORIA: indicá que la información surge de ${src} (ej.: "según señaló en una entrevista con ${src}").
+- EXTENSIÓN: breve, entre 40 y 110 palabras. Un solo bloque de texto. Sin subtítulos, sin listas, sin negritas.
+- Español rioplatense formal, tercera persona. PROHIBIDO el español neutro ("puedes", "debes", "descubre"), dirigirse al lector, emojis o hashtags.
+- Solo hechos presentes en el texto. No inventes datos ni cifras.
+
+SI NO HAY UN HECHO NOTICIOSO CONCRETO Y REPORTABLE (la entrevista es solo opinión, color, anécdotas o charla sin novedad informativa), respondé EXACTAMENTE con la palabra: NO_FACT
+
+RESPUESTA: devolvé ÚNICAMENTE el breve redactado, o NO_FACT. Sin explicaciones ni comentarios.`
+}
+
+/**
  * Prompt for rewriting a regular article from extracted web content.
  * @param {string} extractedText - Raw text extracted from the source URL
  * @param {Object} [opts]
