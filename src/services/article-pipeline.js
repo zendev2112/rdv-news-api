@@ -128,9 +128,18 @@ export function enforceSentenceCase(text) {
     const re = new RegExp(`(^|[^\\p{L}])(${escapeRegExp(ph)})(?![\\p{L}])`, 'giu')
     out = out.replace(re, (m, pre) => pre + PROPER_NOUN_MAP.get(ph))
   }
-  // Capitalize the first letter of the string.
-  out = out.replace(/^(\s*)(\p{Ll})/u, (m, sp, ch) => sp + ch.toUpperCase())
+  // Capitalize the first LETTER, skipping leading punctuation/spaces (e.g. "¿").
+  out = out.replace(/^([^\p{L}]*)(\p{Ll})/u, (m, pre, ch) => pre + ch.toUpperCase())
   return out
+}
+
+// Force every markdown heading (## / ###) in a body to sentence case.
+export function sentenceCaseHeadings(text) {
+  if (!text) return text
+  return text.replace(
+    /^(#{1,6}\s+)(.+)$/gm,
+    (m, hashes, heading) => hashes + enforceSentenceCase(heading.trim()),
+  )
 }
 
 // Heuristic: does this look Title-Cased (most content words capitalized)? Used to
@@ -170,6 +179,7 @@ export function postProcessText(text) {
   fixed = fixed.replace(/^\s*-\s+/gm, '- ')
   fixed = fixed.replace(/^\s*(\d+)\.\s+/gm, '$1. ')
   fixed = fixed.replace(/^#+\s+/gm, '## ')
+  fixed = sentenceCaseHeadings(fixed) // subtitles in sentence case, never Title Case
   fixed = fixed.replace(/!\[[^\]]*\]\([^)]*\)/g, '')
   fixed = fixed.replace(/\t/g, ' ')
   fixed = fixed.replace(/ {2,}/g, ' ')
