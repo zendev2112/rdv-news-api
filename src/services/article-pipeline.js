@@ -455,6 +455,7 @@ async function reelaborateText(
           extractedText,
           item || { url: '', title: '', content_text: extractedText },
           sourceName || '',
+          { competitor: sourceOpts.competitor },
         )
       : reelaborateArticle(
           imageMarkdown
@@ -462,8 +463,7 @@ async function reelaborateText(
             : extractedText,
           {
             sourceDate,
-            attribute: sourceOpts.attribute,
-            sourceName: sourceOpts.attributionName,
+            competitor: sourceOpts.competitor,
           },
         )
 
@@ -611,11 +611,12 @@ export async function processArticleFromUrl(url, options = {}) {
   const isSocial = isSocialMediaUrl(url)
   const sourceName = options.sourceName || extractSourceName(url)
 
-  // Classify the origin (institutional vs. otro medio) to drive attribution and
-  // the no-lifted-interviews rule. Use the registry's proper name when known
-  // (e.g. "La Nueva Radio Suárez") so attribution reads correctly.
+  // Classify the origin to drive naming + the no-lifted-interviews rule.
+  // Otros medios (and unknown sources) are competitors: for their regular notes we
+  // report the public fact as our own WITHOUT naming them; only their INTERVIEWS
+  // get attributed (by name) when we extract the fact. Institutions may be named.
   const source = classifySource(url, options.feedId)
-  const attribute = source.requireAttribution === true
+  const isOtroMedio = source.type !== 'institutional'
   const isNamedSource =
     source.id !== 'unknown' && !String(source.id).startsWith('feed:')
   const attributionName = isNamedSource ? source.name : sourceName
@@ -681,7 +682,7 @@ export async function processArticleFromUrl(url, options = {}) {
   // item is skipped. Detection runs BEFORE generation so a full reelaboration
   // (which would launder the interview) is never spent.
   let briefMode = false
-  if (attribute) {
+  if (isOtroMedio) {
     const ct = await detectInterview(text)
     if (ct.isInterview) {
       briefMode = true
@@ -719,7 +720,7 @@ export async function processArticleFromUrl(url, options = {}) {
     item,
     sourceName,
     sourceDate,
-    { attribute, attributionName, briefMode },
+    { competitor: isOtroMedio, attributionName, briefMode },
   )
   const article = articleResult.text
 

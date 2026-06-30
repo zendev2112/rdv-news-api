@@ -74,8 +74,7 @@ RESPUESTA: devolvé ÚNICAMENTE el breve redactado, o NO_FACT. Sin explicaciones
  * @param {string} extractedText - Raw text extracted from the source URL
  * @param {Object} [opts]
  * @param {string} [opts.sourceDate] - Source publish date (for relative→absolute conversion)
- * @param {boolean} [opts.attribute]  - Source is another medio → require attribution
- * @param {string} [opts.sourceName]  - Name to attribute to (e.g. "La Nueva Radio Suárez")
+ * @param {boolean} [opts.competitor] - Source is another medio (competitor) → never name it
  * @returns {string}
  */
 export function reelaborateArticle(extractedText, opts = {}) {
@@ -86,20 +85,18 @@ FECHA DE PUBLICACIÓN DE LA FUENTE: ${sourceDate}
 CONVERSIÓN DE FECHAS (OBLIGATORIO): la fuente se publicó en esa fecha. Convertí TODA referencia temporal relativa ("ayer", "hoy", "mañana", "anoche", "este viernes", "el próximo lunes", "esta semana", "el fin de semana") a su fecha absoluta (ej.: "el martes 24 de junio"). Si una referencia no se puede resolver con certeza a partir de esa fecha, omitila o reformulala sin inventar una fecha.
 `
     : ''
-  const attributionBlock =
-    opts.attribute && opts.sourceName
-      ? `
-ATRIBUCIÓN (OBLIGATORIO): la información proviene de ${opts.sourceName}, otro medio. Atribuíla explícitamente al menos una vez (ej.: "según informó ${opts.sourceName}"). NO la presentes como reporteo propio de Radio del Volga.
-INTEGRIDAD DE FUENTES (OBLIGATORIO): si el texto trae citas textuales de una entrevista hecha por otro medio (señaladas con "en diálogo con", "dijo a", "declaró a", "en una entrevista con", "consultó a", "respondió"), NO reproduzcas esas citas entre comillas: parafraseá el hecho informado y atribuilo a ${opts.sourceName}. Nunca presentes una entrevista realizada por otro medio como si fuera propia.
+  const competitorBlock = opts.competitor
+    ? `
+FUENTE DE OTRO MEDIO (OBLIGATORIO): la información proviene de otro medio local, que es COMPETENCIA. PROHIBIDO mencionar, nombrar, citar o atribuir nada a ese medio o a cualquier otro medio, radio, diario o sitio de noticias (ej.: NUNCA escribas "según informó [medio]", "de acuerdo con [radio]", "en diálogo con [medio]"). Redactá el hecho como información propia de Radio del Volga. Si el texto original atribuye algo a un medio o trae citas textuales de una entrevista, ELIMINÁ esa atribución y parafraseá el hecho; NO reproduzcas citas textuales entre comillas tomadas de otra fuente.
 `
-      : ''
+    : ''
   return `Sos un redactor SEO de un medio digital argentino llamado Radio del Volga. Tu tarea es reescribir el siguiente artículo para máximo rendimiento en buscadores y legibilidad web.
 
 TEXTO ORIGINAL:
 """
 ${extractedText.substring(0, 6000)}
 """
-${dateBlock}${attributionBlock}
+${dateBlock}${competitorBlock}
 OBJETIVO: Artículo periodístico optimizado para SEO, conciso, atractivo y escaneable. NO inflés ni rellenes. Si la información original es breve, el artículo debe ser breve. Calidad > cantidad.
 
 EXTENSIÓN ADAPTATIVA:
@@ -165,14 +162,22 @@ RESPUESTA: Devolver ÚNICAMENTE el artículo reescrito. Sin explicaciones, sin c
  * @param {string} postText - Original social media post text
  * @param {Object} item - Feed item with metadata
  * @param {string} sourceName - Name of the source/author
+ * @param {Object} [opts]
+ * @param {boolean} [opts.competitor] - Source is another medio (competitor) → never name it
  * @returns {string}
  */
-export function reelaborateSocialMedia(postText, item, sourceName) {
+export function reelaborateSocialMedia(postText, item, sourceName, opts = {}) {
   const author = item.authors?.[0]?.name || sourceName || 'Institución local'
   const absoluteDate = formatSourceDate(item.date_published)
   const date = absoluteDate || item.date_published || 'Reciente'
   const dateRule = absoluteDate
     ? `\nCONVERSIÓN DE FECHAS (OBLIGATORIO): la publicación es de la FECHA indicada. Convertí toda referencia relativa ("ayer", "hoy", "mañana", "este viernes", "esta semana") a su fecha absoluta. No inventes fechas que no se puedan deducir.`
+    : ''
+  const fuenteLine = opts.competitor
+    ? 'FUENTE: otro medio local (COMPETENCIA — NO nombrar ni atribuir en el texto)'
+    : `FUENTE: ${author}`
+  const competitorRule = opts.competitor
+    ? `\nFUENTE DE OTRO MEDIO (OBLIGATORIO): la publicación proviene de otro medio local, que es COMPETENCIA. PROHIBIDO mencionar, nombrar, citar o atribuir nada a ese medio o a cualquier otro medio, radio, diario o sitio de noticias. Redactá el hecho como información propia de Radio del Volga, sin atribuirlo a nadie.`
     : ''
 
   return `Sos un redactor SEO de un medio digital argentino llamado Radio del Volga. Reescribí esta publicación como artículo periodístico. Tu única fuente es el texto a continuación — no agregues ni inventes nada.
@@ -182,8 +187,8 @@ PUBLICACIÓN ORIGINAL:
 ${postText.substring(0, 3000)}
 """
 
-FUENTE: ${author}
-FECHA: ${date}${dateRule}
+${fuenteLine}
+FECHA: ${date}${dateRule}${competitorRule}
 
 REGLA FUNDAMENTAL: El artículo solo puede contener información que esté explícitamente en la publicación original. Si la publicación tiene 3 datos, el artículo tiene 3 datos. Prohibido agregar contexto, antecedentes, proyecciones ni información externa.
 

@@ -1,17 +1,23 @@
 /**
  * Source registry — classifies WHERE a scraped article came from, which drives:
- *   - image rights  (institutional photos OK; otros medios → flyers only)
- *   - attribution   (otros medios must be cited: "según informó …")
- *   - sourcing flags (don't lift another medio's interviews / signed notes)
+ *   - naming         (institutions MAY be named; otros medios are COMPETITORS —
+ *                     for their REGULAR notes report the public fact as our own
+ *                     WITHOUT naming them, but for their INTERVIEWS we extract the
+ *                     fact and MUST attribute the interview to the source)
+ *   - image rights   (institutional photos OK; otros medios → flyers only)
+ *   - sourcing flags (don't lift another medio's interview Q&A → fact-brief instead)
  *   - selection      (knowing it's institutional vs medio shapes relevance)
  *
  * Two source kinds:
  *   - 'institutional' — municipio, clubes, asociaciones, bibliotecas. Their own
- *                       images/info are usable. imagePolicy 'all'.
+ *                       images/info are usable and they may be named in the text
+ *                       ("El Municipio informó…"). imagePolicy 'all'.
  *   - 'medio'         — otros medios locales (radios, diarios, páginas de
- *                       noticias). Used AS A SOURCE: rewrite + attribute, never
- *                       lift their photos (flyers excepted) or their interviews.
- *                       imagePolicy 'flyers-only'.
+ *                       noticias). DIRECT COMPETITORS: for a regular note, rewrite
+ *                       the public fact as our own and DO NOT name them; for an
+ *                       interview, extract the fact, drop the Q&A, and attribute the
+ *                       interview to the source. Never lift their photos (flyers
+ *                       excepted). imagePolicy 'flyers-only'.
  *
  * Most sources share facebook.com / instagram.com hosts, so `match` tokens are
  * page slugs, profile ids, handles, or bare domains — matched as substrings of
@@ -29,6 +35,8 @@ export const sources = [
     match: ['lanuevaradiosuarez'] },
   { id: 'radio-ciudad-noticias', name: 'Radio Ciudad Noticias', ...MEDIO,
     match: ['radiociudadnoticias'] },
+  { id: 'radio-coronel-suarez', name: 'Radio Coronel Suárez', ...MEDIO,
+    match: ['radiocoronelsuarez'] },
   { id: 'suarez-al-dia', name: 'Suárez al Día', ...MEDIO,
     match: ['suarezaldia'] },
   { id: 'coronelsuarez-post', name: 'CoronelSuárez Post', ...MEDIO,

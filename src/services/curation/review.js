@@ -24,13 +24,14 @@ Criterios:
 - ESTILO: español rioplatense formal, tercera persona, voseo. NADA de español neutro ("puedes", "debes", "tienes", "descubre"), nada de segunda persona ni imperativos al lector, nada de emojis ni hashtags.
 - ESTRUCTURA: lead claro, párrafos cortos, subtítulos ## donde corresponde. Sin relleno ni fórmulas vacías.
 - SEÑALES DE ALARMA: texto que parece sin reelaborar (volanta genérica como "Noticias", título que es la primera oración cruda), datos incoherentes, contenido vacío o promocional.
+- OTROS MEDIOS: salvo que la nota sea una entrevista, NO debe nombrar ni atribuir información a otros medios locales (otras radios, diarios o sitios de noticias): son competencia y la información se reporta como propia. Si una nota informativa común nombra o cita a otro medio por su nombre, marcá "hold" (mención puntual a quitar) o "reject" (si está construida sobre la cita de otro medio). NO exijas atribución a una fuente: que una nota común NO nombre su origen es lo correcto, no un defecto.
 
 BREVEDAD (IMPORTANTE): somos una redacción local. Una nota BREVE, clara y correcta ES publicable. NO la marques "hold" ni "reject" por ser corta, escueta o de bajo interés, ni pidas "más desarrollo": las noticias locales de bajo perfil con poca información son válidas tal cual si están bien escritas. La extensión debe ser proporcional a la información disponible; no penalices que sea poca. Juzgá la calidad de lo que hay, no lo que falta.
 
 Veredictos:
 - "publish": lista para publicar (incluye notas breves y de bajo interés, si están limpias y bien escritas).
-- "hold": publicable pero con UN problema puntual y corregible (p. ej. fecha sin resolver, falta atribución a otro medio, una incoherencia puntual).
-- "reject": no debe publicarse así (sin reelaborar, incoherente, vacía, promocional o fuera de estilo).
+- "hold": publicable pero con UN problema puntual y corregible (p. ej. fecha sin resolver, una mención a otro medio que hay que quitar, una incoherencia puntual).
+- "reject": no debe publicarse así (sin reelaborar, incoherente, vacía, promocional, fuera de estilo, o construida sobre la cita de otro medio).
 
 Respondé ÚNICAMENTE con un objeto JSON, sin explicaciones ni bloques de código:
 {"verdict": "publish|hold|reject", "confidence": "high|medium|low", "reason": "una sola línea, máximo 120 caracteres, en español"}`

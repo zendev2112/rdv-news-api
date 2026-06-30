@@ -43,3 +43,12 @@ Format: one line per case — `<draft> · <what it is> · <should-have-done>`
   (no quotes, no Q&A). Interviews with no reportable fact return NO_FACT and are
   skipped. Implemented in content-type.js + prompts.extractFactsBrief + article-pipeline
   brief mode. The brief is the natural feed for the future ticker.
+
+- «Orquesta Escuela» (Local) · regular note sourced from Radio Ciudad Noticias ·
+  draft NAMED the competitor ("según informó Radio Ciudad Noticias"). Wrong — a
+  public event is a free fact; we don't credit a competitor for it.
+  → RESOLVED (2026-06-30): naming is now ASYMMETRIC. Regular competitor notes are
+  rewritten as our own with NO medio name (competitor flag → no-naming block in
+  reelaborateArticle/reelaborateSocialMedia). INTERVIEWS still attribute by name
+  (their original work). Critic updated: stop requiring attribution; flag a medio
+  name in a non-interview note as a defect. Radio Coronel Suárez added to registry.
