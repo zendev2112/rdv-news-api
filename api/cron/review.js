@@ -9,12 +9,15 @@ import {
   checkAnthropicHealth,
   submitBatch,
   getBatchResults,
+  textFromResult,
   REVIEW_MODEL,
 } from '../../src/services/claude-service.js'
 import {
   buildReviewRequest,
-  reviewFieldFromResult,
+  parseVerdict,
+  formatReviewField,
 } from '../../src/services/curation/review.js'
+import { capture, flush } from '../../src/services/analytics.js'
 
 // Batch review is async (Claude batches can take minutes). 300s is plenty for the
 // submit/retrieve bookkeeping; the batch itself completes between cron ticks.
@@ -123,8 +126,9 @@ export default async function handler(req, res) {
     for (const rec of recs) {
       const result = byId.get(rec.recordId)
       if (!result) continue
-      const field = reviewFieldFromResult(result, REVIEW_MODEL)
-      if (!field) continue // request errored — leave PENDING, will retry
+      const verdict = parseVerdict(textFromResult(result))
+      if (!verdict) continue // request errored — leave PENDING, will retry
+      const field = formatReviewField(verdict, REVIEW_MODEL)
       try {
         await airtableService.updateRecord(
           rec.recordId,
@@ -132,6 +136,16 @@ export default async function handler(req, res) {
           rec.tableName,
         )
         written++
+        // Analytics: the gate's decision, sliceable by section/verdict/confidence.
+        // This is the event that turns the hand-run agreement report into a live
+        // dashboard (verdict breakdown, hold/reject rate per table over time).
+        capture('review_verdict', {
+          table: rec.tableName,
+          verdict: verdict.verdict, // publish | hold | reject
+          confidence: verdict.confidence,
+          source: rec.fields.source || null,
+          model: REVIEW_MODEL,
+        })
       } catch (err) {
         retrieveErrors.push({ recordId: rec.recordId, error: err.message })
       }
@@ -181,6 +195,7 @@ export default async function handler(req, res) {
           } catch {}
         }
         console.error('[cron/review] submitBatch failed:', err.message)
+        await flush() // don't lose verdicts captured in the retrieve step
         return res.status(502).json({ ok: false, error: err.message })
       }
       submittedBatchId = created.id
@@ -195,6 +210,9 @@ export default async function handler(req, res) {
       }
     }
   }
+
+  // Serverless-safe: push buffered analytics before Vercel freezes the process.
+  await flush()
 
   return res.status(200).json({
     ok: true,

@@ -10,6 +10,7 @@ import { filterDuplicates } from './dedup.js'
 import { getBlock } from '../../config/homepage-blocks.js'
 import config from '../../config/index.js'
 import { checkGeminiHealth } from '../ai-service.js'
+import { capture, flush } from '../analytics.js'
 
 // Fetch a feed's raw rss.app items (with content_text/content_html intact, which
 // the trimmed supply shape drops). Cached per run so multiple social items from
@@ -211,6 +212,18 @@ export async function generateDrafts({ assignments = [] } = {}) {
       const res = await airtableService.insertRecords([{ fields }], a.feedId)
       const id = res?.records?.[0]?.id || null
       const brief = diagnostics.contentType === 'breve'
+      // Analytics: top of the funnel — a draft was generated and written.
+      if (id) {
+        capture('article_generated', {
+          feed: a.feedId,
+          front: a.front,
+          social,
+          brief, // interview down-converted to a fact-brief
+          contentType: diagnostics.contentType || 'article',
+          interviewVia: diagnostics.interviewVia || null,
+          source: fields.source || null,
+        })
+      }
       results.push(
         id
           ? { url: a.url, front: a.front, status: 'drafted', social, brief, airtableId: id }
@@ -224,6 +237,9 @@ export async function generateDrafts({ assignments = [] } = {}) {
   for (const a of deferred) {
     results.push({ url: a.url, front: a.front, status: 'deferred', reason: 'batch-limit (run again)' })
   }
+
+  // Serverless-safe: flush analytics before the handler/process can freeze.
+  await flush()
 
   return { results }
 }

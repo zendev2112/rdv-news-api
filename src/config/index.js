@@ -289,6 +289,13 @@ const config = {
     model: process.env.OPENROUTER_MODEL || 'meta-llama/llama-2-70b-chat',
   },
 
+  // PostHog product analytics + feature flags for the pipeline. Optional: with no
+  // apiKey the analytics layer is a safe no-op (see src/services/analytics.js).
+  posthog: {
+    apiKey: process.env.POSTHOG_API_KEY || '',
+    host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+  },
+
   sections: NEWS_SECTIONS,
 
   // Find a section by its ID
