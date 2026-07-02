@@ -957,6 +957,13 @@ export async function processArticleFromUrl(url, options = {}) {
     options.diagnostics.imageNote = imageNote
   }
 
+  // FUENTE field policy: a REGULAR note lifted from another medio is reported as
+  // our own — we must NOT name the competitor, so the field is left blank. Their
+  // INTERVIEWS (briefMode) keep the name (we attribute those), and INSTITUTIONS
+  // keep their name (legitimate protagonist). The internal resolvedSourceName is
+  // untouched — generation still uses it for competitor no-naming handling.
+  const sourceField = isOtroMedio && !briefMode ? '' : resolvedSourceName
+
   const fields = {
     title: stripMarkdown(metadata.title || ''),
     overline: stripMarkdown(metadata.volanta || ''),
@@ -966,7 +973,7 @@ export async function processArticleFromUrl(url, options = {}) {
     imgUrl: images.length > 0 ? images[0] : '',
     'article-images': images.slice(1).join(', '),
     url,
-    source: resolvedSourceName,
+    source: sourceField,
     'ig-post': instagramContent || '',
     'fb-post': facebookContent || '',
     'tw-post': twitterContent || '',
