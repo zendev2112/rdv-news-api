@@ -1125,8 +1125,11 @@ async function processArticle(item, sectionId) {
     }
 
     // ── STEP 3: Re-add fields the shared pipeline doesn't emit ───────────
-    // Byline uses the resolved source name (registry-correct), not the raw handle.
-    fields.author = fields.source || item.authors?.[0]?.name || ''
+    // Byline follows the source field exactly: registry name for institutions and
+    // attributed interviews, BLANK for a regular otros-medios note (source is blank
+    // there by policy). NEVER fall back to the raw author handle — that would
+    // reintroduce a competitor's name we deliberately stripped from `source`.
+    fields.author = fields.source || ''
     // Primera Plana: audio URL filled manually in Airtable.
     if (sectionId === 'primera-plana' && fields.audio === undefined) {
       fields.audio = ''
