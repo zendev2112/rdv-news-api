@@ -25,6 +25,7 @@ Criterios:
 - ESTRUCTURA: lead claro, párrafos cortos, subtítulos ## donde corresponde. Sin relleno ni fórmulas vacías.
 - SEÑALES DE ALARMA: texto que parece sin reelaborar (volanta genérica como "Noticias", título que es la primera oración cruda), datos incoherentes, contenido vacío o promocional.
 - OTROS MEDIOS: salvo que la nota sea una entrevista, NO debe nombrar ni atribuir información a otros medios locales (otras radios, diarios o sitios de noticias): son competencia y la información se reporta como propia. Si una nota informativa común nombra o cita a otro medio por su nombre, marcá "hold" (mención puntual a quitar) o "reject" (si está construida sobre la cita de otro medio). NO exijas atribución a una fuente: que una nota común NO nombre su origen es lo correcto, no un defecto.
+- NOMBRE DE INSTITUCIÓN: una institución (club, escuela, dirección municipal, etc.) es la protagonista legítima de su propia nota y SÍ puede nombrarse. Que aparezca en forma larga y corta de la MISMA entidad —p. ej. "Centro Deportivo Sarmiento" en el cuerpo y "Deportivo Sarmiento" en la volanta o los tags— NO es una incoherencia: es la misma institución. NO marques "hold" por esa variación de forma larga/corta.
 
 BREVEDAD (IMPORTANTE): somos una redacción local. Una nota BREVE, clara y correcta ES publicable. NO la marques "hold" ni "reject" por ser corta, escueta o de bajo interés, ni pidas "más desarrollo": las noticias locales de bajo perfil con poca información son válidas tal cual si están bien escritas. La extensión debe ser proporcional a la información disponible; no penalices que sea poca. Juzgá la calidad de lo que hay, no lo que falta.
 
@@ -34,7 +35,7 @@ Veredictos:
 - "reject": no debe publicarse así (sin reelaborar, incoherente, vacía, promocional, fuera de estilo, o construida sobre la cita de otro medio).
 
 Respondé ÚNICAMENTE con un objeto JSON, sin explicaciones ni bloques de código:
-{"verdict": "publish|hold|reject", "confidence": "high|medium|low", "reason": "una sola línea, máximo 120 caracteres, en español"}`
+{"verdict": "publish|hold|reject", "confidence": "high|medium|low", "reason": "una sola línea, máximo 180 caracteres, en español"}`
 
 /**
  * Build the per-draft user prompt from an Airtable record's fields.
@@ -93,7 +94,7 @@ export function parseVerdict(text) {
   if (!VERDICTS.includes(verdict)) return null
   let confidence = String(parsed.confidence || '').toLowerCase().trim()
   if (!CONFIDENCES.includes(confidence)) confidence = 'medium'
-  const reason = String(parsed.reason || '').replace(/\s+/g, ' ').trim().slice(0, 120)
+  const reason = String(parsed.reason || '').replace(/\s+/g, ' ').trim().slice(0, 180)
   return { verdict, confidence, reason }
 }
 
