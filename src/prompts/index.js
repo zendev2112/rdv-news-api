@@ -270,7 +270,8 @@ Generá exactamente 3 campos en formato JSON:
 
 1. "title" — Título SEO:
    - Entre 50 y 70 caracteres (óptimo para Google)
-   - Sentence case: solo primera letra mayúscula (excepto nombres propios)
+   - Sentence case: solo primera letra mayúscula. NO uses Title Case (no capitalices cada palabra).
+   - OBLIGATORIO: los nombres propios SIEMPRE con mayúscula inicial — personas ("Margarita Vergara"), lugares ("Puente Chico", "Coronel Suárez"), instituciones y siglas ("CAPS", "Escuela N° 2 Bartolomé Mitre"). PROHIBIDO dejar un nombre propio en minúscula (MAL: "margarita vergara", "escuela bartolomé mitre").
    - DEBE contener la palabra clave principal del artículo (tema, nombre, lugar)
    - Que genere interés sin ser clickbait
    - Sin signos de exclamación, sin comillas, sin emojis

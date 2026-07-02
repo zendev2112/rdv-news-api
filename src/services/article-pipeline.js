@@ -115,15 +115,102 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-// Enforce Argentine sentence case: lowercase everything, then restore the first
-// letter and any known proper nouns. This kills Title Case ("Fútbol Inferiores
-// Sarmiento" → "Fútbol inferiores Sarmiento") and ALL-CAPS without lowercasing
-// known proper nouns ("Sarmiento", "San Martín").
+// Spanish common/function words + high-frequency local-news vocabulary. These are
+// the words that get wrongly capitalized in Title Case ("Resultados De La Décima
+// Fecha"). We lowercase THESE and PRESERVE everything else — because an unknown
+// capitalized word (a surname, a place: "Vergara", "Puente Chico") is far more
+// likely a proper noun than a stray Title-Cased common word. NOTE: deliberately
+// EXCLUDES words that double as proper-noun tokens (san, santa, chico, mitre…).
+const COMMON_WORDS = new Set([
+  // articles, prepositions, conjunctions, pronouns, common adverbs
+  'de','del','la','el','los','las','un','una','unos','unas','lo','al',
+  'y','e','o','u','ni','que','se','su','sus','le','les','me','te','nos',
+  'en','a','con','sin','sobre','entre','hasta','desde','tras','ante','bajo',
+  'por','para','según','durante','contra','hacia','mediante',
+  'más','menos','muy','ya','no','sí','también','tras','como','cuando','donde',
+  'este','esta','estos','estas','ese','esa','esos','esas','aquel','esto','eso',
+  'cada','todo','toda','todos','todas','otro','otra','otros','otras','mismo','misma',
+  'quien','quienes','cual','cuales','cuyo','cuya','cuánto','cómo','cuándo','dónde','qué',
+  // common verbs (frequent forms)
+  'es','son','fue','fueron','será','serán','está','están','estará','estarán','estuvo',
+  'hay','había','habrá','ha','han','he','hemos','tiene','tienen','tuvo','tendrá',
+  'realizó','realizará','realizaron','realiza','llevó','llevará','participó','participará',
+  'destacó','destaca','anunció','anunciará','abre','abren','presentó','presentará','presenta',
+  'busca','buscan','ofrece','ofrecen','celebra','celebró','celebrará','invita','invitan',
+  'comenzó','comienza','continúa','sigue','siguen','dio','dieron','logró','lograron','viene',
+  'prepara','preparan','organiza','organizó','recibió','recibirá','sumó','sumará',
+  'juega','juegan','jugará','jugaron','jugó','gana','ganó','ganará','ganaron',
+  'pierde','perdió','enfrenta','enfrentará','enfrentó','disputa','disputó','disputará',
+  'visita','visitará','visitó','clasifica','clasificó','clasificaron','vence','venció',
+  'cayó','avanza','avanzó','quedó','asume','asumirá','asumió','fortalece','impulsa',
+  // ordinals (lowercase in sentence case: "la décima fecha", "los cuartos")
+  'primera','primero','segunda','segundo','tercera','tercero','cuarta','cuarto',
+  'quinta','quinto','sexta','sexto','séptima','séptimo','octava','octavo',
+  'novena','noveno','décima','décimo','undécima','duodécima',
+  // high-frequency local-news nouns/adjectives
+  'día','días','fecha','fechas','año','años','mes','meses','semana','hora','horas',
+  'jornada','jornadas','actividad','actividades','evento','eventos','acto','actos',
+  'encuentro','reunión','reuniones','partido','partidos',
+  // NOTE: torneo/copa/liga/apertura omitted on purpose — they usually head proper
+  // event names ("Copa Orlando", "Torneo Apertura"), so we defer to the model.
+  'final','finales','semifinal','semifinales','cuartos','octavos','fase','ronda',
+  'resultado','resultados','triunfo','victoria','derrota','empate','puntos',
+  'aniversario','historia','trayectoria','compromiso','vocación','pasión','futuro',
+  'comunidad','vecinos','vecinas','ciudad','distrito','pueblo','barrio','localidad',
+  'calle','avenida','plaza','salón','sede','edificio','gimnasio','estadio','instalaciones',
+  // NOTE: institution-structure headwords (escuela, colegio, club, centro,
+  // consejo, dirección, secretaría, hospital, instituto, biblioteca…) are OMITTED
+  // on purpose — they head unregistered proper names ("Consejo de Personas
+  // Mayores", "Centro de Formación Laboral"), so we defer to the model's casing.
+  // Registered institutions are handled by the proper-noun phrase map.
+  'salud','educación','deporte','deportes','cultura','ambiente','turismo',
+  'fútbol','vóley','voleibol','básquet','básquetbol','patín','patinaje','natación',
+  'equipo','equipos','plantel','categoría','categorías','división','divisiones',
+  'reserva','inferiores','formativas','cadetes','juvenil',
+  'femenino','femenina','masculino','masculina','infantil',
+  'show','espectáculo','festival','muestra','feria','exposición','concierto','función',
+  'curso','cursos','taller','talleres','capacitación','formación','inscripción','inscripciones',
+  'programa','proyecto','proyectos','iniciativa','propuesta','campaña','obra','obras',
+  'servicio','servicios','atención','área','áreas','grupo',
+  'municipal','provincial','nacional','regional','local','oficial','general','público','pública',
+  'nueva','nuevo','nuevas','nuevos','gran','grandes','primer','primero','segundo','último','última',
+  'importante','emotiva','emotivo','especial','solidaria','solidario','integral',
+  'jubilación','reconocimiento','homenaje','celebración','conmemoración','festejo',
+  'donaciones','ayuda','apoyo','contención','acompañamiento','bienestar',
+])
+
+// Recase a single word for Argentine sentence case.
+function recaseWord(word) {
+  const lower = word.toLowerCase()
+  // Known single-token proper noun → canonical casing (e.g. "SARMIENTO" → "Sarmiento").
+  if (PROPER_NOUN_MAP.has(lower)) return PROPER_NOUN_MAP.get(lower)
+  // Known common/function word → lowercase (this is what kills Title Case).
+  if (COMMON_WORDS.has(lower)) return lower
+  // Unknown word: PRESERVE its casing (a capital here is almost certainly a proper
+  // noun — surname, place, acronym). One exception: a long ALL-CAPS shout that is
+  // not a known acronym gets tamed to Title case ("VERDIRROJO" → "Verdirrojo");
+  // short all-caps (≤6) are kept as acronyms ("CAPS", "BASO", "CORESA").
+  const letters = [...word].filter((c) => /\p{L}/u.test(c))
+  const isAllCaps = letters.length > 1 && word === word.toUpperCase()
+  if (isAllCaps && letters.length > 6) {
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  }
+  return word
+}
+
+// Enforce Argentine sentence case WITHOUT destroying proper nouns. Instead of
+// lowercasing everything (which nuked unknown names like "Vergara"), we recase
+// word-by-word: lowercase known common words, keep the model's capitals on
+// everything else. Then restore canonical multiword proper nouns and capitalize
+// the first letter. "Resultados De La Décima Fecha" → "Resultados de la décima
+// fecha"; "Margarita Vergara" and "CAPS Puente Chico" survive intact.
 export function enforceSentenceCase(text) {
   if (!text) return text
-  let out = text.toLowerCase()
-  // Longest phrases first so multiword proper nouns win over their tokens.
-  const phrases = [...PROPER_NOUN_MAP.keys()].sort((a, b) => b.length - a.length)
+  let out = text.replace(/\p{L}[\p{L}\p{M}''-]*/gu, (w) => recaseWord(w))
+  // Restore canonical multiword proper nouns (longest first so phrases beat tokens).
+  const phrases = [...PROPER_NOUN_MAP.keys()]
+    .filter((k) => k.includes(' '))
+    .sort((a, b) => b.length - a.length)
   for (const ph of phrases) {
     const re = new RegExp(`(^|[^\\p{L}])(${escapeRegExp(ph)})(?![\\p{L}])`, 'giu')
     out = out.replace(re, (m, pre) => pre + PROPER_NOUN_MAP.get(ph))
