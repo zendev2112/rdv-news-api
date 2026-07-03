@@ -4,7 +4,12 @@
  *                     for their REGULAR notes report the public fact as our own
  *                     WITHOUT naming them, but for their INTERVIEWS we extract the
  *                     fact and MUST attribute the interview to the source)
- *   - image rights   (institutional photos OK; otros medios → flyers only)
+ *   - image rights   (images are EXTRACTED BY DEFAULT from every source — using
+ *                     them is the editor's call at review. Only explicitly
+ *                     blocked sources drop images: La Nueva Radio Suárez and
+ *                     Suárez al Día. Editor decision 2026-07-03, revoking the
+ *                     earlier blanket "otros medios → flyers only" rule that
+ *                     was killing extraction site-wide.)
  *   - sourcing flags (don't lift another medio's interview Q&A → fact-brief instead)
  *   - selection      (knowing it's institutional vs medio shapes relevance)
  *
@@ -16,8 +21,8 @@
  *                       noticias). DIRECT COMPETITORS: for a regular note, rewrite
  *                       the public fact as our own and DO NOT name them; for an
  *                       interview, extract the fact, drop the Q&A, and attribute the
- *                       interview to the source. Never lift their photos (flyers
- *                       excepted). imagePolicy 'flyers-only'.
+ *                       interview to the source. Naming rules are UNCHANGED by the
+ *                       image policy above.
  *
  * Most sources share facebook.com / instagram.com hosts, so `match` tokens are
  * page slugs, profile ids, handles, or bare domains — matched as substrings of
@@ -25,19 +30,25 @@
  * back to the feed's default kind via `feedDefaults`.
  */
 
-// imagePolicy: 'all' (any institutional image) | 'flyers-only' (only afiches/gráficas)
+// imagePolicy: 'all' (extract; editor decides at review) | 'none' (drop, blocked
+// source) | 'flyers-only' (legacy: vision check keeps afiches only — currently
+// assigned to no source, kept for future use)
 const INSTITUTIONAL = { type: 'institutional', imagePolicy: 'all', requireAttribution: false }
-const MEDIO = { type: 'medio', imagePolicy: 'flyers-only', requireAttribution: true }
+const MEDIO = { type: 'medio', imagePolicy: 'all', requireAttribution: true }
 
 export const sources = [
-  // ── Otros medios locales (usar como fuente; fotos propias prohibidas) ──────
+  // ── Otros medios locales (usar como fuente; naming asimétrico intacto) ─────
+  // Únicas fuentes con imágenes BLOQUEADAS (decisión del editor): La Nueva
+  // Radio Suárez y Suárez al Día. Del resto se extrae y el editor decide.
   { id: 'la-nueva-radio-suarez', name: 'La Nueva Radio Suárez', ...MEDIO,
+    imagePolicy: 'none',
     match: ['lanuevaradiosuarez'] },
   { id: 'radio-ciudad-noticias', name: 'Radio Ciudad Noticias', ...MEDIO,
     match: ['radiociudadnoticias'] },
   { id: 'radio-coronel-suarez', name: 'Radio Coronel Suárez', ...MEDIO,
     match: ['radiocoronelsuarez'] },
   { id: 'suarez-al-dia', name: 'Suárez al Día', ...MEDIO,
+    imagePolicy: 'none',
     match: ['suarezaldia'] },
   { id: 'coronelsuarez-post', name: 'CoronelSuárez Post', ...MEDIO,
     match: ['postcoronelsuarez'] },
@@ -80,7 +91,10 @@ export const feedDefaults = {
   'local-facebook': MEDIO,
 }
 
-const DEFAULT = { id: 'unknown', name: 'Desconocido', type: 'unknown', imagePolicy: 'flyers-only', requireAttribution: true }
+// Unknown sources (everything not in the registry: national outlets, secondary
+// feeds...) EXTRACT images — the old 'flyers-only' default silently killed
+// extraction across the whole site, which was RDV's biggest strength.
+const DEFAULT = { id: 'unknown', name: 'Desconocido', type: 'unknown', imagePolicy: 'all', requireAttribution: true }
 
 /**
  * Classify a scraped article by URL, falling back to its feed.
@@ -111,8 +125,9 @@ export function classifySource(url, feedId, hints = '') {
  * @returns {{allowed: boolean|null, reason: string}}
  */
 export function imageDecision(source, isFlyer) {
-  if (source.imagePolicy === 'all') return { allowed: true, reason: 'institucional' }
-  // flyers-only
+  if (source.imagePolicy === 'all') return { allowed: true, reason: 'extracción por defecto' }
+  if (source.imagePolicy === 'none') return { allowed: false, reason: `fuente bloqueada (${source.name})` }
+  // flyers-only (legacy)
   if (isFlyer === true) return { allowed: true, reason: 'flyer' }
   if (isFlyer === false) return { allowed: false, reason: `foto propia (${source.name})` }
   return { allowed: null, reason: `verificar flyer vs foto (${source.name})` }

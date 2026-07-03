@@ -1022,12 +1022,17 @@ export async function processArticleFromUrl(url, options = {}) {
   }
 
   // ── Image rights gate ──────────────────────────────────────────────
-  // Institutional sources (imagePolicy 'all') keep their images untouched. For
-  // otros medios / unknown (flyers-only), a vision check decides flyer (keep)
-  // vs. their own photograph (drop, publish text-only). Checks the lead image;
-  // drops all on a photo. Fails open — vision errors never silently lose images.
+  // Editor decision 2026-07-03: images are extracted BY DEFAULT from every
+  // source (using them is the editor's call at review). Only explicitly blocked
+  // sources (imagePolicy 'none': La Nueva Radio Suárez, Suárez al Día) drop
+  // their images. The vision flyer check only runs for legacy 'flyers-only'
+  // sources (currently none) — it no longer gates the whole site.
   let imageNote = null
-  if (images.length > 0 && source.imagePolicy !== 'all') {
+  if (images.length > 0 && source.imagePolicy === 'none') {
+    imageNote = `imagen descartada: fuente bloqueada (${source.name})`
+    images = []
+    imageAttachments = []
+  } else if (images.length > 0 && source.imagePolicy === 'flyers-only') {
     const vision = await classifyImageForUse(images[0])
     const decision = imageDecision(source, vision.isFlyer)
     if (decision.allowed === false) {
