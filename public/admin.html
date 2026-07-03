@@ -616,6 +616,74 @@
             font-style: italic;
             margin-top: 12px;
         }
+
+        /* ── Picker slide deck (one slide per source table) ── */
+        .cur-deck-nav {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .cur-tabs {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            flex: 1;
+            scrollbar-width: thin;
+            padding-bottom: 2px;
+        }
+
+        .cur-tab {
+            flex: 0 0 auto;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            border-radius: 16px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #6b7280;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .cur-tab.active {
+            background: #667eea;
+            border-color: #667eea;
+            color: white;
+        }
+
+        .cur-tab .cur-tab-badge {
+            font-weight: 400;
+            opacity: .85;
+            margin-left: 4px;
+        }
+
+        .cur-arrow {
+            flex: 0 0 auto;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 1px solid #e5e7eb;
+            background: white;
+            cursor: pointer;
+            font-size: 15px;
+            line-height: 1;
+            color: #6b7280;
+        }
+
+        .cur-arrow:hover {
+            background: #f3f4f6;
+        }
+
+        .cur-slide {
+            display: none;
+            margin-top: 12px;
+        }
+
+        .cur-slide.active {
+            display: block;
+        }
     </style>
 </head>
 
@@ -752,9 +820,10 @@
 
             <div class="card" style="margin-bottom: 30px;">
                 <h3 style="margin: 0;">🤖 News Picker <span class="status status-idle" id="status-curate">Idle</span></h3>
-                <p style="color:#666; font-size:13px; margin-top:8px;">Fresh RSS titles grouped by homepage block. Tick the ones you want, then send them to Airtable — same pipeline and Rioplatense prompts as a manual run. <strong>Nothing is generated until you click Send.</strong></p>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Fresh RSS titles organized as one slide per source table. <strong>Fetch &amp; propose</strong> asks Claude to pre-select the ones worth covering (with a score and reason) — add or deselect anything, then send to Airtable. <strong>Nothing is generated until you click Send.</strong></p>
                 <div class="cur-controls">
-                    <button class="btn btn-primary" id="btn-plan" onclick="loadTitles()">Fetch titles</button>
+                    <button class="btn btn-primary" id="btn-propose" onclick="loadPicker('select')">🤖 Fetch &amp; propose</button>
+                    <button class="btn btn-primary" id="btn-plan" onclick="loadPicker('list')" style="background:#94a3b8;">Fetch titles only</button>
                     <button class="btn btn-success" id="btn-generate" onclick="generateSelected()" disabled>Send selected (0)</button>
                 </div>
                 <div class="cur-summary" id="cur-summary"></div>
@@ -1077,11 +1146,40 @@
         }
 
         // ── News picker ───────────────────────────────────────
-        let titleItems = [];   // flat list of all fetched items, index = checkbox id
+        let titleItems = [];      // flat list of all fetched items, index = checkbox id
+        let selectionModel = null; // set when Claude proposed the current deck
+        let curSlide = 0;
 
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c =>
                 ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function showSlide(i) {
+            curSlide = i;
+            document.querySelectorAll('.cur-slide').forEach(el =>
+                el.classList.toggle('active', +el.dataset.slide === i));
+            document.querySelectorAll('.cur-tab').forEach(el =>
+                el.classList.toggle('active', +el.dataset.slide === i));
+            const tab = document.querySelector(`.cur-tab[data-slide="${i}"]`);
+            if (tab) tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+
+        function stepSlide(d) {
+            const n = document.querySelectorAll('.cur-slide').length;
+            if (!n) return;
+            showSlide(((curSlide + d) % n + n) % n);
+        }
+
+        // Tab badges show "selected/total" per table so overrides are visible at a glance.
+        function updateTabBadges() {
+            document.querySelectorAll('.cur-tab').forEach(tab => {
+                const fi = +tab.dataset.slide;
+                const total = document.querySelectorAll(`.cur-cb[data-feed="${fi}"]`).length;
+                const sel = document.querySelectorAll(`.cur-cb[data-feed="${fi}"]:checked`).length;
+                const badge = tab.querySelector('.cur-tab-badge');
+                if (badge) badge.textContent = `${sel}/${total}`;
+            });
         }
 
         function updateGenerateBtn() {
@@ -1089,6 +1187,7 @@
             const btn = document.getElementById('btn-generate');
             btn.textContent = `Send selected (${n})`;
             btn.disabled = n === 0;
+            updateTabBadges();
         }
 
         function relTime(ts) {
@@ -1110,52 +1209,72 @@
             const box = document.getElementById('cur-plan');
             const feeds = data.feeds || [];
             titleItems = [];
+            selectionModel = (data.selection && data.selection.model) || null;
+            curSlide = 0;
             if (!feeds.length) {
                 box.innerHTML = '<p class="cur-empty">No fresh titles — feeds are empty or everything is already published.</p>';
                 updateGenerateBtn();
                 return;
             }
 
-            let html = '';
+            let tabs = '';
+            let slides = '';
             feeds.forEach((f, fi) => {
-                html += `<div class="cur-block">
-                    <div class="cur-block-head">
+                tabs += `<button class="cur-tab${fi === 0 ? ' active' : ''}" data-slide="${fi}" onclick="showSlide(${fi})">${escapeHtml(f.feedName)} <span class="cur-tab-badge">0/${f.items.length}</span></button>`;
+                let rows = `<div class="cur-block-head">
                         <label class="cur-feedtoggle"><input type="checkbox" onchange="toggleFeed(${fi}, this.checked)"> ${escapeHtml(f.feedName)}</label>
-                        <span class="cur-need">${f.items.length} · → ${escapeHtml(f.blockLabel)}</span>
+                        <span class="cur-need">${f.items.length} título(s) · → ${escapeHtml(f.blockLabel)}</span>
                     </div>`;
                 for (const it of f.items) {
                     const i = titleItems.length;
-                    titleItems.push({ url: it.url, front: f.front, feedId: f.feedId });
+                    const pick = it.pick || null;
+                    titleItems.push({ url: it.url, front: f.front, feedId: f.feedId, proposed: !!pick });
                     const thumb = it.image
                         ? `<img class="cur-thumb" src="${encodeURI(it.image)}" loading="lazy" alt="">`
                         : '<div class="cur-thumb cur-thumb-empty"></div>';
-                    html += `<div class="cur-row" id="cur-row-${i}">
-                        <input type="checkbox" class="cur-cb" data-i="${i}" data-feed="${fi}" onchange="updateGenerateBtn()">
+                    const scoreChip = pick
+                        ? `<span class="cur-score${pick.score < 75 ? ' mid' : ''}">${pick.score}</span>`
+                        : '';
+                    const reason = pick && pick.reason
+                        ? `<div class="cur-reason">🤖 ${escapeHtml(pick.reason)}</div>`
+                        : '';
+                    rows += `<div class="cur-row" id="cur-row-${i}">
+                        <input type="checkbox" class="cur-cb" data-i="${i}" data-feed="${fi}"${pick ? ' checked' : ''} onchange="updateGenerateBtn()">
                         ${thumb}
                         <div class="cur-body">
                             <a class="cur-title" href="${encodeURI(it.url)}" target="_blank" rel="noopener">${escapeHtml(it.title || it.url)}</a>
+                            ${reason}
                             <div class="cur-tags"><span>${relTime(it.pubDate)}</span></div>
                         </div>
+                        ${scoreChip}
                         <span class="cur-rowstatus" id="cur-st-${i}"></span>
                     </div>`;
                 }
-                html += '</div>';
+                slides += `<div class="cur-slide${fi === 0 ? ' active' : ''}" data-slide="${fi}">${rows}</div>`;
             });
-            box.innerHTML = html;
+
+            box.innerHTML = `<div class="cur-deck-nav">
+                    <button class="cur-arrow" onclick="stepSlide(-1)" title="Anterior">‹</button>
+                    <div class="cur-tabs">${tabs}</div>
+                    <button class="cur-arrow" onclick="stepSlide(1)" title="Siguiente">›</button>
+                </div>${slides}`;
             updateGenerateBtn();
         }
 
-        async function loadTitles() {
+        // mode 'select' = Claude proposes (picks arrive pre-checked); 'list' = titles only.
+        async function loadPicker(mode) {
             if (!API_TOKEN) { addLog('⚠️ Sign in first', 'warning'); return; }
-            setStatus('status-curate', 'running', 'Fetching');
+            const proposing = mode === 'select';
+            setStatus('status-curate', 'running', proposing ? 'Claude picking' : 'Fetching');
             document.getElementById('btn-plan').disabled = true;
+            document.getElementById('btn-propose').disabled = true;
             document.getElementById('cur-summary').textContent = '';
-            addLog('🤖 Fetching RSS titles...', 'info');
+            addLog(proposing ? '🤖 Fetching titles & asking Claude to propose...' : '📥 Fetching RSS titles...', 'info');
             try {
                 const res = await fetch(`${API_BASE}/api/agent/curate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
-                    body: JSON.stringify({ mode: 'list' })
+                    body: JSON.stringify({ mode })
                 });
                 if (res.status === 401) { setStatus('status-curate', 'error', 'Auth error'); addLog('❌ token rejected', 'error'); return; }
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1164,16 +1283,22 @@
                 const s = data.stats || {};
                 const feeds = data.feeds || [];
                 const total = feeds.reduce((n, f) => n + f.items.length, 0);
-                document.getElementById('cur-summary').textContent =
-                    `${total} título(s) en ${feeds.length} feed(s) · ${s.pulled || 0} ítems pulidos desde ${s.feedsPulled || 0} feeds`;
-                setStatus('status-curate', total ? 'success' : 'idle', `${total} titles`);
-                addLog(`🤖 ${total} titles ready across ${feeds.length} feeds`, total ? 'success' : 'warning');
+                const sel = data.selection || null;
+                let summary = `${total} título(s) en ${feeds.length} tabla(s) · ${s.pulled || 0} ítems desde ${s.feedsPulled || 0} feeds`;
+                if (sel) summary += ` · 🤖 Claude eligió ${sel.picked}${sel.error ? ` (falló: ${sel.error})` : ''}`;
+                document.getElementById('cur-summary').textContent = summary;
+                setStatus('status-curate', total ? 'success' : 'idle', sel ? `${sel.picked} picked` : `${total} titles`);
+                addLog(sel
+                    ? `🤖 Claude proposed ${sel.picked}/${total} title(s) across ${feeds.length} table(s)`
+                    : `📥 ${total} titles ready across ${feeds.length} table(s)`, total ? 'success' : 'warning');
+                if (sel && sel.error) addLog(`⚠️ Claude selection failed (${sel.error}) — pick manually`, 'warning');
                 (data.feedErrors || []).forEach(fe => addLog(`⚠️ Feed error ${fe.feedId}: ${fe.error}`, 'warning'));
             } catch (e) {
                 setStatus('status-curate', 'error', 'Error');
                 addLog(`❌ Fetch failed: ${e.message}`, 'error');
             } finally {
                 document.getElementById('btn-plan').disabled = false;
+                document.getElementById('btn-propose').disabled = false;
             }
         }
 
@@ -1183,8 +1308,26 @@
         async function generateSelected() {
             const boxes = [...document.querySelectorAll('.cur-cb:checked')];
             if (!boxes.length) return;
+
+            // Selection-agreement beacon: how the human edited Claude's proposal
+            // (kept / removed / added). Fire-and-forget — never blocks generation.
+            if (selectionModel) {
+                const checkedIdx = new Set(boxes.map(cb => +cb.dataset.i));
+                const proposed = titleItems.filter(t => t.proposed).length;
+                const kept = titleItems.filter((t, i) => t.proposed && checkedIdx.has(i)).length;
+                const removed = proposed - kept;
+                const added = boxes.length - kept;
+                addLog(`📊 Selection: Claude proposed ${proposed} → kept ${kept}, removed ${removed}, added ${added}`, 'info');
+                fetch(`${API_BASE}/api/agent/curate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
+                    body: JSON.stringify({ mode: 'confirm', proposed, kept, removed, added, sent: boxes.length, model: selectionModel })
+                }).catch(e => addLog(`⚠️ confirm beacon failed: ${e.message}`, 'warning'));
+            }
+
             setStatus('status-curate', 'running', 'Sending');
             document.getElementById('btn-plan').disabled = true;
+            document.getElementById('btn-propose').disabled = true;
             document.getElementById('btn-generate').disabled = true;
             addLog(`🛠️ Sending ${boxes.length} title(s) to Airtable, one at a time...`, 'info');
             let ok = 0, fail = 0;
@@ -1224,6 +1367,7 @@
             setStatus('status-curate', 'success', `Drafted ${ok}`);
             if (typeof loadCoverage === 'function') loadCoverage();
             document.getElementById('btn-plan').disabled = false;
+            document.getElementById('btn-propose').disabled = false;
             updateGenerateBtn();
         }
     </script>
