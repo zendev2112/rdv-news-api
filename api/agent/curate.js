@@ -126,6 +126,76 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Day-sheet status board: today's production vs pauta, per table ──────────
+  // For each quota'd table: records created today (ART) + the review gate's
+  // verdicts parsed from the aiReview field's stable prefix (PUBLISH/HOLD/...).
+  if (mode === 'status') {
+    try {
+      const [{ daySheetFor, startOfDayArtIso, isWeekendArt }, airtableService] =
+        await Promise.all([
+          import('../../src/config/day-sheet.js'),
+          import('../../src/services/airtable.js').then((m) => m.default),
+        ])
+      const sheet = daySheetFor().filter((r) => r.quota > 0)
+      const formula = `IS_AFTER(CREATED_TIME(), '${startOfDayArtIso()}')`
+
+      const rows = []
+      const CHUNK = 4 // Airtable: 5 req/s per base
+      for (let i = 0; i < sheet.length; i += CHUNK) {
+        await Promise.all(
+          sheet.slice(i, i + CHUNK).map(async (r) => {
+            const section = appConfig.getSection(r.feedId)
+            try {
+              const records = await airtableService.fetchRecords(r.feedId, {
+                filterByFormula: formula,
+                maxRecords: 100,
+              })
+              const verdicts = { publish: 0, hold: 0, reject: 0, pending: 0 }
+              for (const rec of records || []) {
+                const v = String(rec?.fields?.aiReview || '').split('·')[0].trim().toLowerCase()
+                if (v in verdicts) verdicts[v] += 1
+                else verdicts.pending += 1
+              }
+              rows.push({
+                feedId: r.feedId,
+                feedName: section?.name || r.feedId,
+                tier: r.tier,
+                quota: r.quota,
+                generated: (records || []).length,
+                ...verdicts,
+              })
+            } catch (err) {
+              rows.push({
+                feedId: r.feedId,
+                feedName: section?.name || r.feedId,
+                tier: r.tier,
+                quota: r.quota,
+                error: err.message,
+              })
+            }
+          }),
+        )
+      }
+
+      // Stable presentation order: locals first, then secondary, then recurring.
+      const tierRank = { local: 0, secondary: 1, recurring: 2 }
+      rows.sort(
+        (a, b) =>
+          (tierRank[a.tier] ?? 9) - (tierRank[b.tier] ?? 9) ||
+          a.feedName.localeCompare(b.feedName),
+      )
+
+      return res.status(200).json({
+        generatedAt: new Date().toISOString(),
+        weekend: isWeekendArt(),
+        rows,
+      })
+    } catch (error) {
+      console.error('curate status error:', error)
+      return res.status(500).json({ error: error.message })
+    }
+  }
+
   // ── Selection-agreement beacon: the human confirmed a proposal ──────────────
   // Fired once per Send click, before the execute loop. kept/removed/added are
   // measured against Claude's proposal — the raw material of the selection-
