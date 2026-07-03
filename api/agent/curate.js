@@ -145,47 +145,80 @@ export default async function handler(req, res) {
   }
 
   // ── Claude proposes a selection over the fresh titles ───────────────────────
+  // Demand = the editorial day sheet (quotas per table) minus what was already
+  // approved today, NOT homepage-slot vacancy. Repeated sessions are additive.
   if (mode === 'select') {
     try {
-      // Lazy imports: keep Claude + Supabase demand out of plain-list cold start.
-      const [{ selectCandidates }, { computeDemand }] = await Promise.all([
-        import('../../src/services/curation/select.js'),
-        import('../../src/services/curation/demand.js'),
-      ])
+      // Lazy imports: keep Claude + Airtable counting out of plain-list cold start.
+      const [{ selectCandidates }, { countApprovedToday }, { getSheetRow }] =
+        await Promise.all([
+          import('../../src/services/curation/select.js'),
+          import('../../src/services/curation/approved-today.js'),
+          import('../../src/config/day-sheet.js'),
+        ])
       const list = await buildTitleList()
 
-      // Demand is advisory context for Claude; a failure there shouldn't kill
-      // the proposal (it just selects without homepage-need awareness).
-      let demand = []
-      try {
-        demand = await computeDemand()
-      } catch (err) {
-        console.error('curate select: demand failed:', err.message)
-      }
+      // Count today's records only for tables that have a quota.
+      const quotaFeedIds = list.feeds
+        .filter((f) => (getSheetRow(f.feedId)?.quota || 0) > 0)
+        .map((f) => f.feedId)
+      const approved = await countApprovedToday(quotaFeedIds)
 
-      // Claude only judges news feeds destined for a homepage block. Recurring/
-      // templated tables (front=null: clima, quiniela...) and empty groups stay
-      // out of the prompt — they render as slides for manual picking only.
-      const proposable = list.feeds.filter((f) => f.front && f.items.length)
-      const { picks, model, error } = await selectCandidates({
-        feeds: proposable,
-        demand,
+      // Attach the day-sheet view to every group (the UI shows it per slide).
+      const sheeted = list.feeds.map((f) => {
+        const row = getSheetRow(f.feedId)
+        const quota = row?.quota || 0
+        const approvedToday = approved.get(f.feedId) || 0
+        return {
+          ...f,
+          tier: row?.tier || 'secondary',
+          quota,
+          approvedToday,
+          remaining: Math.max(0, quota - approvedToday),
+        }
       })
 
-      const feeds = list.feeds.map((f) => ({
-        ...f,
-        items: f.items.map((it) => {
-          const p = picks.get(it.url)
-          return { ...it, pick: p ? { selected: true, ...p } : null }
-        }),
-      }))
+      // Claude judges local + secondary tables that still owe articles today.
+      // Recurring tables get no judgment: today's freshest item(s), auto-picked.
+      const proposable = sheeted.filter(
+        (f) => f.tier !== 'recurring' && f.remaining > 0 && f.items.length,
+      )
+      const { picks, model, error } = await selectCandidates({ feeds: proposable })
 
-      // candidates = what Claude actually saw (block-fed news, not recurring).
+      let recurringPicked = 0
+      const feeds = sheeted.map((f) => {
+        if (f.tier === 'recurring') {
+          // items arrive newest-first; take what the day still owes.
+          const take = new Set(f.items.slice(0, f.remaining).map((it) => it.url))
+          recurringPicked += take.size
+          return {
+            ...f,
+            items: f.items.map((it) => ({
+              ...it,
+              pick: take.has(it.url)
+                ? { selected: true, reason: 'ítem del día (recurrente)' }
+                : null,
+            })),
+          }
+        }
+        return {
+          ...f,
+          items: f.items.map((it) => {
+            const p = picks.get(it.url)
+            return { ...it, pick: p ? { selected: true, ...p } : null }
+          }),
+        }
+      })
+
+      // candidates = what Claude actually saw (quota'd news tables).
       const candidates = proposable.reduce((s, f) => s + f.items.length, 0)
+      const picked = picks.size + recurringPicked
       capture('selection_proposed', {
         tables: feeds.length,
         candidates,
-        picked: picks.size,
+        picked,
+        pickedRecurring: recurringPicked,
+        quotaRemaining: sheeted.reduce((s, f) => s + f.remaining, 0),
         model,
         error: error || null,
       })
@@ -196,7 +229,7 @@ export default async function handler(req, res) {
         feeds,
         feedErrors: list.feedErrors,
         stats: list.stats,
-        selection: { model, picked: picks.size, candidates, error: error || null },
+        selection: { model, picked, candidates, error: error || null },
       })
     } catch (error) {
       console.error('curate select error:', error)

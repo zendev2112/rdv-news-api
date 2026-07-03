@@ -2,8 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 // Read-only dry run of the admin picker's Claude selection: pull fresh titles
-// exactly like curate list mode, compute homepage demand, ask Claude to propose,
-// and print picks per source table. Writes NOTHING (no Airtable, no analytics).
+// exactly like curate select mode, resolve today's day sheet (quotas minus
+// already-approved-today), ask Claude to propose, and print picks per table.
+// Writes NOTHING (no Airtable inserts, no analytics).
 //
 //   node scripts/selection-dry-run.mjs
 
@@ -15,8 +16,9 @@ for (const line of fs.readFileSync(path.resolve(process.cwd(), '.env'), 'utf8').
 
 const { pullSupply } = await import('../src/services/curation/supply.js')
 const { filterDuplicates } = await import('../src/services/curation/dedup.js')
-const { computeDemand } = await import('../src/services/curation/demand.js')
 const { selectCandidates, SELECT_MODEL } = await import('../src/services/curation/select.js')
+const { countApprovedToday } = await import('../src/services/curation/approved-today.js')
+const { getSheetRow, isWeekendArt } = await import('../src/config/day-sheet.js')
 const appConfig = (await import('../src/config/index.js')).default
 const { autoFeedableBlocks, feedsForBlocks, blocksForFeed } = await import(
   '../src/config/homepage-blocks.js'
@@ -32,7 +34,7 @@ const blocks = autoFeedableBlocks()
 const feedIds = [
   ...new Set([...feedsForBlocks(blocks), ...appConfig.sections.map((s) => s.id)]),
 ]
-console.log(`Pulling ${feedIds.length} feeds...`)
+console.log(`Pulling ${feedIds.length} feeds... (${isWeekendArt() ? 'WEEKEND' : 'weekday'} sheet)`)
 const { candidates, feedErrors } = await pullSupply({ feedIds })
 for (const fe of feedErrors || []) console.log(`  ⚠ feed ${fe.feedId}: ${fe.error}`)
 
@@ -49,7 +51,7 @@ for (const c of unique) {
   if (!byFeed.has(c.feedId)) byFeed.set(c.feedId, [])
   byFeed.get(c.feedId).push(c)
 }
-const feeds = feedIds.map((fid) => {
+const bare = feedIds.map((fid) => {
   const items = byFeed.get(fid) || []
   const dest = blocksForFeed(fid, blocks)[0] || null
   items.sort((a, z) => new Date(z.pubDate || 0) - new Date(a.pubDate || 0))
@@ -62,33 +64,49 @@ const feeds = feedIds.map((fid) => {
   }
 })
 
-const total = feeds.reduce((s, f) => s + f.items.length, 0)
-console.log(`${total} fresh title(s) across ${feeds.length} table(s) (pulled ${candidates.length}, new ${unique.length})`)
+const total = bare.reduce((s, f) => s + f.items.length, 0)
+console.log(`${total} fresh title(s) across ${bare.length} table(s) (pulled ${candidates.length}, new ${unique.length})`)
 if (!total) process.exit(0)
 
-// ── Demand (advisory) ─────────────────────────────────────────────────────────
-let demand = []
-try {
-  demand = await computeDemand()
-} catch (err) {
-  console.log(`  ⚠ demand failed (selection runs without it): ${err.message}`)
-}
+// ── Day sheet: quota minus already-approved-today ─────────────────────────────
+const quotaFeedIds = bare.filter((f) => (getSheetRow(f.feedId)?.quota || 0) > 0).map((f) => f.feedId)
+console.log(`Counting today's records in ${quotaFeedIds.length} quota'd tables...`)
+const approved = await countApprovedToday(quotaFeedIds)
 
-// ── Claude proposes (block-fed news only; recurring tables are manual-pick) ──
-const proposable = feeds.filter((f) => f.front && f.items.length)
+const feeds = bare.map((f) => {
+  const row = getSheetRow(f.feedId)
+  const quota = row?.quota || 0
+  const approvedToday = approved.get(f.feedId) || 0
+  return { ...f, tier: row?.tier || 'secondary', quota, approvedToday, remaining: Math.max(0, quota - approvedToday) }
+})
+
+// ── Claude proposes (quota'd news tables; recurring = today's item, no Claude) ──
+const proposable = feeds.filter((f) => f.tier !== 'recurring' && f.remaining > 0 && f.items.length)
 console.log(`\nAsking Claude to propose (model ${SELECT_MODEL})...`)
 const t0 = Date.now()
-const { picks, model, error } = await selectCandidates({ feeds: proposable, demand })
+const { picks, model, error } = await selectCandidates({ feeds: proposable })
 console.log(`→ ${picks.size} pick(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s${error ? `  (ERROR: ${error})` : ''}`)
 
-const needByFront = new Map(demand.map((d) => [d.front, d]))
 let picked = 0
+let recurringPicked = 0
 for (const f of feeds) {
-  const d = needByFront.get(f.front)
-  const needTxt = d ? (d.need > 0 ? `necesita ${d.need}` : d.stale ? 'lleno pero viejo' : 'lleno y fresco') : 's/d'
-  const destTxt = f.blockLabel ? `→ ${f.blockLabel} (${needTxt})` : '(sección propia, sin Claude — elegir a mano)'
-  console.log(`\n${'═'.repeat(72)}\n  ${f.feedName}  ${destTxt}\n${'═'.repeat(72)}`)
-  if (!f.items.length) console.log('  (sin títulos nuevos)')
+  const tierTag = f.tier === 'recurring' ? 'RECURRENTE' : f.tier === 'local' ? 'LOCAL' : 'secundaria'
+  const quotaTxt = f.quota > 0
+    ? `pauta: faltan ${f.remaining} de ${f.quota}${f.approvedToday ? ` (hoy ya ${f.approvedToday})` : ''}`
+    : 'sin pauta'
+  console.log(`\n${'═'.repeat(72)}\n  ${f.feedName} [${tierTag}] — ${quotaTxt}\n${'═'.repeat(72)}`)
+  if (!f.items.length) {
+    console.log('  (sin títulos nuevos)')
+    continue
+  }
+  if (f.tier === 'recurring') {
+    f.items.slice(0, f.remaining).forEach((it) => {
+      recurringPicked += 1
+      console.log(`  ✅ [día] ${snip(it.title, 80)}`)
+    })
+    f.items.slice(f.remaining).forEach((it) => console.log(`  ·       ${snip(it.title, 80)}`))
+    continue
+  }
   for (const it of f.items) {
     const p = picks.get(it.url)
     if (p) {
@@ -102,5 +120,5 @@ for (const f of feeds) {
 }
 
 console.log(`\n${'─'.repeat(72)}`)
-console.log(`TOTAL: Claude picked ${picked}/${total} · model ${model}${error ? ` · error: ${error}` : ''}`)
+console.log(`TOTAL: ${picked} news pick(s) + ${recurringPicked} recurrente(s) = ${picked + recurringPicked} · model ${model}${error ? ` · error: ${error}` : ''}`)
 console.log('(dry run — nothing written to Airtable or PostHog)')

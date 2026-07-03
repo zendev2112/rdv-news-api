@@ -1222,9 +1222,12 @@
             feeds.forEach((f, fi) => {
                 tabs += `<button class="cur-tab${fi === 0 ? ' active' : ''}" data-slide="${fi}" onclick="showSlide(${fi})">${escapeHtml(f.feedName)} <span class="cur-tab-badge">0/${f.items.length}</span></button>`;
                 const dest = f.blockLabel ? `→ ${escapeHtml(f.blockLabel)}` : 'sección propia (sin bloque)';
+                const quota = (typeof f.quota === 'number' && f.quota > 0)
+                    ? ` · pauta hoy: faltan ${f.remaining} de ${f.quota}${f.approvedToday ? ` (ya aprobadas ${f.approvedToday})` : ''}`
+                    : '';
                 let rows = `<div class="cur-block-head">
                         <label class="cur-feedtoggle"><input type="checkbox" onchange="toggleFeed(${fi}, this.checked)"> ${escapeHtml(f.feedName)}</label>
-                        <span class="cur-need">${f.items.length} título(s) · ${dest}</span>
+                        <span class="cur-need">${f.items.length} título(s) · ${dest}${quota}</span>
                     </div>`;
                 if (!f.items.length) {
                     rows += '<p class="cur-empty">Sin títulos nuevos — el feed no trae nada fresco o ya está todo en Airtable.</p>';
@@ -1236,7 +1239,7 @@
                     const thumb = it.image
                         ? `<img class="cur-thumb" src="${encodeURI(it.image)}" loading="lazy" alt="">`
                         : '<div class="cur-thumb cur-thumb-empty"></div>';
-                    const scoreChip = pick
+                    const scoreChip = (pick && Number.isFinite(pick.score))
                         ? `<span class="cur-score${pick.score < 75 ? ' mid' : ''}">${pick.score}</span>`
                         : '';
                     const reason = pick && pick.reason
