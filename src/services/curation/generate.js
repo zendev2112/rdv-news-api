@@ -122,11 +122,18 @@ export async function generateDrafts({ assignments = [] } = {}) {
   if (!assignments.length) return { results }
 
   // Validate server-side — never trust the client's block/feed pairing.
+  // front=null is legal for recurring/templated tables (clima, quiniela...):
+  // the draft is inserted without homepage placement, like a manual section
+  // fetch. When front IS given, the block/feed pairing must be valid.
   const valid = []
   for (const a of assignments) {
-    const block = getBlock(a?.front)
-    if (!a?.url || !a?.feedId || !block || !block.eligibleFeeds.includes(a.feedId)) {
-      results.push({ url: a?.url, front: a?.front, status: 'failed', error: 'invalid-assignment' })
+    const section = a?.feedId ? config.getSection(a.feedId) : null
+    const block = a?.front ? getBlock(a.front) : null
+    const frontOk = a?.front
+      ? block && block.eligibleFeeds.includes(a.feedId)
+      : !!section
+    if (!a?.url || !a?.feedId || !frontOk) {
+      results.push({ url: a?.url, front: a?.front || null, status: 'failed', error: 'invalid-assignment' })
     } else {
       valid.push(a)
     }
@@ -206,8 +213,11 @@ export async function generateDrafts({ assignments = [] } = {}) {
         continue
       }
       // The agent's editorial decision, carried to the homepage at publish time.
-      fields.front = a.front
-      fields.order = 'principal' // newest leads the block (spec principle 4)
+      // Recurring tables have no block: skip placement, like a section fetch.
+      if (a.front) {
+        fields.front = a.front
+        fields.order = 'principal' // newest leads the block (spec principle 4)
+      }
 
       const res = await airtableService.insertRecords([{ fields }], a.feedId)
       const id = res?.records?.[0]?.id || null

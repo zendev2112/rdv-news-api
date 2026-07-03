@@ -17,9 +17,17 @@ export const config = { maxDuration: 300 }
 
 // ── Fresh RSS titles, deduped, grouped by source feed (the list-mode shape) ──
 // Shared by list mode (manual picking) and select mode (Claude proposes).
+// EVERY configured Airtable table gets a group (and thus a slide on the admin):
+// block-fed news feeds first, then the remaining tables (recurring/templated —
+// clima, quiniela, horóscopo, efemérides — which have no homepage block).
 async function buildTitleList() {
   const blocks = autoFeedableBlocks()
-  const feedIds = feedsForBlocks(blocks)
+  const feedIds = [
+    ...new Set([
+      ...feedsForBlocks(blocks),
+      ...appConfig.sections.map((s) => s.id),
+    ]),
+  ]
   const { candidates, feedErrors } = await pullSupply({ feedIds })
 
   // In-run dedup by url.
@@ -41,29 +49,27 @@ async function buildTitleList() {
   }
 
   // One group per source feed; destination block auto-derived (first eligible).
-  const feeds = feedIds
-    .map((fid) => {
-      const items = byFeed.get(fid) || []
-      if (!items.length) return null
-      const eligible = blocksForFeed(fid, blocks)
-      const dest = eligible[0]
-      if (!dest) return null
-      const section = appConfig.getSection(fid)
-      items.sort((a, z) => new Date(z.pubDate || 0) - new Date(a.pubDate || 0))
-      return {
-        feedId: fid,
-        feedName: section?.name || fid,
-        front: dest.front,
-        blockLabel: dest.label,
-        items: items.map((c) => ({
-          url: c.url,
-          title: c.title,
-          image: c.image,
-          pubDate: c.pubDate,
-        })),
-      }
-    })
-    .filter(Boolean)
+  // Feeds with no eligible block (recurring tables) keep front=null — their
+  // drafts are inserted without homepage placement, like a manual section fetch.
+  // Empty feeds stay in the list so every table is visible on the admin.
+  const feeds = feedIds.map((fid) => {
+    const items = byFeed.get(fid) || []
+    const dest = blocksForFeed(fid, blocks)[0] || null
+    const section = appConfig.getSection(fid)
+    items.sort((a, z) => new Date(z.pubDate || 0) - new Date(a.pubDate || 0))
+    return {
+      feedId: fid,
+      feedName: section?.name || fid,
+      front: dest?.front || null,
+      blockLabel: dest?.label || null,
+      items: items.map((c) => ({
+        url: c.url,
+        title: c.title,
+        image: c.image,
+        pubDate: c.pubDate,
+      })),
+    }
+  })
 
   return {
     feeds,
@@ -157,8 +163,12 @@ export default async function handler(req, res) {
         console.error('curate select: demand failed:', err.message)
       }
 
+      // Claude only judges news feeds destined for a homepage block. Recurring/
+      // templated tables (front=null: clima, quiniela...) and empty groups stay
+      // out of the prompt — they render as slides for manual picking only.
+      const proposable = list.feeds.filter((f) => f.front && f.items.length)
       const { picks, model, error } = await selectCandidates({
-        feeds: list.feeds,
+        feeds: proposable,
         demand,
       })
 
@@ -170,7 +180,8 @@ export default async function handler(req, res) {
         }),
       }))
 
-      const candidates = list.feeds.reduce((s, f) => s + f.items.length, 0)
+      // candidates = what Claude actually saw (block-fed news, not recurring).
+      const candidates = proposable.reduce((s, f) => s + f.items.length, 0)
       capture('selection_proposed', {
         tables: feeds.length,
         candidates,

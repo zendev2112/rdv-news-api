@@ -1221,10 +1221,14 @@
             let slides = '';
             feeds.forEach((f, fi) => {
                 tabs += `<button class="cur-tab${fi === 0 ? ' active' : ''}" data-slide="${fi}" onclick="showSlide(${fi})">${escapeHtml(f.feedName)} <span class="cur-tab-badge">0/${f.items.length}</span></button>`;
+                const dest = f.blockLabel ? `→ ${escapeHtml(f.blockLabel)}` : 'sección propia (sin bloque)';
                 let rows = `<div class="cur-block-head">
                         <label class="cur-feedtoggle"><input type="checkbox" onchange="toggleFeed(${fi}, this.checked)"> ${escapeHtml(f.feedName)}</label>
-                        <span class="cur-need">${f.items.length} título(s) · → ${escapeHtml(f.blockLabel)}</span>
+                        <span class="cur-need">${f.items.length} título(s) · ${dest}</span>
                     </div>`;
+                if (!f.items.length) {
+                    rows += '<p class="cur-empty">Sin títulos nuevos — el feed no trae nada fresco o ya está todo en Airtable.</p>';
+                }
                 for (const it of f.items) {
                     const i = titleItems.length;
                     const pick = it.pick || null;

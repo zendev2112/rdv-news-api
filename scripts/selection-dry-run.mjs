@@ -27,8 +27,11 @@ function snip(s, n) {
 }
 
 // ── Build the list-mode feeds shape (mirror of api/agent/curate.js) ──────────
+// Every configured table: block-fed news feeds first, then recurring tables.
 const blocks = autoFeedableBlocks()
-const feedIds = feedsForBlocks(blocks)
+const feedIds = [
+  ...new Set([...feedsForBlocks(blocks), ...appConfig.sections.map((s) => s.id)]),
+]
 console.log(`Pulling ${feedIds.length} feeds...`)
 const { candidates, feedErrors } = await pullSupply({ feedIds })
 for (const fe of feedErrors || []) console.log(`  ⚠ feed ${fe.feedId}: ${fe.error}`)
@@ -46,22 +49,18 @@ for (const c of unique) {
   if (!byFeed.has(c.feedId)) byFeed.set(c.feedId, [])
   byFeed.get(c.feedId).push(c)
 }
-const feeds = feedIds
-  .map((fid) => {
-    const items = byFeed.get(fid) || []
-    if (!items.length) return null
-    const dest = blocksForFeed(fid, blocks)[0]
-    if (!dest) return null
-    items.sort((a, z) => new Date(z.pubDate || 0) - new Date(a.pubDate || 0))
-    return {
-      feedId: fid,
-      feedName: appConfig.getSection(fid)?.name || fid,
-      front: dest.front,
-      blockLabel: dest.label,
-      items: items.map((c) => ({ url: c.url, title: c.title, image: c.image, pubDate: c.pubDate })),
-    }
-  })
-  .filter(Boolean)
+const feeds = feedIds.map((fid) => {
+  const items = byFeed.get(fid) || []
+  const dest = blocksForFeed(fid, blocks)[0] || null
+  items.sort((a, z) => new Date(z.pubDate || 0) - new Date(a.pubDate || 0))
+  return {
+    feedId: fid,
+    feedName: appConfig.getSection(fid)?.name || fid,
+    front: dest?.front || null,
+    blockLabel: dest?.label || null,
+    items: items.map((c) => ({ url: c.url, title: c.title, image: c.image, pubDate: c.pubDate })),
+  }
+})
 
 const total = feeds.reduce((s, f) => s + f.items.length, 0)
 console.log(`${total} fresh title(s) across ${feeds.length} table(s) (pulled ${candidates.length}, new ${unique.length})`)
@@ -75,10 +74,11 @@ try {
   console.log(`  ⚠ demand failed (selection runs without it): ${err.message}`)
 }
 
-// ── Claude proposes ───────────────────────────────────────────────────────────
+// ── Claude proposes (block-fed news only; recurring tables are manual-pick) ──
+const proposable = feeds.filter((f) => f.front && f.items.length)
 console.log(`\nAsking Claude to propose (model ${SELECT_MODEL})...`)
 const t0 = Date.now()
-const { picks, model, error } = await selectCandidates({ feeds, demand })
+const { picks, model, error } = await selectCandidates({ feeds: proposable, demand })
 console.log(`→ ${picks.size} pick(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s${error ? `  (ERROR: ${error})` : ''}`)
 
 const needByFront = new Map(demand.map((d) => [d.front, d]))
@@ -86,7 +86,9 @@ let picked = 0
 for (const f of feeds) {
   const d = needByFront.get(f.front)
   const needTxt = d ? (d.need > 0 ? `necesita ${d.need}` : d.stale ? 'lleno pero viejo' : 'lleno y fresco') : 's/d'
-  console.log(`\n${'═'.repeat(72)}\n  ${f.feedName}  → ${f.blockLabel} (${needTxt})\n${'═'.repeat(72)}`)
+  const destTxt = f.blockLabel ? `→ ${f.blockLabel} (${needTxt})` : '(sección propia, sin Claude — elegir a mano)'
+  console.log(`\n${'═'.repeat(72)}\n  ${f.feedName}  ${destTxt}\n${'═'.repeat(72)}`)
+  if (!f.items.length) console.log('  (sin títulos nuevos)')
   for (const it of f.items) {
     const p = picks.get(it.url)
     if (p) {
