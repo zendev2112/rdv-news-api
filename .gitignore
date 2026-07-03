@@ -4,3 +4,4 @@ node_modules/
 .errors/
 .state/
 rdv-news-frontend/
+POSTHOG.md
