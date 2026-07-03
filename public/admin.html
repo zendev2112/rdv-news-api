@@ -724,6 +724,28 @@
 
         .sheet-tier-local { color: #4f46e5; background: #eef2ff; }
         .sheet-tier-dia { color: #6b7280; background: #f3f4f6; }
+
+        .btn-slide {
+            border: 1px solid #c7d2fe;
+            background: #eef2ff;
+            color: #4f46e5;
+            border-radius: 12px;
+            padding: 3px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        .btn-slide:hover:not(:disabled) {
+            background: #e0e7ff;
+        }
+
+        .btn-slide:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 
@@ -1266,6 +1288,8 @@
         let titleItems = [];      // flat list of all fetched items, index = checkbox id
         let selectionModel = null; // set when Claude proposed the current deck
         let curSlide = 0;
+        let deckFeeds = [];       // current deck data, one entry per table
+        let pickerBusy = false;   // ignore clicks while a fetch/propose runs
 
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c =>
@@ -1323,11 +1347,40 @@
         }
 
         function renderTitles(data) {
-            const box = document.getElementById('cur-plan');
-            const feeds = data.feeds || [];
-            titleItems = [];
+            deckFeeds = data.feeds || [];
             selectionModel = (data.selection && data.selection.model) || null;
             curSlide = 0;
+            renderDeck();
+        }
+
+        // Replace/append ONE table's group after a per-slide fetch & propose,
+        // preserving the editor's manual check state on every other slide.
+        function mergeFeed(feedData, sel) {
+            if (!feedData) return;
+            const state = new Map();
+            document.querySelectorAll('.cur-cb').forEach(cb => {
+                const it = titleItems[+cb.dataset.i];
+                if (it) state.set(it.url, cb.checked);
+            });
+            const idx = deckFeeds.findIndex(f => f.feedId === feedData.feedId);
+            if (idx >= 0) deckFeeds[idx] = feedData; else deckFeeds.push(feedData);
+            if (sel && sel.model) selectionModel = sel.model;
+            renderDeck();
+            document.querySelectorAll('.cur-cb').forEach(cb => {
+                const it = titleItems[+cb.dataset.i];
+                if (it && it.feedId !== feedData.feedId && state.has(it.url)) {
+                    cb.checked = state.get(it.url);
+                }
+            });
+            updateGenerateBtn();
+            const si = deckFeeds.findIndex(f => f.feedId === feedData.feedId);
+            if (si >= 0) showSlide(si);
+        }
+
+        function renderDeck() {
+            const box = document.getElementById('cur-plan');
+            const feeds = deckFeeds;
+            titleItems = [];
             if (!feeds.length) {
                 box.innerHTML = '<p class="cur-empty">No fresh titles — feeds are empty or everything is already published.</p>';
                 updateGenerateBtn();
@@ -1344,7 +1397,9 @@
                     : '';
                 let rows = `<div class="cur-block-head">
                         <label class="cur-feedtoggle"><input type="checkbox" onchange="toggleFeed(${fi}, this.checked)"> ${escapeHtml(f.feedName)}</label>
-                        <span class="cur-need">${f.items.length} título(s) · ${dest}${quota}</span>
+                        <span class="cur-need">${f.items.length} título(s) · ${dest}${quota}
+                            <button class="btn-slide" onclick="loadPicker('select', '${escapeHtml(f.feedId)}')" title="Volver a buscar títulos y proponer solo esta tabla">🤖 Proponer esta tabla</button>
+                        </span>
                     </div>`;
                 if (!f.items.length) {
                     rows += '<p class="cur-empty">Sin títulos nuevos — el feed no trae nada fresco o ya está todo en Airtable.</p>';
@@ -1386,43 +1441,63 @@
         }
 
         // mode 'select' = Claude proposes (picks arrive pre-checked); 'list' = titles only.
-        async function loadPicker(mode) {
+        // feedId limits the fetch & proposal to ONE table (per-slide button) —
+        // only that slide is replaced; manual checks elsewhere are preserved.
+        async function loadPicker(mode, feedId) {
             if (!API_TOKEN) { addLog('⚠️ Sign in first', 'warning'); return; }
+            if (pickerBusy) { addLog('⚠️ Picker is busy — wait for the current run', 'warning'); return; }
+            pickerBusy = true;
             const proposing = mode === 'select';
             setStatus('status-curate', 'running', proposing ? 'Claude picking' : 'Fetching');
             document.getElementById('btn-plan').disabled = true;
             document.getElementById('btn-propose').disabled = true;
+            document.querySelectorAll('.btn-slide').forEach(b => b.disabled = true);
             document.getElementById('cur-summary').textContent = '';
-            addLog(proposing ? '🤖 Fetching titles & asking Claude to propose...' : '📥 Fetching RSS titles...', 'info');
+            addLog(feedId
+                ? `🤖 Re-proposing table "${feedId}"...`
+                : (proposing ? '🤖 Fetching titles & asking Claude to propose...' : '📥 Fetching RSS titles...'), 'info');
             try {
                 const res = await fetch(`${API_BASE}/api/agent/curate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
-                    body: JSON.stringify({ mode })
+                    body: JSON.stringify(feedId ? { mode, feedId } : { mode })
                 });
                 if (res.status === 401) { setStatus('status-curate', 'error', 'Auth error'); addLog('❌ token rejected', 'error'); return; }
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
-                renderTitles(data);
-                const s = data.stats || {};
                 const feeds = data.feeds || [];
-                const total = feeds.reduce((n, f) => n + f.items.length, 0);
                 const sel = data.selection || null;
-                let summary = `${total} título(s) en ${feeds.length} tabla(s) · ${s.pulled || 0} ítems desde ${s.feedsPulled || 0} feeds`;
-                if (sel) summary += ` · 🤖 Claude eligió ${sel.picked}${sel.error ? ` (falló: ${sel.error})` : ''}`;
-                document.getElementById('cur-summary').textContent = summary;
-                setStatus('status-curate', total ? 'success' : 'idle', sel ? `${sel.picked} picked` : `${total} titles`);
-                addLog(sel
-                    ? `🤖 Claude proposed ${sel.picked}/${total} title(s) across ${feeds.length} table(s)`
-                    : `📥 ${total} titles ready across ${feeds.length} table(s)`, total ? 'success' : 'warning');
+                if (feedId) {
+                    mergeFeed(feeds[0], sel);
+                    const f = feeds[0] || { items: [] };
+                    const picked = f.items.filter(it => it.pick).length;
+                    document.getElementById('cur-summary').textContent =
+                        `Tabla "${f.feedName || feedId}" actualizada: ${f.items.length} título(s)` +
+                        (sel ? ` · 🤖 Claude eligió ${picked}${sel.error ? ` (falló: ${sel.error})` : ''}` : '');
+                    setStatus('status-curate', 'success', `${picked} picked`);
+                    addLog(`🤖 "${f.feedName || feedId}": ${picked}/${f.items.length} proposed`, 'success');
+                } else {
+                    renderTitles(data);
+                    const s = data.stats || {};
+                    const total = feeds.reduce((n, f) => n + f.items.length, 0);
+                    let summary = `${total} título(s) en ${feeds.length} tabla(s) · ${s.pulled || 0} ítems desde ${s.feedsPulled || 0} feeds`;
+                    if (sel) summary += ` · 🤖 Claude eligió ${sel.picked}${sel.error ? ` (falló: ${sel.error})` : ''}`;
+                    document.getElementById('cur-summary').textContent = summary;
+                    setStatus('status-curate', total ? 'success' : 'idle', sel ? `${sel.picked} picked` : `${total} titles`);
+                    addLog(sel
+                        ? `🤖 Claude proposed ${sel.picked}/${total} title(s) across ${feeds.length} table(s)`
+                        : `📥 ${total} titles ready across ${feeds.length} table(s)`, total ? 'success' : 'warning');
+                }
                 if (sel && sel.error) addLog(`⚠️ Claude selection failed (${sel.error}) — pick manually`, 'warning');
                 (data.feedErrors || []).forEach(fe => addLog(`⚠️ Feed error ${fe.feedId}: ${fe.error}`, 'warning'));
             } catch (e) {
                 setStatus('status-curate', 'error', 'Error');
                 addLog(`❌ Fetch failed: ${e.message}`, 'error');
             } finally {
+                pickerBusy = false;
                 document.getElementById('btn-plan').disabled = false;
                 document.getElementById('btn-propose').disabled = false;
+                document.querySelectorAll('.btn-slide').forEach(b => b.disabled = false);
             }
         }
 
@@ -1450,9 +1525,11 @@
             }
 
             setStatus('status-curate', 'running', 'Sending');
+            pickerBusy = true; // block re-fetch/re-propose while the send loop runs
             document.getElementById('btn-plan').disabled = true;
             document.getElementById('btn-propose').disabled = true;
             document.getElementById('btn-generate').disabled = true;
+            document.querySelectorAll('.btn-slide').forEach(b => b.disabled = true);
             addLog(`🛠️ Sending ${boxes.length} title(s) to Airtable, one at a time...`, 'info');
             let ok = 0, fail = 0;
             for (let n = 0; n < boxes.length; n++) {
@@ -1495,8 +1572,10 @@
                 `Envío terminado: ✓${ok} drafted · ✗${fail} failed`;
             if (typeof loadCoverage === 'function') loadCoverage();
             loadDaySheet(); // production board reflects the run immediately
+            pickerBusy = false;
             document.getElementById('btn-plan').disabled = false;
             document.getElementById('btn-propose').disabled = false;
+            document.querySelectorAll('.btn-slide').forEach(b => b.disabled = false);
             updateGenerateBtn();
         }
     </script>

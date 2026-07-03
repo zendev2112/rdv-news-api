@@ -20,14 +20,16 @@ export const config = { maxDuration: 300 }
 // EVERY configured Airtable table gets a group (and thus a slide on the admin):
 // block-fed news feeds first, then the remaining tables (recurring/templated —
 // clima, quiniela, horóscopo, efemérides — which have no homepage block).
-async function buildTitleList() {
+// `onlyFeedId` narrows the pull to a single table (per-slide fetch & propose).
+async function buildTitleList(onlyFeedId) {
   const blocks = autoFeedableBlocks()
-  const feedIds = [
+  let feedIds = [
     ...new Set([
       ...feedsForBlocks(blocks),
       ...appConfig.sections.map((s) => s.id),
     ]),
   ]
+  if (onlyFeedId) feedIds = feedIds.filter((fid) => fid === onlyFeedId)
   const { candidates, feedErrors } = await pullSupply({ feedIds })
 
   // In-run dedup by url.
@@ -99,6 +101,12 @@ export default async function handler(req, res) {
 
   const body = typeof req.body === 'object' && req.body ? req.body : {}
   const { mode = 'list' } = body
+
+  // Optional single-table scope for list/select (per-slide fetch & propose).
+  const onlyFeedId = typeof body.feedId === 'string' && body.feedId ? body.feedId : null
+  if (onlyFeedId && !appConfig.getSection(onlyFeedId)) {
+    return res.status(400).json({ error: `unknown feedId: ${onlyFeedId}` })
+  }
 
   // ── Send selected titles to Airtable (reuses the full generation pipeline) ──
   if (mode === 'execute') {
@@ -226,7 +234,7 @@ export default async function handler(req, res) {
           import('../../src/services/curation/approved-today.js'),
           import('../../src/config/day-sheet.js'),
         ])
-      const list = await buildTitleList()
+      const list = await buildTitleList(onlyFeedId)
 
       // Count today's records only for tables that have a quota.
       const quotaFeedIds = list.feeds
@@ -284,6 +292,7 @@ export default async function handler(req, res) {
       const candidates = proposable.reduce((s, f) => s + f.items.length, 0)
       const picked = picks.size + recurringPicked
       capture('selection_proposed', {
+        scope: onlyFeedId || 'all',
         tables: feeds.length,
         candidates,
         picked,
@@ -313,7 +322,7 @@ export default async function handler(req, res) {
 
   // ── List fresh RSS titles, grouped by source feed (each headline once) ──
   try {
-    const list = await buildTitleList()
+    const list = await buildTitleList(onlyFeedId)
     return res.status(200).json({
       generatedAt: new Date().toISOString(),
       ...list,
