@@ -4,12 +4,12 @@
  *                     for their REGULAR notes report the public fact as our own
  *                     WITHOUT naming them, but for their INTERVIEWS we extract the
  *                     fact and MUST attribute the interview to the source)
- *   - image rights   (images are EXTRACTED BY DEFAULT from every source — using
- *                     them is the editor's call at review. Only explicitly
- *                     blocked sources drop images: La Nueva Radio Suárez and
- *                     Suárez al Día. Editor decision 2026-07-03, revoking the
- *                     earlier blanket "otros medios → flyers only" rule that
- *                     was killing extraction site-wide.)
+ *   - image rights   (NO FILTER: images are extracted from EVERY source, no
+ *                     exceptions — using them is the editor's call at review.
+ *                     Editor decision 2026-07-03, revoking the earlier blanket
+ *                     "otros medios → flyers only" rule that was killing
+ *                     extraction site-wide. 'none'/'flyers-only' remain
+ *                     supported values assigned to no source.)
  *   - sourcing flags (don't lift another medio's interview Q&A → fact-brief instead)
  *   - selection      (knowing it's institutional vs medio shapes relevance)
  *
@@ -38,17 +38,15 @@ const MEDIO = { type: 'medio', imagePolicy: 'all', requireAttribution: true }
 
 export const sources = [
   // ── Otros medios locales (usar como fuente; naming asimétrico intacto) ─────
-  // Únicas fuentes con imágenes BLOQUEADAS (decisión del editor): La Nueva
-  // Radio Suárez y Suárez al Día. Del resto se extrae y el editor decide.
+  // Imágenes: se extrae TODO de TODAS las fuentes, sin filtro (decisión del
+  // editor, 2026-07-03). Usarlas o no es su decisión al revisar cada borrador.
   { id: 'la-nueva-radio-suarez', name: 'La Nueva Radio Suárez', ...MEDIO,
-    imagePolicy: 'none',
     match: ['lanuevaradiosuarez'] },
   { id: 'radio-ciudad-noticias', name: 'Radio Ciudad Noticias', ...MEDIO,
     match: ['radiociudadnoticias'] },
   { id: 'radio-coronel-suarez', name: 'Radio Coronel Suárez', ...MEDIO,
     match: ['radiocoronelsuarez'] },
   { id: 'suarez-al-dia', name: 'Suárez al Día', ...MEDIO,
-    imagePolicy: 'none',
     match: ['suarezaldia'] },
   { id: 'coronelsuarez-post', name: 'CoronelSuárez Post', ...MEDIO,
     match: ['postcoronelsuarez'] },
