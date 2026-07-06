@@ -8,6 +8,7 @@ import { extractFromContentHtml } from '../scraper.js'
 import airtableService from '../airtable.js'
 import { filterDuplicates } from './dedup.js'
 import { getBlock } from '../../config/homepage-blocks.js'
+import { defaultSectionFor } from '../../config/section-routing.js'
 import config from '../../config/index.js'
 import { checkGeminiHealth } from '../ai-service.js'
 import { capture, flush } from '../analytics.js'
@@ -218,6 +219,16 @@ export async function generateDrafts({ assignments = [] } = {}) {
         fields.front = a.front
         fields.order = 'principal' // newest leads the block (spec principle 4)
       }
+
+      // Supabase SECTION (drives the section pages + section-reading components).
+      // Prefer the pick's section (set by Claude/editor once section-aware
+      // selection lands); else the table's default from the routing map. Written
+      // as the section id — the Airtable field is free text, and both
+      // publishArticle (normalize fallback) and the social route (reverse lookup)
+      // resolve an id to the correct Supabase section. Previously left blank,
+      // which defaulted every article to primera-plana at publish.
+      const sectionId = a.section || defaultSectionFor(a.feedId)
+      if (sectionId) fields.section = sectionId
 
       const res = await airtableService.insertRecords([{ fields }], a.feedId)
       const id = res?.records?.[0]?.id || null

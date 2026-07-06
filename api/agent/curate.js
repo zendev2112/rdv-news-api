@@ -4,8 +4,13 @@ import appConfig from '../../src/config/index.js'
 import {
   autoFeedableBlocks,
   feedsForBlocks,
-  blocksForFeed,
+  getBlock,
 } from '../../src/config/homepage-blocks.js'
+import {
+  blocksFor,
+  sectionMenuFor,
+  defaultSectionFor,
+} from '../../src/config/section-routing.js'
 import { capture, flush } from '../../src/services/analytics.js'
 
 const ADMIN_TOKEN = process.env.ADMIN_API_TOKEN
@@ -50,20 +55,28 @@ async function buildTitleList(onlyFeedId) {
     byFeed.get(c.feedId).push(c)
   }
 
-  // One group per source feed; destination block auto-derived (first eligible).
-  // Feeds with no eligible block (recurring tables) keep front=null — their
-  // drafts are inserted without homepage placement, like a manual section fetch.
+  // One group per source feed. Placement now comes from the section-routing map
+  // (the single source of truth), not homepage-blocks' array order. `front` is
+  // the table's default box (first in its routing list); the full `blocks` list
+  // plus the Supabase `sectionMenu`/`defaultSection` are exposed so section-aware
+  // selection can spread a wide table across its boxes and pick a section per
+  // headline (until then, front stays the default box and section the default).
   // Empty feeds stay in the list so every table is visible on the admin.
   const feeds = feedIds.map((fid) => {
     const items = byFeed.get(fid) || []
-    const dest = blocksForFeed(fid, blocks)[0] || null
+    const routeBlocks = blocksFor(fid)
+    const front = routeBlocks[0] || null
+    const block = front ? getBlock(front) : null
     const section = appConfig.getSection(fid)
     items.sort((a, z) => new Date(z.pubDate || 0) - new Date(a.pubDate || 0))
     return {
       feedId: fid,
       feedName: section?.name || fid,
-      front: dest?.front || null,
-      blockLabel: dest?.label || null,
+      front,
+      blockLabel: block?.label || null,
+      blocks: routeBlocks,
+      sectionMenu: sectionMenuFor(fid),
+      defaultSection: defaultSectionFor(fid),
       items: items.map((c) => ({
         url: c.url,
         title: c.title,
