@@ -210,6 +210,23 @@ export default async function handler(req, res) {
   // agreement metric (mirror of review_verdict for the review gate).
   if (mode === 'confirm') {
     const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0)
+    // Per-item detail: which titles the editor kept/removed/added vs Claude's
+    // proposal, with Claude's score+reason. Overrides are the calibration data
+    // that turns into per-table criteria; kept items double as future few-shot
+    // positives. Sanitized + capped so a hostile/buggy client can't bloat events.
+    const clean = (arr) =>
+      (Array.isArray(arr) ? arr : []).slice(0, 200).map((it) => ({
+        title: String(it?.title || '').slice(0, 300),
+        url: String(it?.url || '').slice(0, 500),
+        feedId: String(it?.feedId || '').slice(0, 100),
+        feedName: String(it?.feedName || '').slice(0, 100),
+        score: Number.isFinite(Number(it?.score)) ? Number(it.score) : null,
+        reason: String(it?.reason || '').slice(0, 300),
+      }))
+    const keptItems = clean(body.keptItems)
+    const removedItems = clean(body.removedItems)
+    const addedItems = clean(body.addedItems)
+
     capture('selection_confirmed', {
       proposed: n(body.proposed),
       kept: n(body.kept),
@@ -217,7 +234,18 @@ export default async function handler(req, res) {
       added: n(body.added),
       sent: n(body.sent),
       model: body.model || null,
+      keptItems,
+      removedItems,
+      addedItems,
     })
+    // One event per override → trivially sliceable by table/action in PostHog
+    // (e.g. "removals in Local Facebook this week" without unpacking arrays).
+    for (const it of removedItems) {
+      capture('selection_override', { action: 'removed', model: body.model || null, ...it })
+    }
+    for (const it of addedItems) {
+      capture('selection_override', { action: 'added', model: body.model || null, ...it })
+    }
     await flush()
     return res.status(200).json({ ok: true })
   }

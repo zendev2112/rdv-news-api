@@ -1407,7 +1407,12 @@
                 for (const it of f.items) {
                     const i = titleItems.length;
                     const pick = it.pick || null;
-                    titleItems.push({ url: it.url, front: f.front, feedId: f.feedId, proposed: !!pick });
+                    titleItems.push({
+                        url: it.url, title: it.title || it.url, front: f.front,
+                        feedId: f.feedId, feedName: f.feedName, proposed: !!pick,
+                        score: (pick && Number.isFinite(pick.score)) ? pick.score : null,
+                        reason: (pick && pick.reason) || null,
+                    });
                     const thumb = it.image
                         ? `<img class="cur-thumb" src="${encodeURI(it.image)}" loading="lazy" alt="">`
                         : '<div class="cur-thumb cur-thumb-empty"></div>';
@@ -1508,19 +1513,35 @@
             const boxes = [...document.querySelectorAll('.cur-cb:checked')];
             if (!boxes.length) return;
 
-            // Selection-agreement beacon: how the human edited Claude's proposal
-            // (kept / removed / added). Fire-and-forget — never blocks generation.
+            // Selection-agreement beacon: how the human edited Claude's proposal.
+            // Per-item detail (WHICH titles were kept/removed/added, with Claude's
+            // score+reason) is the calibration raw material — override patterns
+            // become per-table criteria in the selection prompt. Items already
+            // sent in a previous batch are excluded so a second Send doesn't
+            // count them as "removed". Fire-and-forget — never blocks generation.
             if (selectionModel) {
                 const checkedIdx = new Set(boxes.map(cb => +cb.dataset.i));
-                const proposed = titleItems.filter(t => t.proposed).length;
-                const kept = titleItems.filter((t, i) => t.proposed && checkedIdx.has(i)).length;
-                const removed = proposed - kept;
-                const added = boxes.length - kept;
-                addLog(`📊 Selection: Claude proposed ${proposed} → kept ${kept}, removed ${removed}, added ${added}`, 'info');
+                const detail = t => ({
+                    title: t.title, url: t.url, feedId: t.feedId, feedName: t.feedName,
+                    score: t.score, reason: t.reason,
+                });
+                const keptItems = [], removedItems = [], addedItems = [];
+                titleItems.forEach((t, i) => {
+                    if (t.sent) return;
+                    if (t.proposed && checkedIdx.has(i)) keptItems.push(detail(t));
+                    else if (t.proposed) removedItems.push(detail(t));
+                    else if (checkedIdx.has(i)) addedItems.push(detail(t));
+                });
+                const kept = keptItems.length, removed = removedItems.length, added = addedItems.length;
+                addLog(`📊 Selection: Claude proposed ${kept + removed} → kept ${kept}, removed ${removed}, added ${added}`, 'info');
                 fetch(`${API_BASE}/api/agent/curate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
-                    body: JSON.stringify({ mode: 'confirm', proposed, kept, removed, added, sent: boxes.length, model: selectionModel })
+                    body: JSON.stringify({
+                        mode: 'confirm', proposed: kept + removed, kept, removed, added,
+                        sent: boxes.length, model: selectionModel,
+                        keptItems, removedItems, addedItems,
+                    })
                 }).catch(e => addLog(`⚠️ confirm beacon failed: ${e.message}`, 'warning'));
             }
 
@@ -1552,7 +1573,7 @@
                     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
                     const r = (data.results || [])[0] || {};
                     if (r.status === 'drafted') {
-                        ok++; cb.checked = false;
+                        ok++; cb.checked = false; a.sent = true;
                         if (st) { st.textContent = '✓'; st.className = 'cur-rowstatus ok'; }
                     } else {
                         fail++;
