@@ -908,6 +908,19 @@
                 </div>
             </div>
 
+            <div class="card" style="margin-bottom: 30px;">
+                <h3 style="margin: 0;">🚀 Publicar aprobados <span class="status status-idle" id="status-pub">Idle</span></h3>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Toma los borradores marcados <strong>aprobado</strong> en Airtable y los publica: sube imágenes a Cloudinary, genera el slug, los manda al sitio (Supabase) y encola la fila de Redes Sociales — lo mismo que el botón manual, pero en lote. <strong>Buscar</strong> muestra qué se va a publicar; nada sale hasta que hacés <strong>Publicar</strong>.</p>
+                <div class="cur-controls">
+                    <button class="btn btn-primary" id="btn-pub-find" onclick="loadApproved()">🔎 Buscar aprobados</button>
+                    <button class="btn btn-success" id="btn-pub-go" onclick="publishApproved()" disabled>Publicar (0)</button>
+                </div>
+                <div class="cur-summary" id="pub-summary"></div>
+                <div id="pub-board">
+                    <p class="cur-empty">Marcá <code>aprobado</code> en Airtable y presioná Buscar para ver qué está listo.</p>
+                </div>
+            </div>
+
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h3 style="margin: 0;">📊 Live Console Logs</h3>
@@ -1598,6 +1611,134 @@
             document.getElementById('btn-propose').disabled = false;
             document.querySelectorAll('.btn-slide').forEach(b => b.disabled = false);
             updateGenerateBtn();
+        }
+
+        // ── Publish approved (aprobado) drafts ─────────────────────────────
+        // The `aprobado` checkbox in Airtable IS the editorial selection — this
+        // card only previews and confirms, then publishes one record per request
+        // (server does slug + Cloudinary + Supabase + Redes Sociales per record).
+        let approvedItems = [];   // flat [{recordId, feedId, title, ...}]
+        let publishBusy = false;
+
+        async function loadApproved() {
+            if (!API_TOKEN) { addLog('⚠️ Sign in first', 'warning'); return; }
+            if (publishBusy) { addLog('⚠️ Publish is busy — wait', 'warning'); return; }
+            publishBusy = true;
+            setStatus('status-pub', 'running', 'Buscando');
+            document.getElementById('btn-pub-find').disabled = true;
+            document.getElementById('btn-pub-go').disabled = true;
+            document.getElementById('pub-summary').textContent = '';
+            addLog('🔎 Buscando borradores aprobados...', 'info');
+            try {
+                const res = await fetch(`${API_BASE}/api/agent/publish`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
+                    body: JSON.stringify({ mode: 'list' })
+                });
+                if (res.status === 401) { setStatus('status-pub', 'error', 'Auth error'); addLog('❌ token rejected', 'error'); return; }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                renderApproved(data.groups || []);
+                const total = data.total || 0;
+                document.getElementById('pub-summary').textContent =
+                    total ? `${total} artículo(s) aprobado(s) en ${(data.groups || []).length} tabla(s)` : 'No hay borradores aprobados.';
+                setStatus('status-pub', total ? 'success' : 'idle', `${total} listos`);
+                addLog(total ? `🔎 ${total} aprobado(s) listos para publicar` : '🔎 Nada aprobado por ahora', total ? 'success' : 'warning');
+            } catch (e) {
+                setStatus('status-pub', 'error', 'Error');
+                addLog(`❌ Buscar aprobados falló: ${e.message}`, 'error');
+            } finally {
+                publishBusy = false;
+                document.getElementById('btn-pub-find').disabled = false;
+                updatePublishBtn();
+            }
+        }
+
+        function updatePublishBtn() {
+            const btn = document.getElementById('btn-pub-go');
+            const n = approvedItems.length;
+            btn.textContent = `Publicar (${n})`;
+            btn.disabled = n === 0 || publishBusy;
+        }
+
+        function renderApproved(groups) {
+            const box = document.getElementById('pub-board');
+            approvedItems = [];
+            if (!groups.length) {
+                box.innerHTML = '<p class="cur-empty">No hay borradores marcados <code>aprobado</code>.</p>';
+                updatePublishBtn();
+                return;
+            }
+            let html = '';
+            for (const g of groups) {
+                html += `<div class="cur-block-head"><strong>${escapeHtml(g.feedName)}</strong> <span class="cur-need">${g.count} aprobado(s)</span></div>`;
+                for (const it of g.items) {
+                    const i = approvedItems.length;
+                    approvedItems.push({ recordId: it.recordId, feedId: it.feedId, title: it.title });
+                    const img = it.hasImage ? '' : ' <span title="sin imagen" style="opacity:.6">🚫🖼️</span>';
+                    const sec = it.section ? ` <span class="cur-tags"><span>${escapeHtml(it.section)}</span></span>` : '';
+                    html += `<div class="cur-row" id="pub-row-${i}">
+                        <div class="cur-body">
+                            <span class="cur-title">${escapeHtml(it.title)}</span>${img}${sec}
+                        </div>
+                        <span class="cur-rowstatus" id="pub-st-${i}"></span>
+                    </div>`;
+                }
+            }
+            box.innerHTML = html;
+            updatePublishBtn();
+        }
+
+        async function publishApproved() {
+            if (!approvedItems.length || publishBusy) return;
+            if (!confirm(`Publicar ${approvedItems.length} artículo(s) al sitio y encolar redes. ¿Seguir?`)) return;
+            publishBusy = true;
+            setStatus('status-pub', 'running', 'Publicando');
+            document.getElementById('btn-pub-find').disabled = true;
+            document.getElementById('btn-pub-go').disabled = true;
+            addLog(`🚀 Publicando ${approvedItems.length} artículo(s), uno a uno...`, 'info');
+            let ok = 0, fail = 0, social = 0;
+            for (let i = 0; i < approvedItems.length; i++) {
+                const it = approvedItems[i];
+                const st = document.getElementById('pub-st-' + i);
+                if (st) { st.textContent = '⏳'; st.className = 'cur-rowstatus'; }
+                setStatus('status-pub', 'running', `Publicando ${i + 1}/${approvedItems.length}`);
+                document.getElementById('pub-summary').textContent =
+                    `Publicando ${i + 1}/${approvedItems.length} · ✓${ok} en el sitio · ✗${fail} fallidos`;
+                try {
+                    const res = await fetch(`${API_BASE}/api/agent/publish`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
+                        body: JSON.stringify({ mode: 'execute', recordId: it.recordId, feedId: it.feedId })
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (res.status === 401) { addLog('❌ token rejected', 'error'); setStatus('status-pub', 'error', 'Auth error'); break; }
+                    const r = data.result || {};
+                    if (r.web && r.web.ok) {
+                        ok++;
+                        if (r.social && r.social.ok) social++;
+                        if (st) { st.textContent = r.social && r.social.ok ? '✓' : '✓·redes✗'; st.className = 'cur-rowstatus ok'; }
+                        if (r.social && !r.social.ok) addLog(`⚠️ ${it.title}: sitio OK pero redes falló (${r.social.error})`, 'warning');
+                    } else {
+                        fail++;
+                        if (st) { st.textContent = '✗'; st.className = 'cur-rowstatus err'; }
+                        addLog(`⚠️ ${it.title}: ${(r.web && r.web.error) || data.error || 'falló'}`, 'warning');
+                    }
+                } catch (e) {
+                    fail++;
+                    if (st) { st.textContent = '✗'; st.className = 'cur-rowstatus err'; }
+                    addLog(`❌ ${it.title}: ${e.message}`, 'error');
+                }
+            }
+            addLog(`✅ Publicados ${ok} (redes ${social}), fallidos ${fail}`, fail ? 'warning' : 'success');
+            setStatus('status-pub', 'success', `Publicados ${ok}`);
+            document.getElementById('pub-summary').textContent =
+                `Terminado: ✓${ok} en el sitio · 📲${social} en redes · ✗${fail} fallidos`;
+            publishBusy = false;
+            document.getElementById('btn-pub-find').disabled = false;
+            loadDaySheet();
+            // Re-scan so published rows drop off and any failures remain visible.
+            loadApproved();
         }
     </script>
 </body>

@@ -89,6 +89,10 @@
       "dest": "/api/agent/curate.js"
     },
     {
+      "src": "/api/agent/publish",
+      "dest": "/api/agent/publish.js"
+    },
+    {
       "src": "/api/fetch/section",
       "dest": "/api/fetch/section.js"
     },
