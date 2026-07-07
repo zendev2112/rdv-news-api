@@ -1,6 +1,7 @@
 import axios from 'axios'
 import Airtable from 'airtable'
 import config from '../config/index.js'
+import { sectionName, isValidSection } from '../config/sections.js'
 import logger from '../utils/logger.js'
 
 // Airtable configuration - use config object if available, fallback to env vars
@@ -145,11 +146,19 @@ async function _insertRecordsOnce(records, sectionId = 'test') {
       }
 
       // Section from the routing map (or editor/Claude) must reach Airtable.
-      // Tables WITH a `section` column keep whatever was set upstream; tables
-      // WITHOUT one have it dropped so Airtable doesn't reject an unknown field.
-      // (Previously this FORCED section='' on every insert — the bug that made
-      // every article publish to primera-plana regardless of the routing map.)
-      if (!shouldAddSectionField(sectionId)) {
+      // The `section` column is a SINGLE SELECT whose options are DISPLAY NAMES
+      // ("Deportes"), while the pipeline works in section ids ("deportes") —
+      // sending an id 422s (INVALID_MULTIPLE_CHOICE_OPTIONS). Convert id →
+      // display name at this boundary; publishArticle maps the name back to the
+      // id at publish (its sectionNameToId). Tables WITHOUT the column have it
+      // dropped so Airtable doesn't reject an unknown field. (Previously this
+      // FORCED section='' on every insert — the bug that made every article
+      // publish to primera-plana regardless of the routing map.)
+      if (shouldAddSectionField(sectionId)) {
+        if (record.fields.section && isValidSection(record.fields.section)) {
+          record.fields.section = sectionName(record.fields.section)
+        }
+      } else {
         delete record.fields.section
       }
 
@@ -184,7 +193,9 @@ async function _insertRecordsOnce(records, sectionId = 'test') {
     // Step 1: Insert records into Airtable (existing code)
     const response = await axios.post(
       airtableApiUrl,
-      { records: validRecords },
+      // typecast lets Airtable create a missing single-select option (new
+      // section/front values) instead of rejecting the whole record with 422.
+      { records: validRecords, typecast: true },
       {
         headers: {
           Authorization: `Bearer ${actualToken}`,

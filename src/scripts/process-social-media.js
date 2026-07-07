@@ -8,6 +8,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import axios from 'axios' // Add axios for image downloading
 import config from '../config/index.js'
 import { defaultSectionFor } from '../config/section-routing.js'
+import { sectionName } from '../config/sections.js'
 import * as prompts from '../prompts/index.js'
 import { generateContent } from '../services/ai-service.js'
 import {
@@ -394,16 +395,20 @@ async function processRecord(record, tableName) {
       // Supabase SECTION — same routing map the text pipeline uses, so flyers
       // (OCR'd here, never touch processArticleFromUrl) land in the right section
       // page instead of defaulting to primera-plana at publish. Only set when the
-      // record has no section yet, to preserve any manual editor choice.
+      // record has no section yet, to preserve any manual editor choice. The
+      // Airtable column is a single select of DISPLAY NAMES → write the name.
       if (!fields.section) {
         const sectionId = defaultSectionFor(feedIdForTable(tableName))
-        if (sectionId) updateFields.section = sectionId
+        if (sectionId) updateFields.section = sectionName(sectionId)
       }
 
       console.log('Updating record with all generated content...')
 
       try {
-        await airtableBase(tableName).update(record.id, updateFields)
+        // typecast: create a missing select option (section) instead of 422ing.
+        await airtableBase(tableName).update(record.id, updateFields, {
+          typecast: true,
+        })
         console.log(
           'Record updated successfully with title, excerpt, article and overline',
         )

@@ -1080,12 +1080,13 @@ export async function processArticleFromUrl(url, options = {}) {
   if (socialType) fields[socialType] = url
 
   // Supabase SECTION (drives the section pages + section-reading components).
-  // Default from the routing map for this table (feedId). Written as the section
-  // id — the Airtable `section` field is free text, and publishArticle resolves
-  // an id to the correct Supabase section. Set here so EVERY path through the
-  // shared pipeline (RSS fetch, admin picker, social drafts) gets a section;
-  // previously left blank, which defaulted every article to primera-plana at
-  // publish. Callers may still override (e.g. Claude's per-headline choice).
+  // Default from the routing map for this table (feedId). Carried as the section
+  // ID through the pipeline; insertRecords converts it to the DISPLAY NAME at
+  // the Airtable boundary (the column is a single select of names), and
+  // publishArticle maps the name back to the id at publish. Set here so EVERY
+  // path through the shared pipeline (RSS fetch, admin picker, social drafts)
+  // gets a section; previously left blank, which defaulted every article to
+  // primera-plana at publish. Callers may override (Claude's per-headline pick).
   const sectionId = defaultSectionFor(options.feedId)
   if (sectionId) fields.section = sectionId
 
