@@ -144,15 +144,13 @@ async function _insertRecordsOnce(records, sectionId = 'test') {
         record.fields.excerpt = record.fields.bajada
       }
 
-      // Section policy requested by user: always send empty section for tables that have it.
-      if (shouldAddSectionField(sectionId)) {
-        record.fields.section = ''
-      } else {
-        // This table doesn't support a section field — remove it if present
+      // Section from the routing map (or editor/Claude) must reach Airtable.
+      // Tables WITH a `section` column keep whatever was set upstream; tables
+      // WITHOUT one have it dropped so Airtable doesn't reject an unknown field.
+      // (Previously this FORCED section='' on every insert — the bug that made
+      // every article publish to primera-plana regardless of the routing map.)
+      if (!shouldAddSectionField(sectionId)) {
         delete record.fields.section
-        console.log(
-          `Removing section field for ${sectionId} table as it doesn't need one`,
-        )
       }
 
       // Ensure fields meet Airtable requirements (no undefined values)
@@ -646,9 +644,9 @@ function shouldAddSectionField(tableIdentifier) {
   // Convert to lowercase for case-insensitive comparison
   const normalized = tableIdentifier.toLowerCase()
 
-  // Tables known to NOT use the "section" field
+  // Tables known to NOT use the "section" field. (Instituciones DOES have a
+  // section column — confirmed 2026-07-07 — so it is no longer excluded.)
   return !(
-    normalized === 'instituciones' ||
     normalized.includes('social') ||
     normalized.includes('config') ||
     normalized.includes('settings')
