@@ -8,7 +8,7 @@ import { extractFromContentHtml } from '../scraper.js'
 import airtableService from '../airtable.js'
 import { filterDuplicates } from './dedup.js'
 import { getBlock } from '../../config/homepage-blocks.js'
-import { blocksFor } from '../../config/section-routing.js'
+import { isValidSection } from '../../config/sections.js'
 import config from '../../config/index.js'
 import { checkGeminiHealth } from '../ai-service.js'
 import { capture, flush } from '../analytics.js'
@@ -122,20 +122,16 @@ export async function generateDrafts({ assignments = [] } = {}) {
   const results = []
   if (!assignments.length) return { results }
 
-  // Validate server-side — never trust the client's block/feed pairing.
+  // Validate server-side — never trust the client's payload.
   // front=null is legal for recurring/templated tables (clima, quiniela...):
   // the draft is inserted without homepage placement, like a manual section
-  // fetch. When front IS given, the block must exist AND be one this table may
-  // fill per the routing map (section-routing.js — the single source of truth,
-  // not homepage-blocks' stale eligibleFeeds which never got the economia→Pymes/
-  // Propiedades additions).
+  // fetch. When front IS given it must be a REAL homepage block — but any
+  // block: the routing map is Claude's suggestion (enforced in select.js),
+  // while the editor may deliberately place an article in any box.
   const valid = []
   for (const a of assignments) {
     const section = a?.feedId ? config.getSection(a.feedId) : null
-    const allowedBlocks = a?.feedId ? blocksFor(a.feedId) : []
-    const frontOk = a?.front
-      ? !!getBlock(a.front) && allowedBlocks.includes(a.front)
-      : !!section
+    const frontOk = a?.front ? !!getBlock(a.front) : !!section
     if (!a?.url || !a?.feedId || !frontOk) {
       results.push({ url: a?.url, front: a?.front || null, status: 'failed', error: 'invalid-assignment' })
     } else {
@@ -224,10 +220,10 @@ export async function generateDrafts({ assignments = [] } = {}) {
       }
 
       // Supabase SECTION: the shared pipeline (processArticleFromUrl) already set
-      // the table's default section from the routing map. Only override here when
-      // the pick carries an explicit section (set by Claude/editor once
-      // section-aware selection lands). Written as the section id.
-      if (a.section) fields.section = a.section
+      // the table's default section from the routing map. Override with the
+      // pick's explicit section (Claude's choice or the editor's dropdown pick)
+      // when it's a REAL section id — any of the ~50, not just the table menu.
+      if (a.section && isValidSection(a.section)) fields.section = a.section
 
       const res = await airtableService.insertRecords([{ fields }], a.feedId)
       const id = res?.records?.[0]?.id || null

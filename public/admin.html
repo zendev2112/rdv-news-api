@@ -1315,6 +1315,7 @@
 
         // ── News picker ───────────────────────────────────────
         let titleItems = [];      // flat list of all fetched items, index = checkbox id
+        let placementCatalog = { sections: [], blocks: [] }; // ALL Supabase sections + homepage boxes (from the API)
         let selectionModel = null; // set when Claude proposed the current deck
         let curSlide = 0;
         let deckFeeds = [];       // current deck data, one entry per table
@@ -1344,7 +1345,36 @@
         // Editor overrides Claude's section/box for a row → write it back so the
         // execute call sends the corrected placement.
         function setPlacement(i, kind, value) {
-            if (titleItems[i]) titleItems[i][kind] = value || null;
+            if (!titleItems[i]) return;
+            titleItems[i][kind] = value || null;
+            // The execute payload reads `front` — keep it in sync with the box pick
+            // (including "(sin caja)" → null = no homepage placement).
+            if (kind === 'block') titleItems[i].front = value || null;
+        }
+
+        // Placement dropdown: "Sugeridas" (the table's routing menu, Claude's pick
+        // pre-selected) on top, then "Todas" (the FULL catalog — every Supabase
+        // section / homepage box). The editor can always go off-menu.
+        function placementSelect(i, kind, suggestedIds, selected) {
+            const isSection = kind === 'section';
+            const catalog = isSection ? (placementCatalog.sections || []) : (placementCatalog.blocks || []);
+            const nameOf = (id) => {
+                const c = catalog.find(c => c.id === id);
+                return c ? (isSection ? c.name : c.label) : id;
+            };
+            const opt = (id) =>
+                `<option value="${escapeHtml(id)}"${id === selected ? ' selected' : ''}>${isSection ? '📍 ' : ''}${escapeHtml(nameOf(id))}</option>`;
+            const rest = catalog.filter(c => !suggestedIds.includes(c.id))
+                .slice().sort((a, b) => (isSection ? a.name : a.label).localeCompare(isSection ? b.name : b.label, 'es'));
+            if (!suggestedIds.length && !rest.length) return '';
+            // A box is optional (front=null = no homepage placement); a section isn't.
+            const none = !isSection
+                ? `<option value=""${!selected ? ' selected' : ''}>(sin caja)</option>`
+                : '';
+            const groups = none +
+                (suggestedIds.length ? `<optgroup label="Sugeridas">${suggestedIds.map(opt).join('')}</optgroup>` : '') +
+                (rest.length ? `<optgroup label="Todas">${rest.map(c => opt(c.id)).join('')}</optgroup>` : '');
+            return `<select class="cur-sel" title="${isSection ? 'Sección de Supabase' : 'Bloque de portada'}" onchange="setPlacement(${i},'${kind}',this.value)">${groups}</select>`;
         }
 
         // Tab badges show "selected/total" per table so overrides are visible at a glance.
@@ -1446,7 +1476,6 @@
                     // table's default section + default box (for manually-added items).
                     const secId = (pick && pick.section) || f.defaultSection || null;
                     const blockId = (pick && pick.block) || f.front || null;
-                    const blockLbl = (pick && pick.blockLabel) || null;
                     titleItems.push({
                         url: it.url, title: it.title || it.url, front: blockId,
                         feedId: f.feedId, feedName: f.feedName, proposed: !!pick,
@@ -1454,21 +1483,11 @@
                         reason: (pick && pick.reason) || null,
                         section: secId, block: blockId,
                     });
-                    // Placement controls: an editable dropdown when the table offers a
-                    // choice (so the editor can SEE the allowed Supabase sections/boxes
-                    // and correct Claude), a static chip when there's only one option.
-                    const secMenu = f.sectionMenu || [];
-                    const sectionControl = secMenu.length > 1
-                        ? `<select class="cur-sel" title="Sección de Supabase" onchange="setPlacement(${i},'section',this.value)">
-                               ${secMenu.map(s => `<option value="${escapeHtml(s)}"${s === secId ? ' selected' : ''}>📍 ${escapeHtml(s)}</option>`).join('')}
-                           </select>`
-                        : (secId ? `<span class="cur-place">📍 ${escapeHtml(secId)}</span>` : '');
-                    const blkMenu = f.blockMenu || [];
-                    const blockControl = blkMenu.length > 1
-                        ? `<select class="cur-sel" title="Bloque de portada" onchange="setPlacement(${i},'block',this.value)">
-                               ${blkMenu.map(b => `<option value="${escapeHtml(b.id)}"${b.id === blockId ? ' selected' : ''}>${escapeHtml(b.label)}</option>`).join('')}
-                           </select>`
-                        : (blockLbl ? `<span class="cur-place">${escapeHtml(blockLbl)}</span>` : '');
+                    // Placement controls: editable dropdowns with the table's routing
+                    // menu as "Sugeridas" on top (Claude's pick pre-selected) and the
+                    // FULL catalog below — the editor may place an article anywhere.
+                    const sectionControl = placementSelect(i, 'section', f.sectionMenu || [], secId);
+                    const blockControl = placementSelect(i, 'block', (f.blockMenu || []).map(b => b.id), blockId);
                     const thumb = it.image
                         ? `<img class="cur-thumb" src="${encodeURI(it.image)}" loading="lazy" alt="">`
                         : '<div class="cur-thumb cur-thumb-empty"></div>';
@@ -1528,6 +1547,7 @@
                 const data = await res.json();
                 const feeds = data.feeds || [];
                 const sel = data.selection || null;
+                if (data.catalog) placementCatalog = data.catalog; // full section/box lists for the dropdowns
                 if (feedId) {
                     mergeFeed(feeds[0], sel);
                     const f = feeds[0] || { items: [] };

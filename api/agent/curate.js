@@ -5,12 +5,14 @@ import {
   autoFeedableBlocks,
   feedsForBlocks,
   getBlock,
+  HOMEPAGE_BLOCKS,
 } from '../../src/config/homepage-blocks.js'
 import {
   blocksFor,
   sectionMenuFor,
   defaultSectionFor,
 } from '../../src/config/section-routing.js'
+import { SECTIONS } from '../../src/config/sections.js'
 import { capture, flush } from '../../src/services/analytics.js'
 
 const ADMIN_TOKEN = process.env.ADMIN_API_TOKEN
@@ -91,6 +93,13 @@ async function buildTitleList(onlyFeedId) {
   return {
     feeds,
     feedErrors,
+    // Global catalogs for the admin dropdowns: the editor may place an article
+    // in ANY Supabase section / homepage box, not just the table's routing menu
+    // (the menu is Claude's suggestion, the catalog is the editor's freedom).
+    catalog: {
+      sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, parent: s.parent })),
+      blocks: HOMEPAGE_BLOCKS.map((b) => ({ id: b.front, label: b.label })),
+    },
     stats: {
       feedsPulled: feedIds.length,
       pulled: candidates.length,
@@ -364,6 +373,7 @@ export default async function handler(req, res) {
         generatedAt: new Date().toISOString(),
         feeds,
         feedErrors: list.feedErrors,
+        catalog: list.catalog,
         stats: list.stats,
         selection: { model, picked, candidates, error: error || null },
       })
