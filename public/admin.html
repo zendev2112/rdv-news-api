@@ -582,6 +582,22 @@
             flex-wrap: wrap;
         }
 
+        .cur-place {
+            color: #6366f1;
+            font-weight: 600;
+        }
+
+        .cur-sel {
+            font-size: 11px;
+            color: #4338ca;
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            border-radius: 8px;
+            padding: 1px 4px;
+            max-width: 180px;
+            cursor: pointer;
+        }
+
         .cur-score {
             flex: 0 0 auto;
             font-size: 12px;
@@ -1325,6 +1341,12 @@
             showSlide(((curSlide + d) % n + n) % n);
         }
 
+        // Editor overrides Claude's section/box for a row → write it back so the
+        // execute call sends the corrected placement.
+        function setPlacement(i, kind, value) {
+            if (titleItems[i]) titleItems[i][kind] = value || null;
+        }
+
         // Tab badges show "selected/total" per table so overrides are visible at a glance.
         function updateTabBadges() {
             document.querySelectorAll('.cur-tab').forEach(tab => {
@@ -1420,12 +1442,33 @@
                 for (const it of f.items) {
                     const i = titleItems.length;
                     const pick = it.pick || null;
+                    // Placement: Claude's chosen section/block when proposed, else the
+                    // table's default section + default box (for manually-added items).
+                    const secId = (pick && pick.section) || f.defaultSection || null;
+                    const blockId = (pick && pick.block) || f.front || null;
+                    const blockLbl = (pick && pick.blockLabel) || null;
                     titleItems.push({
-                        url: it.url, title: it.title || it.url, front: f.front,
+                        url: it.url, title: it.title || it.url, front: blockId,
                         feedId: f.feedId, feedName: f.feedName, proposed: !!pick,
                         score: (pick && Number.isFinite(pick.score)) ? pick.score : null,
                         reason: (pick && pick.reason) || null,
+                        section: secId, block: blockId,
                     });
+                    // Placement controls: an editable dropdown when the table offers a
+                    // choice (so the editor can SEE the allowed Supabase sections/boxes
+                    // and correct Claude), a static chip when there's only one option.
+                    const secMenu = f.sectionMenu || [];
+                    const sectionControl = secMenu.length > 1
+                        ? `<select class="cur-sel" title="Sección de Supabase" onchange="setPlacement(${i},'section',this.value)">
+                               ${secMenu.map(s => `<option value="${escapeHtml(s)}"${s === secId ? ' selected' : ''}>📍 ${escapeHtml(s)}</option>`).join('')}
+                           </select>`
+                        : (secId ? `<span class="cur-place">📍 ${escapeHtml(secId)}</span>` : '');
+                    const blkMenu = f.blockMenu || [];
+                    const blockControl = blkMenu.length > 1
+                        ? `<select class="cur-sel" title="Bloque de portada" onchange="setPlacement(${i},'block',this.value)">
+                               ${blkMenu.map(b => `<option value="${escapeHtml(b.id)}"${b.id === blockId ? ' selected' : ''}>${escapeHtml(b.label)}</option>`).join('')}
+                           </select>`
+                        : (blockLbl ? `<span class="cur-place">${escapeHtml(blockLbl)}</span>` : '');
                     const thumb = it.image
                         ? `<img class="cur-thumb" src="${encodeURI(it.image)}" loading="lazy" alt="">`
                         : '<div class="cur-thumb cur-thumb-empty"></div>';
@@ -1441,7 +1484,7 @@
                         <div class="cur-body">
                             <a class="cur-title" href="${encodeURI(it.url)}" target="_blank" rel="noopener">${escapeHtml(it.title || it.url)}</a>
                             ${reason}
-                            <div class="cur-tags"><span>${relTime(it.pubDate)}</span></div>
+                            <div class="cur-tags"><span>${relTime(it.pubDate)}</span>${sectionControl}${blockControl}</div>
                         </div>
                         ${scoreChip}
                         <span class="cur-rowstatus" id="cur-st-${i}"></span>
@@ -1579,7 +1622,7 @@
                     const res = await fetch(`${API_BASE}/api/agent/curate`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
-                        body: JSON.stringify({ mode: 'execute', assignments: [{ url: a.url, front: a.front, role: 'principal', feedId: a.feedId }] })
+                        body: JSON.stringify({ mode: 'execute', assignments: [{ url: a.url, front: a.block || a.front, section: a.section || null, role: 'principal', feedId: a.feedId }] })
                     });
                     const data = await res.json().catch(() => ({}));
                     if (res.status === 401) { addLog('❌ token rejected', 'error'); setStatus('status-curate', 'error', 'Auth error'); break; }

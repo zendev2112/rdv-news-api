@@ -8,6 +8,7 @@ import { extractFromContentHtml } from '../scraper.js'
 import airtableService from '../airtable.js'
 import { filterDuplicates } from './dedup.js'
 import { getBlock } from '../../config/homepage-blocks.js'
+import { blocksFor } from '../../config/section-routing.js'
 import config from '../../config/index.js'
 import { checkGeminiHealth } from '../ai-service.js'
 import { capture, flush } from '../analytics.js'
@@ -124,13 +125,16 @@ export async function generateDrafts({ assignments = [] } = {}) {
   // Validate server-side — never trust the client's block/feed pairing.
   // front=null is legal for recurring/templated tables (clima, quiniela...):
   // the draft is inserted without homepage placement, like a manual section
-  // fetch. When front IS given, the block/feed pairing must be valid.
+  // fetch. When front IS given, the block must exist AND be one this table may
+  // fill per the routing map (section-routing.js — the single source of truth,
+  // not homepage-blocks' stale eligibleFeeds which never got the economia→Pymes/
+  // Propiedades additions).
   const valid = []
   for (const a of assignments) {
     const section = a?.feedId ? config.getSection(a.feedId) : null
-    const block = a?.front ? getBlock(a.front) : null
+    const allowedBlocks = a?.feedId ? blocksFor(a.feedId) : []
     const frontOk = a?.front
-      ? block && block.eligibleFeeds.includes(a.feedId)
+      ? !!getBlock(a.front) && allowedBlocks.includes(a.front)
       : !!section
     if (!a?.url || !a?.feedId || !frontOk) {
       results.push({ url: a?.url, front: a?.front || null, status: 'failed', error: 'invalid-assignment' })

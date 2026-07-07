@@ -1,4 +1,5 @@
 import { generateMessage, REVIEW_MODEL } from '../claude-service.js'
+import { getBlock } from '../../config/homepage-blocks.js'
 
 /**
  * Claude selection for the admin News Picker.
@@ -41,8 +42,13 @@ REGLAS COMUNES:
 - EVENTOS CON FECHA: no elijas convocatorias a eventos que ya pasaron.
 - Puntaje: 0-100. Piso ${FLOOR.local} para [LOCAL], ${FLOOR.secondary} para [SECUNDARIA].
 
+UBICACIÓN (solo cuando la tabla ofrece opciones):
+- Algunas tablas muestran "Secciones:" y/o "Bloques:". Para CADA nota elegida, cuando la tabla las ofrezca, agregá la SECCIÓN de Supabase más acorde al tema del título — un slug EXACTO de la lista "Secciones:" — y el BLOQUE de portada más acorde — el identificador EXACTO (lo que va antes del paréntesis) de la lista "Bloques:". Ejemplo: una nota sobre el dólar en la tabla Economía → section "dolar"; una sobre un loteo → section "propiedades", block "PropiedadesSection".
+- Repartí: no amontones todas las notas de una tabla en la misma sección/bloque si hay opciones que encajan mejor.
+- Si la tabla NO muestra opciones, omití "section" y "block".
+
 Respondé ÚNICAMENTE con un objeto JSON, sin explicaciones ni bloques de código:
-{"picks": [{"index": <n>, "score": <0-100>, "reason": "<motivo corto en español, máx 100 caracteres>"}]}
+{"picks": [{"index": <n>, "score": <0-100>, "reason": "<motivo corto en español, máx 100 caracteres>", "section": "<slug o vacío>", "block": "<id o vacío>"}]}
 Incluí SOLO los candidatos que ELEGÍS (los demás se asumen descartados).`
 
 // Pull the first JSON object/array out of an LLM response (tolerates fences/prose).
@@ -83,12 +89,25 @@ function buildUserPrompt(feeds) {
     const tierTag = f.tier === 'local' ? '[LOCAL]' : '[SECUNDARIA]'
     const quotaTxt = `cupo restante hoy: ${f.remaining}` +
       (f.approvedToday ? ` (pauta ${f.quota}, ya aprobadas ${f.approvedToday})` : ` (pauta ${f.quota})`)
+    // Only show the placement menus when the table actually offers a CHOICE —
+    // a single-option table needs no guidance and just bloats the prompt.
+    const menuLines = []
+    const sections = f.sectionMenu || []
+    if (sections.length > 1) menuLines.push(`Secciones: ${sections.join(', ')}`)
+    const blocks = f.blocks || []
+    if (blocks.length > 1) {
+      const labelled = blocks
+        .map((b) => `${b} (${getBlock(b)?.label || b})`)
+        .join(', ')
+      menuLines.push(`Bloques: ${labelled}`)
+    }
+    const menu = menuLines.length ? `\n${menuLines.join('\n')}` : ''
     const lines = f.items.map((it) => {
       const line = `[${idx}] ${it.title || it.url} (${relAge(it.pubDate) || 'sin fecha'})`
       idx += 1
       return line
     })
-    return `## Tabla "${f.feedName}" ${tierTag} — ${quotaTxt}\n${lines.join('\n')}`
+    return `## Tabla "${f.feedName}" ${tierTag} — ${quotaTxt}${menu}\n${lines.join('\n')}`
   })
 
   return `CANDIDATOS (elegí por índice):\n\n${groups.join('\n\n')}`
@@ -142,7 +161,7 @@ async function dedupePicks(picks, flat) {
  *
  * @param {Object} opts
  * @param {Array}  opts.feeds [{feedId, feedName, tier, quota, approvedToday, remaining, items:[{url,title,image,pubDate}]}]
- * @returns {Promise<{picks: Map<string, {score:number, reason:string}>, model: string, error?: string}>}
+ * @returns {Promise<{picks: Map<string, {score:number, reason:string, section:string|null, block:string|null}>, model: string, error?: string}>}
  */
 export async function selectCandidates({ feeds = [] } = {}) {
   const flat = feeds.flatMap((f) =>
@@ -151,6 +170,12 @@ export async function selectCandidates({ feeds = [] } = {}) {
       title: it.title,
       tier: f.tier || 'secondary',
       feedName: f.feedName,
+      // Placement menus + defaults, so a pick's section/block can be validated
+      // against what THIS table allows (routing map) and fall back cleanly.
+      sections: f.sectionMenu || [],
+      defaultSection: f.defaultSection || null,
+      blocks: f.blocks || [],
+      defaultBlock: f.front || null,
     })),
   )
   if (!flat.length) return { picks: new Map(), model: SELECT_MODEL }
@@ -182,9 +207,18 @@ export async function selectCandidates({ feeds = [] } = {}) {
     if (!cand || picks.has(cand.url)) continue
     const score = Number(p.score) || 0
     if (score < (FLOOR[cand.tier] ?? FLOOR.secondary)) continue
+    // Section + block: accept only a value from THIS table's menu; otherwise fall
+    // back to the table default. Guarantees a valid, publishable placement even if
+    // the model invents or omits one.
+    const rawSection = typeof p.section === 'string' ? p.section.trim() : ''
+    const section = cand.sections.includes(rawSection) ? rawSection : cand.defaultSection
+    const rawBlock = typeof p.block === 'string' ? p.block.trim() : ''
+    const block = cand.blocks.includes(rawBlock) ? rawBlock : cand.defaultBlock
     picks.set(cand.url, {
       score,
       reason: String(p.reason || '').replace(/\s+/g, ' ').trim().slice(0, 140),
+      section,
+      block,
     })
   }
 

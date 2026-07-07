@@ -75,6 +75,8 @@ async function buildTitleList(onlyFeedId) {
       front,
       blockLabel: block?.label || null,
       blocks: routeBlocks,
+      // Block menu WITH labels so the admin can render a readable box dropdown.
+      blockMenu: routeBlocks.map((b) => ({ id: b, label: getBlock(b)?.label || b })),
       sectionMenu: sectionMenuFor(fid),
       defaultSection: defaultSectionFor(fid),
       items: items.map((c) => ({
@@ -307,7 +309,8 @@ export default async function handler(req, res) {
       let recurringPicked = 0
       const feeds = sheeted.map((f) => {
         if (f.tier === 'recurring') {
-          // items arrive newest-first; take what the day still owes.
+          // items arrive newest-first; take what the day still owes. Recurring
+          // tables get no Claude judgment → the table default section + box.
           const take = new Set(f.items.slice(0, f.remaining).map((it) => it.url))
           recurringPicked += take.size
           return {
@@ -315,7 +318,13 @@ export default async function handler(req, res) {
             items: f.items.map((it) => ({
               ...it,
               pick: take.has(it.url)
-                ? { selected: true, reason: 'ítem del día (recurrente)' }
+                ? {
+                    selected: true,
+                    reason: 'ítem del día (recurrente)',
+                    section: f.defaultSection,
+                    block: f.front,
+                    blockLabel: getBlock(f.front)?.label || null,
+                  }
                 : null,
             })),
           }
@@ -324,7 +333,14 @@ export default async function handler(req, res) {
           ...f,
           items: f.items.map((it) => {
             const p = picks.get(it.url)
-            return { ...it, pick: p ? { selected: true, ...p } : null }
+            // Surface the block's human label so the editor sees Claude's
+            // placement (section slug + box) and can veto it on the slide.
+            return {
+              ...it,
+              pick: p
+                ? { selected: true, ...p, blockLabel: getBlock(p.block)?.label || null }
+                : null,
+            }
           }),
         }
       })
