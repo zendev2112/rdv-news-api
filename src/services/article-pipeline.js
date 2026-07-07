@@ -34,6 +34,7 @@ import {
 import { enforceRioplatense } from '../utils/rioplatense.js'
 import { classifySource, imageDecision, sources as registrySources } from '../config/source-registry.js'
 import { detectInterview } from './curation/content-type.js'
+import { defaultSectionFor } from '../config/section-routing.js'
 
 // ── Utility functions ────────────────────────────────────────────────
 
@@ -1077,6 +1078,16 @@ export async function processArticleFromUrl(url, options = {}) {
   // Set social media type field to the URL
   const socialType = getSocialMediaType(url)
   if (socialType) fields[socialType] = url
+
+  // Supabase SECTION (drives the section pages + section-reading components).
+  // Default from the routing map for this table (feedId). Written as the section
+  // id — the Airtable `section` field is free text, and publishArticle resolves
+  // an id to the correct Supabase section. Set here so EVERY path through the
+  // shared pipeline (RSS fetch, admin picker, social drafts) gets a section;
+  // previously left blank, which defaulted every article to primera-plana at
+  // publish. Callers may still override (e.g. Claude's per-headline choice).
+  const sectionId = defaultSectionFor(options.feedId)
+  if (sectionId) fields.section = sectionId
 
   return fields
 }

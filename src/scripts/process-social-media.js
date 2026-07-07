@@ -7,6 +7,7 @@ import Airtable from 'airtable'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import axios from 'axios' // Add axios for image downloading
 import config from '../config/index.js'
+import { defaultSectionFor } from '../config/section-routing.js'
 import * as prompts from '../prompts/index.js'
 import { generateContent } from '../services/ai-service.js'
 import {
@@ -36,6 +37,15 @@ const visionModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
 // Helper function to create a delay
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Resolve a table's DISPLAY NAME (e.g. "Instituciones") back to its config
+// feedId (e.g. "instituciones") so we can look up its default Supabase section.
+// The mixed "Slack Noticias" inbox is not a config section → returns null → no
+// auto-section (the editor picks it), which is correct for a multi-section inbox.
+function feedIdForTable(tableName) {
+  const section = (config.sections || []).find((s) => s.tableName === tableName)
+  return section?.id || null
+}
 
 /**
  * Main function to process social media content
@@ -379,6 +389,15 @@ async function processRecord(record, tableName) {
       // Only set source if not already present
       if (!fields.source) {
         updateFields.source = source
+      }
+
+      // Supabase SECTION — same routing map the text pipeline uses, so flyers
+      // (OCR'd here, never touch processArticleFromUrl) land in the right section
+      // page instead of defaulting to primera-plana at publish. Only set when the
+      // record has no section yet, to preserve any manual editor choice.
+      if (!fields.section) {
+        const sectionId = defaultSectionFor(feedIdForTable(tableName))
+        if (sectionId) updateFields.section = sectionId
       }
 
       console.log('Updating record with all generated content...')
