@@ -729,96 +729,122 @@
         .sheet-short { color: #b45309; font-weight: 700; }
         .sheet-zero { color: #9ca3af; }
 
-        .sheet-tier {
-            font-size: 10px;
-            font-weight: 700;
-            border-radius: 8px;
-            padding: 1px 6px;
-            margin-left: 6px;
-            vertical-align: middle;
+        /* ── Pauta de Hoy: status board (big %, verdict chips, table pills) ── */
+        .sheet-hero {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            flex-wrap: wrap;
+            margin: 18px 0 4px;
         }
 
-        .sheet-tier-local { color: #4f46e5; background: #eef2ff; }
-        .sheet-tier-dia { color: #6b7280; background: #f3f4f6; }
+        .sheet-hero-num {
+            font-size: 42px;
+            font-weight: 800;
+            line-height: 1;
+            color: #0b0b0b;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -1px;
+        }
 
-        /* ── Pauta de Hoy: per-table progress meters ── */
-        .sheet-legend {
+        .sheet-hero-num small {
+            font-size: 22px;
+            font-weight: 600;
+            color: #94a3b8;
+            letter-spacing: 0;
+        }
+
+        .sheet-hero-meta {
+            font-size: 13px;
+            color: #52514e;
+            line-height: 1.5;
+        }
+
+        .sheet-chips {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-left: auto;
+        }
+
+        .sheet-chip {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 5px 11px;
+            border-radius: 999px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            color: #334155;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .sheet-chip-dim { color: #94a3b8; }
+
+        .sheet-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: #eef1f5;
+            overflow: hidden;
+            margin: 12px 0 2px;
+        }
+
+        .sheet-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            background: #2a78d6;
+            min-width: 2px;
+        }
+
+        .sheet-group { margin-top: 18px; }
+
+        .sheet-group-h {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #eef1f5;
+            padding-bottom: 5px;
+        }
+
+        .sheet-group-h span {
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+            text-transform: none;
+            letter-spacing: 0;
+            color: #898781;
+            font-size: 12px;
+        }
+
+        .sheet-pills {
             display: flex;
             flex-wrap: wrap;
-            gap: 14px;
-            font-size: 12px;
-            color: #52514e;
-            margin: 12px 0 14px;
+            gap: 8px;
         }
 
-        .sheet-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 3px;
-            display: inline-block;
-            margin-right: 5px;
-            vertical-align: -1px;
-        }
-
-        .sheet-row {
-            display: grid;
-            grid-template-columns: 200px 1fr 64px;
-            gap: 12px;
+        .sheet-pill {
+            display: inline-flex;
             align-items: center;
-            padding: 4px 0;
-        }
-
-        .sheet-row-total {
-            padding: 6px 0 12px;
-            border-bottom: 1px solid #e2e8f0;
-            margin-bottom: 8px;
-        }
-
-        .sheet-name {
-            font-size: 13px;
+            gap: 7px;
+            font-size: 12.5px;
+            padding: 7px 12px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            background: #fff;
             color: #334155;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
-        .sheet-track {
-            position: relative;
-            height: 14px;
-            background: #f1f5f9;
-            border-radius: 7px;
-            overflow: hidden;
-            display: flex;
-            gap: 2px;
-        }
+        .sheet-pill b { font-variant-numeric: tabular-nums; font-weight: 700; }
 
-        .sheet-track-lg { height: 20px; border-radius: 10px; }
-
-        .sheet-seg { height: 100%; }
-
-        .sheet-tick {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background: rgba(11, 11, 11, 0.35);
-        }
-
-        .sheet-count {
-            font-size: 13px;
-            font-weight: 600;
-            text-align: right;
-            font-variant-numeric: tabular-nums;
-        }
-
-        .sheet-err {
-            font-size: 12px;
-            color: #dc2626;
-        }
-
-        @media (max-width: 700px) {
-            .sheet-row { grid-template-columns: 130px 1fr 56px; }
-        }
+        .sheet-pill-done { background: #f0faf0; border-color: #b7e3b7; color: #0a6b0a; }
+        .sheet-pill-part { background: #eef5fd; border-color: #bcd7f5; color: #1c5aa8; }
+        .sheet-pill-zero { color: #94a3b8; background: #fafbfc; }
+        .sheet-pill-err  { background: #fdf1f1; border-color: #f0c4c4; color: #b02a2a; }
 
         .btn-slide {
             border: 1px solid #c7d2fe;
@@ -904,28 +930,6 @@
         }
 
         /* ── Day-by-day heatmap grids ── */
-        .met-toggle {
-            display: inline-flex;
-            border: 1px solid #c7d2fe;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        .met-tgl {
-            border: none;
-            background: #fff;
-            color: #4f46e5;
-            font-size: 12px;
-            font-weight: 600;
-            padding: 5px 14px;
-            cursor: pointer;
-        }
-
-        .met-tgl.active {
-            background: #4f46e5;
-            color: #fff;
-        }
-
         .met-hm-wrap {
             overflow-x: auto;
             padding-bottom: 4px;
@@ -945,6 +949,17 @@
         }
 
         .met-hm th.met-hm-we { background: #f1f5f9; border-radius: 3px; }
+
+        .met-hm th.met-hm-mon {
+            text-align: left;
+            font-weight: 700;
+            font-size: 10px;
+            color: #52514e;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            border-bottom: 2px solid #e1e0d9;
+            padding: 2px 4px 3px;
+        }
 
         .met-hm .met-hm-lbl {
             position: sticky;
@@ -1141,9 +1156,10 @@
                     <button class="btn btn-primary" style="width: auto; padding: 8px 16px; margin: 0;"
                         onclick="loadDaySheet()">Refresh</button>
                 </div>
-                <p style="color:#666; font-size:13px; margin-top:8px;">Producción de hoy contra la pauta editorial:
-                    cada barra se llena hacia la pauta de su tabla, coloreada por el veredicto del gate de revisión.
-                    La marca oscura señala la pauta cuando la producción la supera. Refresca sola al terminar un envío.</p>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Lo que se generó hoy contra la pauta editorial,
+                    tabla por tabla. <span style="color:#0a6b0a; font-weight:600;">Verde</span> = pauta cumplida,
+                    <span style="color:#1c5aa8; font-weight:600;">azul</span> = en curso, gris = sin notas todavía.
+                    Refresca sola al terminar un envío.</p>
                 <div id="sheet-board">
                     <p class="cur-empty">Sign in and press Refresh to load today's production.</p>
                 </div>
@@ -1151,46 +1167,39 @@
 
             <div class="card" style="margin-bottom: 30px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h3 style="margin: 0;">📈 Producción — últimos 30 días <span class="status status-idle" id="status-metrics">Idle</span></h3>
+                    <h3 style="margin: 0;">📈 Publicadas en el sitio — últimos 30 días <span class="status status-idle" id="status-metrics">Idle</span></h3>
                     <button class="btn btn-primary" style="width: auto; padding: 8px 16px; margin: 0;"
                         onclick="loadMetrics()">Refresh</button>
                 </div>
-                <p style="color:#666; font-size:13px; margin-top:8px;">Cuánto produce la redacción y adónde va:
-                    borradores creados en Airtable y notas publicadas en el sitio, día por día contra la pauta,
-                    y el reparto por sección del sitio y por caja de la portada.</p>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Notas publicadas en el sitio, día por día:
+                    cuántas salieron, en qué sección y en qué caja de la portada.</p>
                 <div id="met-body" style="display:none;">
                     <div class="met-kpis" id="met-kpis"></div>
+                    <h4 style="font-size:13px; font-weight:600; color:#334155; margin:16px 0 6px;">Publicadas por día</h4>
                     <div class="met-chart-wide"><canvas id="met-trend"></canvas></div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:4px;">
-                        <h4 style="font-size:13px; font-weight:600; color:#334155; margin:0;">Día por día — número exacto por celda</h4>
-                        <div class="met-toggle">
-                            <button class="met-tgl active" id="met-tgl-published" onclick="setHeatMetric('published')">Publicadas</button>
-                            <button class="met-tgl" id="met-tgl-drafts" onclick="setHeatMetric('drafts')">Borradores</button>
-                        </div>
-                    </div>
-                    <p style="font-size:12px; color:#64748b; margin:0 0 10px;">Cada fila una sección / caja, cada columna un día. Celda vacía = 0.</p>
-                    <h4 style="font-size:12px; font-weight:600; color:#64748b; margin:10px 0 4px;">Secciones del sitio × días</h4>
+                    <h4 style="font-size:13px; font-weight:600; color:#334155; margin:0 0 2px;">Publicadas por sección, día por día</h4>
+                    <p style="font-size:12px; color:#64748b; margin:0 0 8px;">Cada fila una sección, cada columna un día del mes. Celda vacía = 0.</p>
                     <div class="met-hm-wrap" id="met-heat-sections"></div>
-                    <h4 style="font-size:12px; font-weight:600; color:#64748b; margin:14px 0 4px;">Cajas de la portada × días</h4>
+                    <h4 style="font-size:13px; font-weight:600; color:#334155; margin:18px 0 2px;">Publicadas por caja de la portada, día por día</h4>
+                    <p style="font-size:12px; color:#64748b; margin:0 0 8px;">Cada fila una caja de la portada, cada columna un día del mes.</p>
                     <div class="met-hm-wrap" id="met-heat-fronts"></div>
                     <div class="met-grid" style="margin-top: 24px;">
                         <div class="met-chart">
-                            <h4>Por sección del sitio — todas las secciones con actividad</h4>
+                            <h4>Total del mes por sección</h4>
                             <div class="met-canvas-box" id="met-sections-box"><canvas id="met-sections"></canvas></div>
-                            <p id="met-sections-note" style="display:none; font-size:12px; color:#64748b; margin-top:8px;"></p>
                         </div>
                         <div class="met-chart">
-                            <h4>Por caja de la portada — todas las cajas con actividad</h4>
+                            <h4>Total del mes por caja de la portada</h4>
                             <div class="met-canvas-box" id="met-fronts-box"><canvas id="met-fronts"></canvas></div>
                         </div>
                     </div>
                     <div class="met-grid" style="margin-top: 28px;">
                         <div class="met-chart">
-                            <h4>Detalle completo — todas las secciones del sitio</h4>
+                            <h4>Detalle completo — todas las secciones</h4>
                             <div id="met-sections-table"></div>
                         </div>
                         <div class="met-chart">
-                            <h4>Detalle completo — todas las cajas de la portada</h4>
+                            <h4>Detalle completo — todas las cajas</h4>
                             <div id="met-fronts-table"></div>
                         </div>
                     </div>
@@ -1529,31 +1538,32 @@
             }
         }
 
-        // ── Day-sheet production board: one progress meter per table ─────────
-        // Each table's bar fills toward its quota; the fill is segmented by the
-        // review gate's verdict (status colors, never reused for series). The
-        // dark tick marks the pauta when production overflows it. Every quota'd
-        // table is shown — empty bars included; nothing is folded away.
-        const SHEET_SEGS = [
-            { key: 'publish', color: '#0ca30c', label: '✅ Publicar' },
-            { key: 'hold', color: '#fab219', label: '🟡 Revisar' },
-            { key: 'reject', color: '#d03b3b', label: '⛔ Rechazada' },
-            { key: 'pending', color: '#c3c2b7', label: '⏳ Sin revisar' },
+        // ── Day-sheet status board: today's generation vs the pauta ──────────
+        // Big total + verdict chips up top; one pill per table, grouped by
+        // tier. Green = pauta met, blue = in progress, gray = nothing yet.
+        // Every quota'd table gets its pill — nothing folded away; the verdict
+        // breakdown per table lives in the pill's tooltip.
+        const SHEET_TIERS = [
+            { key: 'local', label: 'Locales' },
+            { key: 'secondary', label: 'Secciones' },
+            { key: 'recurring', label: 'Del día' },
+        ];
+        const SHEET_VCHIPS = [
+            { key: 'publish', label: '✅ Listas' },
+            { key: 'hold', label: '🟡 A revisar' },
+            { key: 'reject', label: '⛔ Rechazadas' },
+            { key: 'pending', label: '⏳ Sin revisar' },
         ];
 
-        function sheetMeter(r, large) {
-            // Denominator = whichever is bigger, pauta or production, so the
-            // segments always fit; a tick marks the pauta when it's inside.
-            const den = Math.max(r.quota || 0, r.generated || 0, 1);
-            let segs = '';
-            for (const s of SHEET_SEGS) {
-                const n = r[s.key] || 0;
-                if (n) segs += `<span class="sheet-seg" style="width:${(n / den) * 100}%; background:${s.color};" title="${s.label}: ${n}"></span>`;
+        function sheetPill(r) {
+            if (r.error) {
+                return `<span class="sheet-pill sheet-pill-err" title="${escapeHtml(r.error)}">${escapeHtml(r.feedName)} <b>error</b></span>`;
             }
-            const tick = (r.generated || 0) > (r.quota || 0)
-                ? `<span class="sheet-tick" style="left:${((r.quota || 0) / den) * 100}%;" title="pauta: ${r.quota}"></span>`
-                : '';
-            return `<div class="sheet-track${large ? ' sheet-track-lg' : ''}" title="${r.generated || 0} de ${r.quota || 0}">${segs}${tick}</div>`;
+            const g = r.generated || 0, q = r.quota || 0;
+            const done = g >= q && g > 0;
+            const cls = done ? 'sheet-pill-done' : g > 0 ? 'sheet-pill-part' : 'sheet-pill-zero';
+            const tip = `${r.feedName} — ${g} de ${q} · ✅ ${r.publish || 0} · 🟡 ${r.hold || 0} · ⛔ ${r.reject || 0} · ⏳ ${r.pending || 0}`;
+            return `<span class="sheet-pill ${cls}" title="${escapeHtml(tip)}">${done ? '✓ ' : ''}${escapeHtml(r.feedName)} <b>${g}/${q}</b></span>`;
         }
 
         function renderDaySheet(data) {
@@ -1564,39 +1574,38 @@
                 return;
             }
 
-            let html = `<div class="sheet-legend">${SHEET_SEGS.map(s =>
-                `<span><span class="sheet-dot" style="background:${s.color}"></span>${s.label}</span>`).join('')}</div>`;
-
-            // Day total up top: the one meter that answers "¿vamos a tiempo?".
             const t = rows.reduce((a, r) => ({
                 generated: a.generated + (r.generated || 0), quota: a.quota + (r.quota || 0),
                 publish: a.publish + (r.publish || 0), hold: a.hold + (r.hold || 0),
                 reject: a.reject + (r.reject || 0), pending: a.pending + (r.pending || 0)
             }), { generated: 0, quota: 0, publish: 0, hold: 0, reject: 0, pending: 0 });
             const pct = t.quota ? Math.round((t.generated / t.quota) * 100) : 0;
-            const tCls = t.generated >= t.quota ? 'sheet-done' : (t.generated > 0 ? 'sheet-short' : 'sheet-zero');
-            html += `<div class="sheet-row sheet-row-total">
-                <div class="sheet-name" style="font-weight:700;">Total del día${data.weekend ? ' (finde)' : ''} · ${pct}%</div>
-                ${sheetMeter(t, true)}
-                <div class="sheet-count ${tCls}">${t.generated}/${t.quota}</div></div>`;
+            const hoy = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 
-            for (const r of rows) {
-                const tier = r.tier === 'local'
-                    ? '<span class="sheet-tier sheet-tier-local">LOCAL</span>'
-                    : r.tier === 'recurring'
-                        ? '<span class="sheet-tier sheet-tier-dia">DÍA</span>'
-                        : '';
-                if (r.error) {
-                    html += `<div class="sheet-row">
-                        <div class="sheet-name">${escapeHtml(r.feedName)}${tier}</div>
-                        <div class="sheet-err">error: ${escapeHtml(r.error)}</div><div></div></div>`;
-                    continue;
-                }
-                const cls = r.generated >= r.quota ? 'sheet-done' : (r.generated > 0 ? 'sheet-short' : 'sheet-zero');
-                html += `<div class="sheet-row">
-                    <div class="sheet-name" title="${escapeHtml(r.feedName)}">${escapeHtml(r.feedName)}${tier}</div>
-                    ${sheetMeter(r, false)}
-                    <div class="sheet-count ${cls}">${r.generated}/${r.quota}</div></div>`;
+            const chips = SHEET_VCHIPS.map(c =>
+                `<span class="sheet-chip${t[c.key] ? '' : ' sheet-chip-dim'}">${c.label} ${t[c.key]}</span>`).join('');
+
+            let html = `<div class="sheet-hero">
+                <div class="sheet-hero-num">${t.generated}<small>/${t.quota}</small></div>
+                <div class="sheet-hero-meta"><strong>${pct}% de la pauta de hoy</strong>${data.weekend ? ' (fin de semana)' : ''}<br>${hoy}</div>
+                <div class="sheet-chips">${chips}</div></div>
+                <div class="sheet-bar"><div class="sheet-bar-fill" style="width:${Math.min(100, pct)}%;${t.generated >= t.quota && t.generated ? 'background:#0ca30c;' : ''}"></div></div>`;
+
+            for (const tier of SHEET_TIERS) {
+                const group = rows.filter(r => r.tier === tier.key);
+                if (!group.length) continue;
+                const g = group.reduce((s, r) => s + (r.generated || 0), 0);
+                const q = group.reduce((s, r) => s + (r.quota || 0), 0);
+                const sorted = [...group].sort((a, b) => (b.generated || 0) - (a.generated || 0) ||
+                    String(a.feedName).localeCompare(String(b.feedName), 'es'));
+                html += `<div class="sheet-group"><div class="sheet-group-h">${tier.label} <span>${g}/${q}</span></div>
+                    <div class="sheet-pills">${sorted.map(sheetPill).join('')}</div></div>`;
+            }
+            // Any tier outside the known three still gets its pills (complete data).
+            const rest = rows.filter(r => !SHEET_TIERS.some(x => x.key === r.tier));
+            if (rest.length) {
+                html += `<div class="sheet-group"><div class="sheet-group-h">Otras tablas <span></span></div>
+                    <div class="sheet-pills">${rest.map(sheetPill).join('')}</div></div>`;
             }
             box.innerHTML = html;
         }
@@ -1661,19 +1670,19 @@
                 <div class="met-l">${label}</div>${sub ? `<div class="met-s">${sub}</div>` : ''}</div>`;
         }
 
-        // Horizontal grouped bars: publicadas + borradores per row, every row
-        // with activity — nothing folded into "Otros". Height scales with the
-        // row count so bars never squash; series colors match the trend chart.
+        // Horizontal bars: month total of publicadas per row. Every row that
+        // published appears — nothing folded into "Otros"; the zero rows live
+        // in the complete detail tables below. Height scales with the row
+        // count so bars never squash.
         function metBarChart(key, canvasId, boxId, rows, labelKey) {
             metDestroy(key);
-            document.getElementById(boxId).style.height = `${Math.max(80, rows.length * 40 + 40)}px`;
+            document.getElementById(boxId).style.height = `${Math.max(80, rows.length * 28 + 30)}px`;
             metCharts[key] = new Chart(document.getElementById(canvasId), {
                 type: 'bar',
                 data: {
                     labels: rows.map(r => r[labelKey]),
                     datasets: [
-                        { label: 'Publicadas', data: rows.map(r => r.published), backgroundColor: MET_BLUE, borderRadius: 4, barThickness: 10 },
-                        { label: 'Borradores', data: rows.map(r => r.drafts), backgroundColor: MET_AQUA, borderRadius: 4, barThickness: 10 }
+                        { label: 'Publicadas', data: rows.map(r => r.published), backgroundColor: MET_BLUE, borderRadius: 4, barThickness: 14 }
                     ]
                 },
                 plugins: [metBarLabels],
@@ -1682,9 +1691,7 @@
                     animation: false,
                     maintainAspectRatio: false,
                     layout: { padding: { right: 30 } },
-                    plugins: {
-                        legend: { position: 'top', align: 'end', labels: { usePointStyle: true, pointStyle: 'rect', boxHeight: 8, boxWidth: 8, color: MET_INK.label, font: { size: 12 } } }
-                    },
+                    plugins: { legend: { display: false } },
                     scales: {
                         x: { grid: { color: MET_INK.grid }, border: { color: MET_INK.axis }, ticks: { color: MET_INK.tick, precision: 0 } },
                         y: { grid: { display: false }, border: { color: MET_INK.axis }, ticks: { color: MET_INK.label, autoSkip: false } }
@@ -1694,38 +1701,35 @@
         }
 
         // Full detail table: EVERY row from the catalog, zeros included, with
-        // exact counts and a total. Zero rows are dimmed but never hidden.
+        // exact counts (hoy / 7 días / 30 días) and a total. Zero rows are
+        // dimmed but never hidden.
         function metTable(rows, labelKey, head) {
+            const sum = a => (a || []).reduce((s, v) => s + v, 0);
             let html = `<table class="sheet-table"><thead><tr>
-                <th>${head}</th><th>Borradores</th><th>Publicadas</th></tr></thead><tbody>`;
-            let td = 0, tp = 0;
+                <th>${head}</th><th>Hoy</th><th>7 días</th><th>30 días</th></tr></thead><tbody>`;
+            let t1 = 0, t7 = 0, t30 = 0;
             for (const r of rows) {
-                td += r.drafts; tp += r.published;
-                const dim = (r.drafts + r.published) === 0 ? ' style="color:#94a3b8;"' : '';
-                html += `<tr${dim}><td>${escapeHtml(r[labelKey])}</td><td>${r.drafts}</td><td>${r.published}</td></tr>`;
+                const s = r.publishedByDay || [];
+                const hoy = s[s.length - 1] || 0, d7 = sum(s.slice(-7)), d30 = r.published || 0;
+                t1 += hoy; t7 += d7; t30 += d30;
+                const dim = d30 === 0 ? ' style="color:#94a3b8;"' : '';
+                html += `<tr${dim}><td>${escapeHtml(r[labelKey])}</td><td>${hoy}</td><td>${d7}</td><td>${d30}</td></tr>`;
             }
             html += `<tr style="font-weight:700; border-top:2px solid #e5e7eb;">
-                <td>Total</td><td>${td}</td><td>${tp}</td></tr>`;
+                <td>Total</td><td>${t1}</td><td>${t7}</td><td>${t30}</td></tr>`;
             return html + '</tbody></table>';
         }
 
         // ── Day-by-day grids: every section / box × every day, exact counts ──
         // Sequential blue ramp (one hue, more-is-darker); zero = empty cell.
         // EVERY row is rendered, all-zero rows included (dimmed label, sorted
-        // to the bottom) — complete data, nothing folded.
+        // to the bottom) — complete data, nothing folded. A month band on top
+        // keeps the day numbers readable across the month boundary.
         let metData = null;
-        let metHeatMetric = 'published';
         const HEAT_RAMP = ['#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#256abf', '#184f95', '#0d366b'];
 
-        function setHeatMetric(m) {
-            metHeatMetric = m;
-            document.getElementById('met-tgl-published').classList.toggle('active', m === 'published');
-            document.getElementById('met-tgl-drafts').classList.toggle('active', m === 'drafts');
-            if (metData) renderHeatmaps(metData);
-        }
-
         function metHeatmap(containerId, rows, labelKey, days) {
-            const key = metHeatMetric === 'published' ? 'publishedByDay' : 'draftsByDay';
+            const key = 'publishedByDay';
             const sum = a => (a || []).reduce((s, v) => s + v, 0);
             const sorted = [...rows].sort((a, b) => sum(b[key]) - sum(a[key]) ||
                 String(a[labelKey]).localeCompare(String(b[labelKey]), 'es'));
@@ -1735,12 +1739,24 @@
                 const dt = new Date(`${d.date}T12:00:00-03:00`);
                 return {
                     num: dt.getDate(),
+                    mon: dt.toLocaleDateString('es-AR', { month: 'long' }),
                     we: dt.getDay() === 0 || dt.getDay() === 6,
                     full: dt.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
                 };
             });
 
-            let html = '<table class="met-hm"><thead><tr><th class="met-hm-lbl"></th>';
+            // One band per month spanning its days: "junio ……… | julio ……"
+            const bands = [];
+            for (const m of dayMeta) {
+                if (bands.length && bands[bands.length - 1].mon === m.mon) bands[bands.length - 1].n++;
+                else bands.push({ mon: m.mon, n: 1 });
+            }
+
+            let html = '<table class="met-hm"><thead>';
+            html += '<tr><th class="met-hm-lbl"></th>' +
+                bands.map(b => `<th class="met-hm-mon" colspan="${b.n}">${b.mon}</th>`).join('') +
+                '<th></th></tr>';
+            html += '<tr><th class="met-hm-lbl"></th>';
             for (const m of dayMeta) html += `<th class="${m.we ? 'met-hm-we' : ''}" title="${m.full}">${m.num}</th>`;
             html += '<th class="met-hm-tot">Total</th></tr></thead><tbody>';
 
@@ -1779,28 +1795,40 @@
             document.getElementById('met-empty').style.display = 'none';
             document.getElementById('met-body').style.display = 'block';
 
-            const t = data.today || {};
-            const pct = t.quota ? Math.round((t.drafts / t.quota) * 100) : 0;
-            document.getElementById('met-kpis').innerHTML =
-                metKpi(t.drafts ?? 0, 'Borradores hoy', `pauta ${t.quota ?? '—'} (${pct}%)`) +
-                metKpi(t.published ?? 0, 'Publicadas hoy', '') +
-                metKpi(data.totals?.drafts ?? 0, `Borradores · ${data.windowDays} días`, '') +
-                metKpi(data.totals?.published ?? 0, `Publicadas · ${data.windowDays} días`, '');
-
-            // Trend: drafts vs published per day, with the daily pauta as a
-            // dashed gray reference (context, not a competing series).
             const days = data.days || [];
-            const labels = days.map(d =>
-                new Date(`${d.date}T12:00:00-03:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }));
+            const pubs = days.map(d => d.published);
+            const sum = a => a.reduce((s, v) => s + v, 0);
+            const nf = n => n.toLocaleString('es-AR', { maximumFractionDigits: 1 });
+            const fmtDay = i => new Date(`${days[i].date}T12:00:00-03:00`)
+                .toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+
+            const hoy = pubs[pubs.length - 1] || 0;
+            const d7 = sum(pubs.slice(-7));
+            const d30 = sum(pubs);
+            let best = 0;
+            pubs.forEach((v, i) => { if (v > pubs[best]) best = i; });
+
+            document.getElementById('met-kpis').innerHTML =
+                metKpi(hoy, 'Publicadas hoy', '') +
+                metKpi(d7, 'Últimos 7 días', `${nf(d7 / 7)} por día`) +
+                metKpi(d30, `Últimos ${data.windowDays} días`, `${nf(d30 / Math.max(1, days.length))} por día`) +
+                metKpi(pubs[best] || 0, 'Mejor día', days.length ? fmtDay(best) : '');
+
+            // Publicadas per day: one blue bar per day, plus a 7-day moving
+            // average so the tendency reads through the daily jitter.
+            const ma = pubs.map((_, i) => {
+                const w = pubs.slice(Math.max(0, i - 6), i + 1);
+                return +(sum(w) / w.length).toFixed(1);
+            });
+            const labels = days.map((_, i) => fmtDay(i));
             metDestroy('trend');
             metCharts.trend = new Chart(document.getElementById('met-trend'), {
-                type: 'line',
+                type: 'bar',
                 data: {
                     labels,
                     datasets: [
-                        { label: 'Publicadas', data: days.map(d => d.published), borderColor: MET_BLUE, backgroundColor: MET_BLUE, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2 },
-                        { label: 'Borradores', data: days.map(d => d.drafts), borderColor: MET_AQUA, backgroundColor: MET_AQUA, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2 },
-                        { label: 'Pauta', data: days.map(d => d.quota), borderColor: MET_INK.tick, backgroundColor: MET_INK.tick, borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 0, tension: 0 }
+                        { label: 'Publicadas', data: pubs, backgroundColor: MET_BLUE, borderRadius: 3, order: 2 },
+                        { type: 'line', label: 'Promedio 7 días', data: ma, borderColor: '#184f95', borderWidth: 2, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, order: 1 }
                     ]
                 },
                 options: {
@@ -1808,35 +1836,24 @@
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { position: 'top', align: 'end', labels: { usePointStyle: true, pointStyle: 'line', boxHeight: 8, color: MET_INK.label, font: { size: 12 } } }
+                        legend: { position: 'top', align: 'end', labels: { usePointStyle: true, boxHeight: 8, boxWidth: 18, color: MET_INK.label, font: { size: 12 } } }
                     },
                     scales: {
-                        x: { grid: { display: false }, border: { color: MET_INK.axis }, ticks: { color: MET_INK.tick, maxTicksLimit: 10 } },
+                        x: { grid: { display: false }, border: { color: MET_INK.axis }, ticks: { color: MET_INK.tick, maxTicksLimit: 12, maxRotation: 0 } },
                         y: { beginAtZero: true, grid: { color: MET_INK.grid }, border: { display: false }, ticks: { color: MET_INK.tick, precision: 0 } }
                     }
                 }
             });
 
-            // Charts: EVERY section / box with activity in the window (no
-            // folding, no "Otros"). Tables: the complete catalogs, zeros too.
-            // The synthetic "(sin sección)" bucket (drafts from before section
-            // routing existed) stays OUT of the chart — its hundreds of drafts
-            // would crush every real section's bar — but its exact count is
-            // stated right below and it keeps its row in the table.
+            // Bar charts: every section / caja that published this month (no
+            // "Otros", no caps). The complete catalogs — zero rows included,
+            // dimmed — are always in the detail tables below.
             const sections = data.sections || [];
             const fronts = data.fronts || [];
-            const active = rows => rows.filter(r => (r.drafts + r.published) > 0);
-            const sinSec = sections.find(s => s.id === '(sin sección)');
-            const note = document.getElementById('met-sections-note');
-            if (sinSec && sinSec.drafts > 0) {
-                note.textContent = `Además: ${sinSec.drafts} borradores sin sección asignada (anteriores al ruteo de secciones) — fila "(sin sección)" en la tabla de abajo.`;
-                note.style.display = 'block';
-            } else {
-                note.style.display = 'none';
-            }
             metBarChart('sections', 'met-sections', 'met-sections-box',
-                active(sections).filter(s => s.id !== '(sin sección)'), 'name');
-            metBarChart('fronts', 'met-fronts', 'met-fronts-box', active(fronts), 'label');
+                sections.filter(r => r.published > 0), 'name');
+            metBarChart('fronts', 'met-fronts', 'met-fronts-box',
+                fronts.filter(r => r.published > 0), 'label');
             document.getElementById('met-sections-table').innerHTML = metTable(sections, 'name', 'Sección');
             document.getElementById('met-fronts-table').innerHTML = metTable(fronts, 'label', 'Caja');
             renderHeatmaps(data);
@@ -1862,7 +1879,7 @@
                 renderMetrics(data);
                 setStatus('status-metrics', 'success', `${data.totals?.published ?? 0} publicadas`);
                 const errs = (data.tableErrors || []).length;
-                addLog(`📈 Producción loaded — ${data.totals?.drafts ?? 0} borradores, ${data.totals?.published ?? 0} publicadas en ${data.windowDays} días${errs ? ` (${errs} tabla(s) con error)` : ''}`, errs ? 'warning' : 'success');
+                addLog(`📈 Publicadas loaded — ${data.totals?.published ?? 0} en ${data.windowDays} días${errs ? ` (${errs} tabla(s) con error)` : ''}`, errs ? 'warning' : 'success');
             } catch (e) {
                 setStatus('status-metrics', 'error', 'Error');
                 addLog(`❌ Producción failed: ${e.message}`, 'error');
