@@ -1005,12 +1005,23 @@
                     <div class="met-chart-wide"><canvas id="met-trend"></canvas></div>
                     <div class="met-grid">
                         <div class="met-chart">
-                            <h4>Publicadas por sección del sitio</h4>
+                            <h4>Por sección del sitio — todas las secciones con actividad</h4>
                             <div class="met-canvas-box" id="met-sections-box"><canvas id="met-sections"></canvas></div>
+                            <p id="met-sections-note" style="display:none; font-size:12px; color:#64748b; margin-top:8px;"></p>
                         </div>
                         <div class="met-chart">
-                            <h4>Publicadas por caja de la portada</h4>
+                            <h4>Por caja de la portada — todas las cajas con actividad</h4>
                             <div class="met-canvas-box" id="met-fronts-box"><canvas id="met-fronts"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="met-grid" style="margin-top: 28px;">
+                        <div class="met-chart">
+                            <h4>Detalle completo — todas las secciones del sitio</h4>
+                            <div id="met-sections-table"></div>
+                        </div>
+                        <div class="met-chart">
+                            <h4>Detalle completo — todas las cajas de la portada</h4>
+                            <div id="met-fronts-table"></div>
                         </div>
                     </div>
                 </div>
@@ -1417,22 +1428,23 @@
         const MET_BLUE = '#2a78d6', MET_AQUA = '#1baf7a';
         let metCharts = {};
 
-        // Direct value labels at the end of each horizontal bar — the numbers
-        // are always readable without hovering (and carry the aqua bars, whose
-        // contrast on white is below 3:1 on their own).
+        // Direct value labels at the end of every bar in every series — the
+        // exact numbers are always readable without hovering (and carry the
+        // aqua bars, whose contrast on white is below 3:1 on their own).
         const metBarLabels = {
             id: 'metBarLabels',
             afterDatasetsDraw(chart) {
-                const meta = chart.getDatasetMeta(0);
-                const data = chart.data.datasets[0].data;
                 const { ctx } = chart;
                 ctx.save();
-                ctx.font = '11px system-ui, -apple-system, "Segoe UI", sans-serif';
+                ctx.font = '10px system-ui, -apple-system, "Segoe UI", sans-serif';
                 ctx.fillStyle = MET_INK.label;
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'middle';
-                meta.data.forEach((bar, i) => {
-                    if (data[i] > 0) ctx.fillText(String(data[i]), bar.x + 6, bar.y);
+                chart.data.datasets.forEach((ds, di) => {
+                    const meta = chart.getDatasetMeta(di);
+                    meta.data.forEach((bar, i) => {
+                        if (ds.data[i] > 0) ctx.fillText(String(ds.data[i]), bar.x + 5, bar.y);
+                    });
                 });
                 ctx.restore();
             }
@@ -1447,16 +1459,20 @@
                 <div class="met-l">${label}</div>${sub ? `<div class="met-s">${sub}</div>` : ''}</div>`;
         }
 
-        // Horizontal bar chart: one hue (magnitude job), thin rounded bars,
-        // height scales with the row count so bars never squash.
-        function metBarChart(key, canvasId, boxId, rows, color) {
+        // Horizontal grouped bars: publicadas + borradores per row, every row
+        // with activity — nothing folded into "Otros". Height scales with the
+        // row count so bars never squash; series colors match the trend chart.
+        function metBarChart(key, canvasId, boxId, rows, labelKey) {
             metDestroy(key);
-            document.getElementById(boxId).style.height = `${Math.max(60, rows.length * 26 + 20)}px`;
+            document.getElementById(boxId).style.height = `${Math.max(80, rows.length * 40 + 40)}px`;
             metCharts[key] = new Chart(document.getElementById(canvasId), {
                 type: 'bar',
                 data: {
-                    labels: rows.map(r => r.label),
-                    datasets: [{ data: rows.map(r => r.value), backgroundColor: color, borderRadius: 4, barThickness: 12 }]
+                    labels: rows.map(r => r[labelKey]),
+                    datasets: [
+                        { label: 'Publicadas', data: rows.map(r => r.published), backgroundColor: MET_BLUE, borderRadius: 4, barThickness: 10 },
+                        { label: 'Borradores', data: rows.map(r => r.drafts), backgroundColor: MET_AQUA, borderRadius: 4, barThickness: 10 }
+                    ]
                 },
                 plugins: [metBarLabels],
                 options: {
@@ -1464,13 +1480,31 @@
                     animation: false,
                     maintainAspectRatio: false,
                     layout: { padding: { right: 30 } },
-                    plugins: { legend: { display: false } },
+                    plugins: {
+                        legend: { position: 'top', align: 'end', labels: { usePointStyle: true, pointStyle: 'rect', boxHeight: 8, boxWidth: 8, color: MET_INK.label, font: { size: 12 } } }
+                    },
                     scales: {
                         x: { grid: { color: MET_INK.grid }, border: { color: MET_INK.axis }, ticks: { color: MET_INK.tick, precision: 0 } },
                         y: { grid: { display: false }, border: { color: MET_INK.axis }, ticks: { color: MET_INK.label, autoSkip: false } }
                     }
                 }
             });
+        }
+
+        // Full detail table: EVERY row from the catalog, zeros included, with
+        // exact counts and a total. Zero rows are dimmed but never hidden.
+        function metTable(rows, labelKey, head) {
+            let html = `<table class="sheet-table"><thead><tr>
+                <th>${head}</th><th>Borradores</th><th>Publicadas</th></tr></thead><tbody>`;
+            let td = 0, tp = 0;
+            for (const r of rows) {
+                td += r.drafts; tp += r.published;
+                const dim = (r.drafts + r.published) === 0 ? ' style="color:#94a3b8;"' : '';
+                html += `<tr${dim}><td>${escapeHtml(r[labelKey])}</td><td>${r.drafts}</td><td>${r.published}</td></tr>`;
+            }
+            html += `<tr style="font-weight:700; border-top:2px solid #e5e7eb;">
+                <td>Total</td><td>${td}</td><td>${tp}</td></tr>`;
+            return html + '</tbody></table>';
         }
 
         function renderMetrics(data) {
@@ -1515,19 +1549,28 @@
                 }
             });
 
-            // Top sections / boxes by published count; the tail folds into
-            // "Otros" instead of growing more bars.
-            const fold = (rows, labelKey) => {
-                const withData = rows.filter(r => r.published > 0);
-                const top = withData.slice(0, 12).map(r => ({ label: r[labelKey], value: r.published }));
-                const rest = withData.slice(12).reduce((s, r) => s + r.published, 0);
-                if (rest > 0) top.push({ label: 'Otros', value: rest });
-                return top;
-            };
-            const secRows = fold(data.sections || [], 'name');
-            const frontRows = fold(data.fronts || [], 'label');
-            metBarChart('sections', 'met-sections', 'met-sections-box', secRows, MET_BLUE);
-            metBarChart('fronts', 'met-fronts', 'met-fronts-box', frontRows, MET_AQUA);
+            // Charts: EVERY section / box with activity in the window (no
+            // folding, no "Otros"). Tables: the complete catalogs, zeros too.
+            // The synthetic "(sin sección)" bucket (drafts from before section
+            // routing existed) stays OUT of the chart — its hundreds of drafts
+            // would crush every real section's bar — but its exact count is
+            // stated right below and it keeps its row in the table.
+            const sections = data.sections || [];
+            const fronts = data.fronts || [];
+            const active = rows => rows.filter(r => (r.drafts + r.published) > 0);
+            const sinSec = sections.find(s => s.id === '(sin sección)');
+            const note = document.getElementById('met-sections-note');
+            if (sinSec && sinSec.drafts > 0) {
+                note.textContent = `Además: ${sinSec.drafts} borradores sin sección asignada (anteriores al ruteo de secciones) — fila "(sin sección)" en la tabla de abajo.`;
+                note.style.display = 'block';
+            } else {
+                note.style.display = 'none';
+            }
+            metBarChart('sections', 'met-sections', 'met-sections-box',
+                active(sections).filter(s => s.id !== '(sin sección)'), 'name');
+            metBarChart('fronts', 'met-fronts', 'met-fronts-box', active(fronts), 'label');
+            document.getElementById('met-sections-table').innerHTML = metTable(sections, 'name', 'Sección');
+            document.getElementById('met-fronts-table').innerHTML = metTable(fronts, 'label', 'Caja');
         }
 
         async function loadMetrics() {

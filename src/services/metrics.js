@@ -17,7 +17,7 @@
 import axios from 'axios'
 import config from '../config/index.js'
 import { SECTIONS, getSection } from '../config/sections.js'
-import { getBlock } from '../config/homepage-blocks.js'
+import { getBlock, HOMEPAGE_BLOCKS } from '../config/homepage-blocks.js'
 import { daySheetFor } from '../config/day-sheet.js'
 import supabaseService from './supabase.js'
 import logger from '../utils/logger.js'
@@ -181,8 +181,14 @@ export async function buildProductionMetrics({ windowDays = 30 } = {}) {
     quota: daySheetFor(new Date(`${date}T12:00:00-03:00`)).reduce((s, r) => s + r.quota, 0),
   }))
 
-  // Merge the two sides into one row per section / per homepage box.
-  const sectionIds = new Set([...draftsBySection.keys(), ...publishedBySection.keys()])
+  // Merge the two sides into one row per section / per homepage box. Seeded
+  // with the FULL catalogs so every section and every box appears — zeros
+  // included; the cockpit shows complete data, nothing folded away.
+  const sectionIds = new Set([
+    ...SECTIONS.map((s) => s.id),
+    ...draftsBySection.keys(),
+    ...publishedBySection.keys(),
+  ])
   const sections = [...sectionIds]
     .map((id) => ({
       id,
@@ -190,9 +196,18 @@ export async function buildProductionMetrics({ windowDays = 30 } = {}) {
       drafts: draftsBySection.get(id) || 0,
       published: publishedBySection.get(id) || 0,
     }))
-    .sort((a, b) => b.published - a.published || b.drafts - a.drafts)
+    .sort(
+      (a, b) =>
+        b.published - a.published ||
+        b.drafts - a.drafts ||
+        a.name.localeCompare(b.name, 'es'),
+    )
 
-  const frontIds = new Set([...draftsByFront.keys(), ...publishedByFront.keys()])
+  const frontIds = new Set([
+    ...HOMEPAGE_BLOCKS.map((b) => b.front),
+    ...draftsByFront.keys(),
+    ...publishedByFront.keys(),
+  ])
   const fronts = [...frontIds]
     .map((id) => ({
       id,
@@ -200,7 +215,12 @@ export async function buildProductionMetrics({ windowDays = 30 } = {}) {
       drafts: draftsByFront.get(id) || 0,
       published: publishedByFront.get(id) || 0,
     }))
-    .sort((a, b) => b.published - a.published || b.drafts - a.drafts)
+    .sort(
+      (a, b) =>
+        b.published - a.published ||
+        b.drafts - a.drafts ||
+        a.label.localeCompare(b.label, 'es'),
+    )
 
   tableRows.sort((a, b) => b.drafts - a.drafts)
 
