@@ -903,6 +903,85 @@
             position: relative;
         }
 
+        /* ── Day-by-day heatmap grids ── */
+        .met-toggle {
+            display: inline-flex;
+            border: 1px solid #c7d2fe;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .met-tgl {
+            border: none;
+            background: #fff;
+            color: #4f46e5;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 5px 14px;
+            cursor: pointer;
+        }
+
+        .met-tgl.active {
+            background: #4f46e5;
+            color: #fff;
+        }
+
+        .met-hm-wrap {
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
+        .met-hm {
+            border-collapse: separate;
+            border-spacing: 2px;
+            font-size: 10px;
+        }
+
+        .met-hm th {
+            font-weight: 500;
+            color: #898781;
+            padding: 1px 2px;
+            text-align: center;
+        }
+
+        .met-hm th.met-hm-we { background: #f1f5f9; border-radius: 3px; }
+
+        .met-hm .met-hm-lbl {
+            position: sticky;
+            left: 0;
+            background: #fff;
+            text-align: left;
+            font-size: 11px;
+            color: #334155;
+            min-width: 120px;
+            max-width: 160px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding-right: 8px;
+            z-index: 1;
+        }
+
+        .met-hm-cell {
+            width: 24px;
+            min-width: 24px;
+            height: 21px;
+            text-align: center;
+            border-radius: 3px;
+            background: #f8fafc;
+            color: #0b0b0b;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .met-hm-tot {
+            font-weight: 700;
+            color: #334155;
+            text-align: right;
+            padding-left: 8px;
+        }
+
+        .met-hm-zero .met-hm-lbl { color: #b6bcc6; }
+
         @media (max-width: 800px) {
             .met-grid {
                 grid-template-columns: 1fr;
@@ -1082,7 +1161,19 @@
                 <div id="met-body" style="display:none;">
                     <div class="met-kpis" id="met-kpis"></div>
                     <div class="met-chart-wide"><canvas id="met-trend"></canvas></div>
-                    <div class="met-grid">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:4px;">
+                        <h4 style="font-size:13px; font-weight:600; color:#334155; margin:0;">Día por día — número exacto por celda</h4>
+                        <div class="met-toggle">
+                            <button class="met-tgl active" id="met-tgl-published" onclick="setHeatMetric('published')">Publicadas</button>
+                            <button class="met-tgl" id="met-tgl-drafts" onclick="setHeatMetric('drafts')">Borradores</button>
+                        </div>
+                    </div>
+                    <p style="font-size:12px; color:#64748b; margin:0 0 10px;">Cada fila una sección / caja, cada columna un día. Celda vacía = 0.</p>
+                    <h4 style="font-size:12px; font-weight:600; color:#64748b; margin:10px 0 4px;">Secciones del sitio × días</h4>
+                    <div class="met-hm-wrap" id="met-heat-sections"></div>
+                    <h4 style="font-size:12px; font-weight:600; color:#64748b; margin:14px 0 4px;">Cajas de la portada × días</h4>
+                    <div class="met-hm-wrap" id="met-heat-fronts"></div>
+                    <div class="met-grid" style="margin-top: 24px;">
                         <div class="met-chart">
                             <h4>Por sección del sitio — todas las secciones con actividad</h4>
                             <div class="met-canvas-box" id="met-sections-box"><canvas id="met-sections"></canvas></div>
@@ -1618,7 +1709,73 @@
             return html + '</tbody></table>';
         }
 
+        // ── Day-by-day grids: every section / box × every day, exact counts ──
+        // Sequential blue ramp (one hue, more-is-darker); zero = empty cell.
+        // EVERY row is rendered, all-zero rows included (dimmed label, sorted
+        // to the bottom) — complete data, nothing folded.
+        let metData = null;
+        let metHeatMetric = 'published';
+        const HEAT_RAMP = ['#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#256abf', '#184f95', '#0d366b'];
+
+        function setHeatMetric(m) {
+            metHeatMetric = m;
+            document.getElementById('met-tgl-published').classList.toggle('active', m === 'published');
+            document.getElementById('met-tgl-drafts').classList.toggle('active', m === 'drafts');
+            if (metData) renderHeatmaps(metData);
+        }
+
+        function metHeatmap(containerId, rows, labelKey, days) {
+            const key = metHeatMetric === 'published' ? 'publishedByDay' : 'draftsByDay';
+            const sum = a => (a || []).reduce((s, v) => s + v, 0);
+            const sorted = [...rows].sort((a, b) => sum(b[key]) - sum(a[key]) ||
+                String(a[labelKey]).localeCompare(String(b[labelKey]), 'es'));
+            const max = Math.max(1, ...sorted.map(r => Math.max(0, ...(r[key] || []))));
+
+            const dayMeta = days.map(d => {
+                const dt = new Date(`${d.date}T12:00:00-03:00`);
+                return {
+                    num: dt.getDate(),
+                    we: dt.getDay() === 0 || dt.getDay() === 6,
+                    full: dt.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
+                };
+            });
+
+            let html = '<table class="met-hm"><thead><tr><th class="met-hm-lbl"></th>';
+            for (const m of dayMeta) html += `<th class="${m.we ? 'met-hm-we' : ''}" title="${m.full}">${m.num}</th>`;
+            html += '<th class="met-hm-tot">Total</th></tr></thead><tbody>';
+
+            const colTotals = days.map(() => 0);
+            for (const r of sorted) {
+                const series = r[key] || [];
+                const total = sum(series);
+                html += `<tr class="${total === 0 ? 'met-hm-zero' : ''}">
+                    <td class="met-hm-lbl" title="${escapeHtml(String(r[labelKey]))}">${escapeHtml(String(r[labelKey]))}</td>`;
+                series.forEach((v, i) => {
+                    colTotals[i] += v;
+                    const idx = v ? Math.min(HEAT_RAMP.length - 1, Math.ceil((v / max) * HEAT_RAMP.length) - 1) : -1;
+                    const bg = idx >= 0 ? `background:${HEAT_RAMP[idx]};` : '';
+                    const ink = idx >= 4 ? 'color:#fff;' : '';
+                    html += `<td class="met-hm-cell" style="${bg}${ink}" title="${escapeHtml(String(r[labelKey]))} — ${dayMeta[i].full}: ${v}">${v || ''}</td>`;
+                });
+                html += `<td class="met-hm-tot">${total}</td></tr>`;
+            }
+
+            html += `<tr><td class="met-hm-lbl" style="font-weight:700;">Total</td>`;
+            colTotals.forEach((v, i) => {
+                html += `<td class="met-hm-cell" style="font-weight:700;" title="${dayMeta[i].full}: ${v}">${v || ''}</td>`;
+            });
+            html += `<td class="met-hm-tot">${colTotals.reduce((s, v) => s + v, 0)}</td></tr>`;
+            html += '</tbody></table>';
+            document.getElementById(containerId).innerHTML = html;
+        }
+
+        function renderHeatmaps(data) {
+            metHeatmap('met-heat-sections', data.sections || [], 'name', data.days || []);
+            metHeatmap('met-heat-fronts', data.fronts || [], 'label', data.days || []);
+        }
+
         function renderMetrics(data) {
+            metData = data;
             document.getElementById('met-empty').style.display = 'none';
             document.getElementById('met-body').style.display = 'block';
 
@@ -1682,6 +1839,7 @@
             metBarChart('fronts', 'met-fronts', 'met-fronts-box', active(fronts), 'label');
             document.getElementById('met-sections-table').innerHTML = metTable(sections, 'name', 'Sección');
             document.getElementById('met-fronts-table').innerHTML = metTable(fronts, 'label', 'Caja');
+            renderHeatmaps(data);
         }
 
         async function loadMetrics() {

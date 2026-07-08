@@ -133,6 +133,8 @@ export async function buildProductionMetrics({ windowDays = 30 } = {}) {
   const draftsByDay = new Map()
   const draftsBySection = new Map()
   const draftsByFront = new Map()
+  const draftsBySectionDay = new Map() // key `${sectionId}|${day}`
+  const draftsByFrontDay = new Map() // key `${front}|${day}`
   const tableRows = []
   const verdicts = { publish: 0, hold: 0, reject: 0, pending: 0 }
   const tableErrors = []
@@ -146,9 +148,13 @@ export async function buildProductionMetrics({ windowDays = 30 } = {}) {
           for (const rec of records) {
             const day = artDay(rec.createdTime)
             if (day) bump(draftsByDay, day)
-            const sec = sectionIdFromAirtable(rec.fields?.section)
-            bump(draftsBySection, sec || '(sin sección)')
-            if (rec.fields?.front) bump(draftsByFront, rec.fields.front)
+            const sec = sectionIdFromAirtable(rec.fields?.section) || '(sin sección)'
+            bump(draftsBySection, sec)
+            if (day) bump(draftsBySectionDay, `${sec}|${day}`)
+            if (rec.fields?.front) {
+              bump(draftsByFront, rec.fields.front)
+              if (day) bump(draftsByFrontDay, `${rec.fields.front}|${day}`)
+            }
             const v = String(rec.fields?.aiReview || '').split('·')[0].trim().toLowerCase()
             verdicts[v in verdicts ? v : 'pending'] += 1
           }
@@ -165,11 +171,18 @@ export async function buildProductionMetrics({ windowDays = 30 } = {}) {
   const publishedByDay = new Map()
   const publishedBySection = new Map()
   const publishedByFront = new Map()
+  const publishedBySectionDay = new Map()
+  const publishedByFrontDay = new Map()
   for (const row of published) {
     const day = artDay(row.created_at)
     if (day) bump(publishedByDay, day)
-    bump(publishedBySection, row.section || '(sin sección)')
-    if (row.front) bump(publishedByFront, row.front)
+    const sec = row.section || '(sin sección)'
+    bump(publishedBySection, sec)
+    if (day) bump(publishedBySectionDay, `${sec}|${day}`)
+    if (row.front) {
+      bump(publishedByFront, row.front)
+      if (day) bump(publishedByFrontDay, `${row.front}|${day}`)
+    }
   }
 
   // Daily pauta: quotas differ weekday/weekend, so resolve per calendar day
@@ -189,12 +202,18 @@ export async function buildProductionMetrics({ windowDays = 30 } = {}) {
     ...draftsBySection.keys(),
     ...publishedBySection.keys(),
   ])
+  // Per-row day series aligned with `days` — the "cada sección, cada día"
+  // grids on the admin read these directly.
+  const daySeries = (map, id) => dayKeys.map((d) => map.get(`${id}|${d}`) || 0)
+
   const sections = [...sectionIds]
     .map((id) => ({
       id,
       name: getSection(id)?.name || id,
       drafts: draftsBySection.get(id) || 0,
       published: publishedBySection.get(id) || 0,
+      publishedByDay: daySeries(publishedBySectionDay, id),
+      draftsByDay: daySeries(draftsBySectionDay, id),
     }))
     .sort(
       (a, b) =>
@@ -214,6 +233,8 @@ export async function buildProductionMetrics({ windowDays = 30 } = {}) {
       label: getBlock(id)?.label || id,
       drafts: draftsByFront.get(id) || 0,
       published: publishedByFront.get(id) || 0,
+      publishedByDay: daySeries(publishedByFrontDay, id),
+      draftsByDay: daySeries(draftsByFrontDay, id),
     }))
     .sort(
       (a, b) =>
