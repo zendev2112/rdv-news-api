@@ -846,6 +846,114 @@
         .sheet-pill-zero { color: #94a3b8; background: #fafbfc; }
         .sheet-pill-err  { background: #fdf1f1; border-color: #f0c4c4; color: #b02a2a; }
 
+        /* ── Aprobación queue: Claude suggests, the editor decides ── */
+        .apv-group { margin-top: 18px; }
+
+        .apv-group-h {
+            font-size: 13px;
+            font-weight: 700;
+            color: #334155;
+            margin-bottom: 8px;
+        }
+
+        .apv-row {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            background: #fff;
+        }
+
+        .apv-row.apv-approved { background: #f0faf0; border-color: #b7e3b7; }
+
+        .apv-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .apv-title {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: #1f2937;
+            cursor: pointer;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .apv-title:hover { color: #2a78d6; }
+
+        .apv-meta { font-size: 11px; color: #94a3b8; white-space: nowrap; }
+
+        .apv-chip {
+            font-size: 11px;
+            font-weight: 600;
+            background: #f3f4f6;
+            color: #4b5563;
+            border-radius: 8px;
+            padding: 2px 8px;
+            white-space: nowrap;
+        }
+
+        .apv-note { font-size: 12px; margin: 6px 0 0; color: #52514e; }
+        .apv-note.apv-v-publish { color: #0a6b0a; }
+        .apv-note.apv-v-hold { color: #9a6a00; }
+        .apv-note.apv-v-reject { color: #b02a2a; }
+
+        .apv-body {
+            display: none;
+            margin-top: 10px;
+            border-top: 1px solid #eef1f5;
+            padding-top: 10px;
+        }
+
+        .apv-row.open .apv-body { display: block; }
+
+        .apv-overline {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            color: #4f46e5;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .apv-excerpt {
+            font-size: 13px;
+            color: #475569;
+            font-style: italic;
+            margin-bottom: 8px;
+        }
+
+        .apv-article {
+            font-size: 13px;
+            color: #1f2937;
+            white-space: pre-wrap;
+            max-height: 340px;
+            overflow-y: auto;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 10px 12px;
+            line-height: 1.55;
+        }
+
+        .btn-apv {
+            border: 1px solid #b7e3b7;
+            background: #f0faf0;
+            color: #0a6b0a;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-apv:hover:not(:disabled) { background: #e1f5e1; }
+        .btn-apv:disabled { opacity: .5; cursor: not-allowed; }
+        .btn-apv.undo { border-color: #e2e8f0; background: #fff; color: #64748b; font-weight: 600; }
+
         .btn-slide {
             border: 1px solid #c7d2fe;
             background: #eef2ff;
@@ -1206,6 +1314,31 @@
                 </div>
                 <div id="met-empty">
                     <p class="cur-empty">Sign in and press Refresh to load production metrics.</p>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 30px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0;">✅ Aprobación — cola de borradores <span class="status status-idle" id="status-apv">Idle</span></h3>
+                    <button class="btn btn-primary" style="width: auto; padding: 8px 16px; margin: 0;"
+                        onclick="loadPending()">Refresh</button>
+                </div>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Todos los borradores esperando tu decisión, en un solo
+                    lugar en vez de 28 tablas. Claude deja su <strong>sugerencia</strong> junto a cada nota; la decisión es tuya:
+                    <strong>Aprobar</strong> acá es el mismo tick <code>aprobado</code> de Airtable, y nada se publica sin ese tick.
+                    Tocá el título para leer la nota completa.</p>
+                <div class="cur-controls">
+                    <button class="btn btn-primary" id="btn-apv-find" onclick="loadPending()">🔎 Buscar pendientes</button>
+                    <select class="input" id="apv-days" style="width:auto; margin:0; padding:8px 10px;">
+                        <option value="1">Últimas 24 h</option>
+                        <option value="3" selected>Últimos 3 días</option>
+                        <option value="7">Últimos 7 días</option>
+                        <option value="14">Últimos 14 días</option>
+                    </select>
+                </div>
+                <div class="cur-summary" id="apv-summary"></div>
+                <div id="apv-board">
+                    <p class="cur-empty">Presioná Buscar para ver los borradores que esperan tu decisión.</p>
                 </div>
             </div>
 
@@ -2255,6 +2388,130 @@
         // (server does slug + Cloudinary + Supabase + Redes Sociales per record).
         let approvedItems = [];   // flat [{recordId, feedId, title, ...}]
         let publishBusy = false;
+
+        // ── Aprobación queue: Claude suggests, the editor decides ────────────
+        // Groups every pending draft by Claude's verdict (the SUGGESTION); the
+        // Aprobar button writes the same `aprobado` tick as Airtable — the
+        // editor's click is the only thing that ever sets it.
+        let apvItems = [];
+        let apvBusy = false;
+        const APV_GROUPS = [
+            { key: 'publish', label: '✅ Claude sugiere publicar', cls: 'apv-v-publish' },
+            { key: 'hold', label: '🟡 Claude sugiere revisar con cuidado', cls: 'apv-v-hold' },
+            { key: 'reject', label: '⛔ Claude sugiere NO publicar', cls: 'apv-v-reject' },
+            { key: 'none', label: '⏳ Sin veredicto todavía (el gate corre cada hora)', cls: 'apv-v-none' },
+        ];
+
+        function apvAge(iso) {
+            const h = (Date.now() - new Date(iso).getTime()) / 3.6e6;
+            if (!isFinite(h)) return '';
+            if (h < 1) return 'hace <1 h';
+            if (h < 48) return `hace ${Math.round(h)} h`;
+            return `hace ${Math.round(h / 24)} días`;
+        }
+
+        async function loadPending() {
+            if (!API_TOKEN) { addLog('⚠️ Sign in first', 'warning'); return; }
+            if (apvBusy) return;
+            apvBusy = true;
+            setStatus('status-apv', 'running', 'Buscando');
+            document.getElementById('btn-apv-find').disabled = true;
+            document.getElementById('apv-summary').textContent = '';
+            const sinceDays = Number(document.getElementById('apv-days').value) || 3;
+            addLog(`🔎 Buscando borradores pendientes (últimos ${sinceDays} día(s))...`, 'info');
+            try {
+                const res = await fetch(`${API_BASE}/api/agent/publish`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
+                    body: JSON.stringify({ mode: 'pending', sinceDays })
+                });
+                if (res.status === 401) { setStatus('status-apv', 'error', 'Auth error'); addLog('❌ token rejected', 'error'); return; }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                renderPending(data.groups || []);
+                const total = data.total || 0;
+                document.getElementById('apv-summary').textContent =
+                    total ? `${total} borrador(es) esperando tu decisión` : 'Nada pendiente en esta ventana.';
+                setStatus('status-apv', total ? 'success' : 'idle', `${total} pendientes`);
+                addLog(total ? `🔎 ${total} borrador(es) en la cola de aprobación` : '🔎 Cola de aprobación vacía', 'success');
+            } catch (e) {
+                setStatus('status-apv', 'error', 'Error');
+                addLog(`❌ Buscar pendientes falló: ${e.message}`, 'error');
+            } finally {
+                apvBusy = false;
+                document.getElementById('btn-apv-find').disabled = false;
+            }
+        }
+
+        function renderPending(groups) {
+            const box = document.getElementById('apv-board');
+            apvItems = [];
+            const flat = groups.flatMap(g => g.items || []);
+            if (!flat.length) {
+                box.innerHTML = '<p class="cur-empty">Nada pendiente en esta ventana — todo decidido.</p>';
+                return;
+            }
+            let html = '';
+            for (const vg of APV_GROUPS) {
+                const items = flat.filter(it => it.verdict === vg.key)
+                    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+                if (!items.length) continue;
+                html += `<div class="apv-group"><div class="apv-group-h">${vg.label} · ${items.length}</div>`;
+                for (const it of items) {
+                    const i = apvItems.length;
+                    apvItems.push(it);
+                    const img = it.hasImage ? '' : ' <span title="sin imagen" style="opacity:.6">🚫🖼️</span>';
+                    html += `<div class="apv-row" id="apv-row-${i}">
+                        <div class="apv-head">
+                            <button class="btn-apv" id="apv-btn-${i}" onclick="approveOne(${i})">✔ Aprobar</button>
+                            <span class="apv-title" onclick="document.getElementById('apv-row-${i}').classList.toggle('open')">${escapeHtml(it.title)}${img}</span>
+                            <span class="apv-chip">${escapeHtml(it.feedName)}</span>
+                            <span class="apv-meta">${it.createdAt ? apvAge(it.createdAt) : ''}</span>
+                        </div>
+                        ${it.verdictNote ? `<div class="apv-note ${vg.cls}">${it.confidence ? `<strong>confianza ${escapeHtml({ high: 'alta', medium: 'media', low: 'baja' }[it.confidence] || it.confidence)}</strong> · ` : ''}${escapeHtml(it.verdictNote)}</div>` : ''}
+                        <div class="apv-body">
+                            ${it.overline ? `<div class="apv-overline">${escapeHtml(it.overline)}</div>` : ''}
+                            ${it.excerpt ? `<div class="apv-excerpt">${escapeHtml(it.excerpt)}</div>` : ''}
+                            <div class="apv-article">${escapeHtml(it.article || '(sin texto)')}${it.articleTruncated ? '\n\n[…texto recortado — el resto está en Airtable]' : ''}</div>
+                        </div>
+                    </div>`;
+                }
+                html += '</div>';
+            }
+            box.innerHTML = html;
+        }
+
+        async function approveOne(i) {
+            const it = apvItems[i];
+            if (!it) return;
+            const btn = document.getElementById('apv-btn-' + i);
+            const row = document.getElementById('apv-row-' + i);
+            const undo = row.classList.contains('apv-approved');
+            btn.disabled = true;
+            btn.textContent = '⏳';
+            try {
+                const res = await fetch(`${API_BASE}/api/agent/publish`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
+                    body: JSON.stringify({ mode: 'approve', recordId: it.recordId, feedId: it.feedId, value: !undo, verdict: it.verdict })
+                });
+                if (res.status === 401) { addLog('❌ token rejected', 'error'); btn.textContent = undo ? 'Quitar' : '✔ Aprobar'; return; }
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                row.classList.toggle('apv-approved', !undo);
+                btn.textContent = undo ? '✔ Aprobar' : 'Quitar';
+                btn.classList.toggle('undo', !undo);
+                addLog(undo ? `↩️ Aprobación quitada: ${it.title}` : `✅ Aprobada: ${it.title}`, 'success');
+                const n = document.querySelectorAll('.apv-row.apv-approved').length;
+                document.getElementById('apv-summary').textContent =
+                    `${apvItems.length} en la cola · ${n} aprobada(s) — usá "Publicar aprobados" para mandarlas al sitio.`;
+            } catch (e) {
+                btn.textContent = undo ? 'Quitar' : '✔ Aprobar';
+                addLog(`❌ Aprobar falló: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
 
         async function loadApproved() {
             if (!API_TOKEN) { addLog('⚠️ Sign in first', 'warning'); return; }

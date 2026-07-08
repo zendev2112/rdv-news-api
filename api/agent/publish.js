@@ -95,6 +95,105 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Approval queue: drafts awaiting the editor's decision ──────────────────
+  // Claude's review verdict rides along as the SUGGESTION; the decision is the
+  // editor's alone (see editor-human-gates). Same skip rule as `list`: tables
+  // without an `aprobado` field reject the formula and drop out silently.
+  if (mode === 'pending') {
+    const sinceDays = Math.min(14, Math.max(1, Number(body.sinceDays) || 3))
+    const PENDING_FORMULA = `AND(NOT({aprobado}), {status}='draft', IS_AFTER(CREATED_TIME(), DATEADD(NOW(), -${sinceDays}, 'days')))`
+    const ARTICLE_PREVIEW = 4000
+    try {
+      const feedIds = appConfig.sections.map((s) => s.id)
+      const groups = []
+      const CHUNK = 4
+      for (let i = 0; i < feedIds.length; i += CHUNK) {
+        await Promise.all(
+          feedIds.slice(i, i + CHUNK).map(async (feedId) => {
+            const section = appConfig.getSection(feedId)
+            const records = await airtableService.fetchRecords(feedId, {
+              filterByFormula: PENDING_FORMULA,
+              maxRecords: 100,
+            })
+            if (!records || !records.length) return
+            groups.push({
+              feedId,
+              feedName: section?.name || feedId,
+              count: records.length,
+              items: records.map((r) => {
+                const f = r.fields || {}
+                // aiReview: "publish · conf:high · <reason> · <model> · <ISO ts>"
+                // Keep the verdict + confidence + human-readable reason; the
+                // model/timestamp tail is provenance noise in the queue.
+                const parts = String(f.aiReview || '').split('·').map((s) => s.trim()).filter(Boolean)
+                const head = (parts[0] || '').toLowerCase()
+                const confidence = (parts.find((p) => /^conf:/i.test(p)) || '').replace(/^conf:/i, '')
+                const note = parts
+                  .slice(1)
+                  .filter((p) => !/^conf:/i.test(p) && !/^claude-/i.test(p) && !/^\d{4}-\d{2}-\d{2}T/.test(p))
+                  .join(' · ')
+                const article = String(f.article || '')
+                return {
+                  recordId: r.id,
+                  feedId,
+                  feedName: section?.name || feedId,
+                  title: f.title || '(sin título)',
+                  overline: f.overline || '',
+                  excerpt: f.excerpt || '',
+                  article: article.slice(0, ARTICLE_PREVIEW),
+                  articleTruncated: article.length > ARTICLE_PREVIEW,
+                  section: f.section || '',
+                  front: f.front || '',
+                  hasImage:
+                    !!(f.imgUrl || (Array.isArray(f.image) && f.image.length)),
+                  verdict: ['publish', 'hold', 'reject'].includes(head) ? head : 'none',
+                  verdictNote: note,
+                  confidence,
+                  createdAt: r.createdTime || null,
+                }
+              }),
+            })
+          }),
+        )
+      }
+      groups.sort((a, b) => a.feedName.localeCompare(b.feedName))
+      const total = groups.reduce((n, g) => n + g.count, 0)
+      return res
+        .status(200)
+        .json({ generatedAt: new Date().toISOString(), sinceDays, groups, total })
+    } catch (error) {
+      console.error('publish pending error:', error)
+      return res.status(500).json({ error: error.message })
+    }
+  }
+
+  // ── The editor's decision: tick (or untick) `aprobado` on one record ────────
+  // This endpoint only ever moves the checkbox the editor clicked — publishing
+  // still happens exclusively through execute/the button, from ticked records.
+  if (mode === 'approve') {
+    const recordId = typeof body.recordId === 'string' ? body.recordId : null
+    const feedId = typeof body.feedId === 'string' ? body.feedId : null
+    if (!recordId || !feedId) {
+      return res.status(400).json({ error: 'recordId and feedId are required' })
+    }
+    const value = body.value !== false
+    try {
+      await airtableService.updateRecord(recordId, { aprobado: value }, feedId)
+      // Claude-suggestion vs editor-decision agreement data (verdict is what
+      // Claude said; value is what the editor did).
+      capture('editor_approval', {
+        feedId,
+        value,
+        verdict: typeof body.verdict === 'string' ? body.verdict : null,
+      })
+      await flush()
+      return res.status(200).json({ ok: true, recordId, aprobado: value })
+    } catch (error) {
+      console.error(`publish approve error (${recordId}):`, error)
+      return res.status(500).json({ error: error.message })
+    }
+  }
+
   // ── Publish ONE approved record end-to-end ──────────────────────────────────
   // One record per request; the admin loops for live per-row progress and to stay
   // clear of gateway timeouts (same pattern as the curate execute loop).
