@@ -1289,7 +1289,7 @@
                     <p style="font-size:12px; color:#64748b; margin:0 0 8px;">Cada fila una sección, cada columna un día del mes. Celda vacía = 0.</p>
                     <div class="met-hm-wrap" id="met-heat-sections"></div>
                     <h4 style="font-size:13px; font-weight:600; color:#334155; margin:18px 0 2px;">Publicadas por caja de la portada, día por día</h4>
-                    <p style="font-size:12px; color:#64748b; margin:0 0 8px;">Cada fila una caja de la portada, cada columna un día del mes.</p>
+                    <p style="font-size:12px; color:#64748b; margin:0 0 8px;">Las filas siguen el orden real de la portada, de arriba abajo. Cada columna un día del mes.</p>
                     <div class="met-hm-wrap" id="met-heat-fronts"></div>
                     <div class="met-grid" style="margin-top: 24px;">
                         <div class="met-chart">
@@ -1861,10 +1861,12 @@
         let metData = null;
         const HEAT_RAMP = ['#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#256abf', '#184f95', '#0d366b'];
 
-        function metHeatmap(containerId, rows, labelKey, days) {
+        function metHeatmap(containerId, rows, labelKey, days, keepOrder) {
             const key = 'publishedByDay';
             const sum = a => (a || []).reduce((s, v) => s + v, 0);
-            const sorted = [...rows].sort((a, b) => sum(b[key]) - sum(a[key]) ||
+            // Cajas arrive in the front page's own order and keep it (zeros
+            // dimmed in place); secciones sort by volume, zeros to the bottom.
+            const sorted = keepOrder ? rows : [...rows].sort((a, b) => sum(b[key]) - sum(a[key]) ||
                 String(a[labelKey]).localeCompare(String(b[labelKey]), 'es'));
             const max = Math.max(1, ...sorted.map(r => Math.max(0, ...(r[key] || []))));
 
@@ -1920,7 +1922,7 @@
 
         function renderHeatmaps(data) {
             metHeatmap('met-heat-sections', data.sections || [], 'name', data.days || []);
-            metHeatmap('met-heat-fronts', data.fronts || [], 'label', data.days || []);
+            metHeatmap('met-heat-fronts', data.fronts || [], 'label', data.days || [], true);
         }
 
         function renderMetrics(data) {

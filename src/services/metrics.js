@@ -208,6 +208,10 @@ export async function buildProductionMetrics({ windowDays = 30 } = {}) {
     ...draftsByFront.keys(),
     ...publishedByFront.keys(),
   ])
+  // Cajas keep the front page's own order (HOMEPAGE_BLOCKS array order = the
+  // homepage top to bottom); anything observed in data but not in the catalog
+  // sinks below, alphabetically.
+  const frontIndex = new Map(HOMEPAGE_BLOCKS.map((b, i) => [b.front, i]))
   const fronts = [...frontIds]
     .map((id) => ({
       id,
@@ -219,8 +223,7 @@ export async function buildProductionMetrics({ windowDays = 30 } = {}) {
     }))
     .sort(
       (a, b) =>
-        b.published - a.published ||
-        b.drafts - a.drafts ||
+        (frontIndex.get(a.id) ?? 999) - (frontIndex.get(b.id) ?? 999) ||
         a.label.localeCompare(b.label, 'es'),
     )
 

@@ -13,6 +13,10 @@
 // A candidate from feed F may be assigned to block B only if F ∈ B.eligibleFeeds.
 // The item's feed id doubles as the Airtable section id for generation (the
 // table it came from); `front` is the homepage destination — two different things.
+//
+// ARRAY ORDER = the real front page, top to bottom (the editor's canonical
+// order, 2026-07-08). Dashboards and dropdowns render cajas in this order —
+// keep it in sync with the homepage.
 
 export const HOMEPAGE_BLOCKS = [
   // ── Layer 1: curated locals (propose, human approves) ──────────────────
@@ -36,12 +40,13 @@ export const HOMEPAGE_BLOCKS = [
   { front: 'TechSection',               label: 'Tech',                 slots: 3,  layer: 2, requiresImage: true,  eligibleFeeds: ['tecnologia'] },
   { front: 'EspectaculosSection',       label: 'Espectáculos',         slots: 3,  layer: 2, requiresImage: true,  eligibleFeeds: ['espectaculos'] },
   { front: 'InversionesSection',        label: 'Inversiones',          slots: 2,  layer: 2, requiresImage: true,  eligibleFeeds: ['economia'] },
+  // No RSS feed → cannot be auto-fed; still holds its place on the front.
+  { front: 'PymesYEmprendimientosSection', label: 'Pymes y Emprendimientos', slots: 2, layer: 2, requiresImage: true, manualOnly: true, eligibleFeeds: [] },
   { front: 'LifestyleSection',          label: 'Lifestyle',            slots: 4,  layer: 2, requiresImage: true,  eligibleFeeds: ['lifestyle', 'turismo', 'salud', 'vinos'] },
   { front: 'BienestarSection',          label: 'Bienestar',            slots: 5,  layer: 2, requiresImage: true,  eligibleFeeds: ['salud'] },
   { front: 'EstrenosSection',           label: 'Estrenos',             slots: 3,  layer: 2, requiresImage: true,  eligibleFeeds: ['cine-series', 'espectaculos'] },
 
-  // ── No RSS feed → cannot be auto-fed ───────────────────────────────────
-  { front: 'PymesYEmprendimientosSection', label: 'Pymes y Emprendimientos', slots: 2, layer: 2, requiresImage: true, manualOnly: true, eligibleFeeds: [] },
+  // ── Not currently on the homepage ──────────────────────────────────────
   { front: 'PropiedadesSection',        label: 'Propiedades',          slots: 4,  layer: 2, requiresImage: true, manualOnly: true, hidden: true, eligibleFeeds: [] },
 ]
 
