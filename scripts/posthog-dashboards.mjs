@@ -174,15 +174,26 @@ for (const ins of INSIGHTS) {
     console.log(`  = exists, skipped: ${ins.name}`)
     continue
   }
-  await api.post(`/api/projects/${project.id}/insights/`, {
-    name: ins.name,
-    description: ins.description,
-    filters: ins.filters,
-    dashboards: [dashboard.id],
-    saved: true,
-  })
-  created++
-  console.log(`  + created: ${ins.name}`)
+  try {
+    await api.post(`/api/projects/${project.id}/insights/`, {
+      name: ins.name,
+      description: ins.description,
+      filters: ins.filters,
+      dashboards: [dashboard.id],
+      saved: true,
+    })
+    created++
+    console.log(`  + created: ${ins.name}`)
+  } catch (err) {
+    const detail = err.response
+      ? `${err.response.status} ${JSON.stringify(err.response.data)}`
+      : err.message
+    console.error(`  ✗ failed: ${ins.name} — ${detail}`)
+    if (err.response?.status === 403) {
+      console.error('    (403 = the personal key lacks the insight:write scope — edit the key in PostHog Settings → Personal API keys)')
+      process.exit(1)
+    }
+  }
 }
 
 console.log(`\nDone — ${created} insight(s) created. Open: ${HOST}/project/${project.id}/dashboard/${dashboard.id}`)
