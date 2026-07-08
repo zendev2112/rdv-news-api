@@ -1,5 +1,6 @@
 import axios from 'axios'
 import appConfig from '../../src/config/index.js'
+import { sectionIdFromAirtable } from '../../src/config/sections.js'
 import airtableService from '../../src/services/airtable.js'
 import {
   autoFeedableBlocks,
@@ -143,6 +144,8 @@ export default async function handler(req, res) {
           table: rec.tableName,
           verdict: verdict.verdict, // publish | hold | reject
           confidence: verdict.confidence,
+          section: sectionIdFromAirtable(rec.fields.section), // site section id — funnel slice key
+          front: rec.fields.front || null, // homepage box — funnel slice key
           source: rec.fields.source || null,
           model: REVIEW_MODEL,
         })

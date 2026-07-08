@@ -232,7 +232,8 @@ export async function generateDrafts({ assignments = [] } = {}) {
       if (id) {
         capture('article_generated', {
           feed: a.feedId,
-          front: a.front,
+          front: a.front || null,
+          section: fields.section || null, // site section id — funnel slice key
           social,
           brief, // interview down-converted to a fact-brief
           contentType: diagnostics.contentType || 'article',

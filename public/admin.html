@@ -2493,7 +2493,7 @@
                 const res = await fetch(`${API_BASE}/api/agent/publish`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
-                    body: JSON.stringify({ mode: 'approve', recordId: it.recordId, feedId: it.feedId, value: !undo, verdict: it.verdict })
+                    body: JSON.stringify({ mode: 'approve', recordId: it.recordId, feedId: it.feedId, value: !undo, verdict: it.verdict, section: it.section || null, front: it.front || null })
                 });
                 if (res.status === 401) { addLog('❌ token rejected', 'error'); btn.textContent = undo ? 'Quitar' : '✔ Aprobar'; return; }
                 const data = await res.json().catch(() => ({}));

@@ -83,4 +83,24 @@ export function isValidSection(id) {
   return byId.has(id)
 }
 
+// Airtable stores the display name ("Deportes"); the pipeline works in ids
+// ("deportes"). Normalize either form (or a hand-typed variant) back to the id
+// so analytics/metrics slice on one consistent value. Unknown values pass
+// through unchanged rather than being dropped.
+const byName = new Map(SECTIONS.map((s) => [s.name, s.id]))
+
+export function sectionIdFromAirtable(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  if (byId.has(raw)) return raw
+  if (byName.has(raw)) return byName.get(raw)
+  const slug = raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return byId.has(slug) ? slug : raw
+}
+
 export default SECTIONS

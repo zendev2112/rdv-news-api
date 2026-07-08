@@ -16,7 +16,7 @@
 
 import axios from 'axios'
 import config from '../config/index.js'
-import { SECTIONS, getSection } from '../config/sections.js'
+import { SECTIONS, getSection, sectionIdFromAirtable } from '../config/sections.js'
 import { getBlock, HOMEPAGE_BLOCKS } from '../config/homepage-blocks.js'
 import { daySheetFor } from '../config/day-sheet.js'
 import supabaseService from './supabase.js'
@@ -39,25 +39,6 @@ function lastArtDays(n) {
     days.push(ART_DAY_FMT.format(new Date(now - i * 86400000)))
   }
   return days
-}
-
-// Airtable display name ("Deportes") → Supabase section id ("deportes").
-// Inverse of the insertRecords boundary conversion; unknown names fall back to
-// a normalized slug so a hand-typed value still lands near the right bucket.
-const NAME_TO_ID = new Map(SECTIONS.map((s) => [s.name, s.id]))
-const ID_SET = new Set(SECTIONS.map((s) => s.id))
-function sectionIdFromAirtable(value) {
-  const raw = String(value || '').trim()
-  if (!raw) return null
-  if (ID_SET.has(raw)) return raw
-  if (NAME_TO_ID.has(raw)) return NAME_TO_ID.get(raw)
-  const slug = raw
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return ID_SET.has(slug) ? slug : raw
 }
 
 // ── Airtable: all records created in the window, per table ──────────────────

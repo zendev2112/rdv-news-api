@@ -1,4 +1,5 @@
 import appConfig from '../../src/config/index.js'
+import { sectionIdFromAirtable } from '../../src/config/sections.js'
 import { capture, flush } from '../../src/services/analytics.js'
 
 const ADMIN_TOKEN = process.env.ADMIN_API_TOKEN
@@ -142,7 +143,7 @@ export default async function handler(req, res) {
                   excerpt: f.excerpt || '',
                   article: article.slice(0, ARTICLE_PREVIEW),
                   articleTruncated: article.length > ARTICLE_PREVIEW,
-                  section: f.section || '',
+                  section: sectionIdFromAirtable(f.section) || '',
                   front: f.front || '',
                   hasImage:
                     !!(f.imgUrl || (Array.isArray(f.image) && f.image.length)),
@@ -185,6 +186,8 @@ export default async function handler(req, res) {
         feedId,
         value,
         verdict: typeof body.verdict === 'string' ? body.verdict : null,
+        section: typeof body.section === 'string' ? body.section : null,
+        front: typeof body.front === 'string' ? body.front : null,
       })
       await flush()
       return res.status(200).json({ ok: true, recordId, aprobado: value })
@@ -261,9 +264,17 @@ export default async function handler(req, res) {
         /* cosmetic — status already excludes it from the list */
       }
 
+      // Funnel bottom: what actually reached the site, sliceable by placement
+      // and by whether Claude's gate had suggested publishing it.
+      const revHead = String(record?.fields?.aiReview || '')
+        .split('·')[0]
+        .trim()
+        .toLowerCase()
       capture('article_published', {
         feedId,
         section: result.web.section,
+        front: record?.fields?.front || null,
+        verdict: ['publish', 'hold', 'reject'].includes(revHead) ? revHead : 'none',
         social: !!result.social?.ok,
       })
       await flush()
