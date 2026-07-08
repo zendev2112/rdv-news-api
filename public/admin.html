@@ -762,6 +762,73 @@
             opacity: .5;
             cursor: not-allowed;
         }
+
+        /* ── Producción cockpit (KPI tiles + charts) ── */
+        .met-kpis {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin: 16px 0 20px;
+        }
+
+        .met-kpi {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 12px 14px;
+        }
+
+        .met-kpi .met-v {
+            font-size: 28px;
+            font-weight: 700;
+            color: #0b0b0b;
+            line-height: 1.1;
+        }
+
+        .met-kpi .met-l {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        .met-kpi .met-s {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        .met-chart-wide {
+            position: relative;
+            height: 260px;
+            margin: 8px 0 24px;
+        }
+
+        .met-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+        }
+
+        .met-chart {
+            min-width: 0;
+        }
+
+        .met-chart h4 {
+            font-size: 13px;
+            font-weight: 600;
+            color: #334155;
+            margin: 0 0 10px;
+        }
+
+        .met-canvas-box {
+            position: relative;
+        }
+
+        @media (max-width: 800px) {
+            .met-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 
@@ -925,6 +992,34 @@
             </div>
 
             <div class="card" style="margin-bottom: 30px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0;">📈 Producción — últimos 30 días <span class="status status-idle" id="status-metrics">Idle</span></h3>
+                    <button class="btn btn-primary" style="width: auto; padding: 8px 16px; margin: 0;"
+                        onclick="loadMetrics()">Refresh</button>
+                </div>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Cuánto produce la redacción y adónde va:
+                    borradores creados en Airtable y notas publicadas en el sitio, día por día contra la pauta,
+                    y el reparto por sección del sitio y por caja de la portada.</p>
+                <div id="met-body" style="display:none;">
+                    <div class="met-kpis" id="met-kpis"></div>
+                    <div class="met-chart-wide"><canvas id="met-trend"></canvas></div>
+                    <div class="met-grid">
+                        <div class="met-chart">
+                            <h4>Publicadas por sección del sitio</h4>
+                            <div class="met-canvas-box" id="met-sections-box"><canvas id="met-sections"></canvas></div>
+                        </div>
+                        <div class="met-chart">
+                            <h4>Publicadas por caja de la portada</h4>
+                            <div class="met-canvas-box" id="met-fronts-box"><canvas id="met-fronts"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="met-empty">
+                    <p class="cur-empty">Sign in and press Refresh to load production metrics.</p>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 30px;">
                 <h3 style="margin: 0;">🚀 Publicar aprobados <span class="status status-idle" id="status-pub">Idle</span></h3>
                 <p style="color:#666; font-size:13px; margin-top:8px;">Toma los borradores marcados <strong>aprobado</strong> en Airtable y los publica: sube imágenes a Cloudinary, genera el slug, los manda al sitio (Supabase) y encola la fila de Redes Sociales — lo mismo que el botón manual, pero en lote. <strong>Buscar</strong> muestra qué se va a publicar; nada sale hasta que hacés <strong>Publicar</strong>.</p>
                 <div class="cur-controls">
@@ -954,6 +1049,7 @@
         </div>
     </div> <!-- end main-panel -->
 
+    <script src="/vendor/chart.umd.min.js"></script>
     <script>
         const API_BASE = window.location.origin;
         // Token is kept only in memory — never persisted to localStorage
@@ -997,6 +1093,7 @@
             addLog('✅ Authenticated successfully', 'success');
             loadCoverage();
             loadDaySheet();
+            loadMetrics();
         }
 
         function logout() {
@@ -1310,6 +1407,153 @@
             } catch (e) {
                 setStatus('status-sheet', 'error', 'Error');
                 addLog(`❌ Pauta failed: ${e.message}`, 'error');
+            }
+        }
+
+        // ── Producción cockpit ────────────────────────────────
+        // Chart chrome (dataviz palette): recessive grid/axes, muted tick ink,
+        // series colors follow the fixed categorical order (blue, aqua).
+        const MET_INK = { grid: '#e1e0d9', axis: '#c3c2b7', tick: '#898781', label: '#52514e' };
+        const MET_BLUE = '#2a78d6', MET_AQUA = '#1baf7a';
+        let metCharts = {};
+
+        // Direct value labels at the end of each horizontal bar — the numbers
+        // are always readable without hovering (and carry the aqua bars, whose
+        // contrast on white is below 3:1 on their own).
+        const metBarLabels = {
+            id: 'metBarLabels',
+            afterDatasetsDraw(chart) {
+                const meta = chart.getDatasetMeta(0);
+                const data = chart.data.datasets[0].data;
+                const { ctx } = chart;
+                ctx.save();
+                ctx.font = '11px system-ui, -apple-system, "Segoe UI", sans-serif';
+                ctx.fillStyle = MET_INK.label;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                meta.data.forEach((bar, i) => {
+                    if (data[i] > 0) ctx.fillText(String(data[i]), bar.x + 6, bar.y);
+                });
+                ctx.restore();
+            }
+        };
+
+        function metDestroy(key) {
+            if (metCharts[key]) { metCharts[key].destroy(); delete metCharts[key]; }
+        }
+
+        function metKpi(value, label, sub) {
+            return `<div class="met-kpi"><div class="met-v">${value}</div>
+                <div class="met-l">${label}</div>${sub ? `<div class="met-s">${sub}</div>` : ''}</div>`;
+        }
+
+        // Horizontal bar chart: one hue (magnitude job), thin rounded bars,
+        // height scales with the row count so bars never squash.
+        function metBarChart(key, canvasId, boxId, rows, color) {
+            metDestroy(key);
+            document.getElementById(boxId).style.height = `${Math.max(60, rows.length * 26 + 20)}px`;
+            metCharts[key] = new Chart(document.getElementById(canvasId), {
+                type: 'bar',
+                data: {
+                    labels: rows.map(r => r.label),
+                    datasets: [{ data: rows.map(r => r.value), backgroundColor: color, borderRadius: 4, barThickness: 12 }]
+                },
+                plugins: [metBarLabels],
+                options: {
+                    indexAxis: 'y',
+                    animation: false,
+                    maintainAspectRatio: false,
+                    layout: { padding: { right: 30 } },
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: MET_INK.grid }, border: { color: MET_INK.axis }, ticks: { color: MET_INK.tick, precision: 0 } },
+                        y: { grid: { display: false }, border: { color: MET_INK.axis }, ticks: { color: MET_INK.label, autoSkip: false } }
+                    }
+                }
+            });
+        }
+
+        function renderMetrics(data) {
+            document.getElementById('met-empty').style.display = 'none';
+            document.getElementById('met-body').style.display = 'block';
+
+            const t = data.today || {};
+            const pct = t.quota ? Math.round((t.drafts / t.quota) * 100) : 0;
+            document.getElementById('met-kpis').innerHTML =
+                metKpi(t.drafts ?? 0, 'Borradores hoy', `pauta ${t.quota ?? '—'} (${pct}%)`) +
+                metKpi(t.published ?? 0, 'Publicadas hoy', '') +
+                metKpi(data.totals?.drafts ?? 0, `Borradores · ${data.windowDays} días`, '') +
+                metKpi(data.totals?.published ?? 0, `Publicadas · ${data.windowDays} días`, '');
+
+            // Trend: drafts vs published per day, with the daily pauta as a
+            // dashed gray reference (context, not a competing series).
+            const days = data.days || [];
+            const labels = days.map(d =>
+                new Date(`${d.date}T12:00:00-03:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }));
+            metDestroy('trend');
+            metCharts.trend = new Chart(document.getElementById('met-trend'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Publicadas', data: days.map(d => d.published), borderColor: MET_BLUE, backgroundColor: MET_BLUE, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2 },
+                        { label: 'Borradores', data: days.map(d => d.drafts), borderColor: MET_AQUA, backgroundColor: MET_AQUA, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2 },
+                        { label: 'Pauta', data: days.map(d => d.quota), borderColor: MET_INK.tick, backgroundColor: MET_INK.tick, borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 0, tension: 0 }
+                    ]
+                },
+                options: {
+                    animation: false,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'top', align: 'end', labels: { usePointStyle: true, pointStyle: 'line', boxHeight: 8, color: MET_INK.label, font: { size: 12 } } }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, border: { color: MET_INK.axis }, ticks: { color: MET_INK.tick, maxTicksLimit: 10 } },
+                        y: { beginAtZero: true, grid: { color: MET_INK.grid }, border: { display: false }, ticks: { color: MET_INK.tick, precision: 0 } }
+                    }
+                }
+            });
+
+            // Top sections / boxes by published count; the tail folds into
+            // "Otros" instead of growing more bars.
+            const fold = (rows, labelKey) => {
+                const withData = rows.filter(r => r.published > 0);
+                const top = withData.slice(0, 12).map(r => ({ label: r[labelKey], value: r.published }));
+                const rest = withData.slice(12).reduce((s, r) => s + r.published, 0);
+                if (rest > 0) top.push({ label: 'Otros', value: rest });
+                return top;
+            };
+            const secRows = fold(data.sections || [], 'name');
+            const frontRows = fold(data.fronts || [], 'label');
+            metBarChart('sections', 'met-sections', 'met-sections-box', secRows, MET_BLUE);
+            metBarChart('fronts', 'met-fronts', 'met-fronts-box', frontRows, MET_AQUA);
+        }
+
+        async function loadMetrics() {
+            if (!API_TOKEN) { addLog('⚠️ Sign in first', 'warning'); return; }
+            if (typeof Chart === 'undefined') {
+                setStatus('status-metrics', 'error', 'Error');
+                addLog('❌ Chart.js no cargó (/vendor/chart.umd.min.js)', 'error');
+                return;
+            }
+            setStatus('status-metrics', 'running', 'Loading');
+            try {
+                const res = await fetch(`${API_BASE}/api/agent/metrics`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
+                    body: JSON.stringify({ windowDays: 30 })
+                });
+                if (res.status === 401) { setStatus('status-metrics', 'error', 'Auth error'); addLog('❌ Producción: token rejected', 'error'); return; }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                renderMetrics(data);
+                setStatus('status-metrics', 'success', `${data.totals?.published ?? 0} publicadas`);
+                const errs = (data.tableErrors || []).length;
+                addLog(`📈 Producción loaded — ${data.totals?.drafts ?? 0} borradores, ${data.totals?.published ?? 0} publicadas en ${data.windowDays} días${errs ? ` (${errs} tabla(s) con error)` : ''}`, errs ? 'warning' : 'success');
+            } catch (e) {
+                setStatus('status-metrics', 'error', 'Error');
+                addLog(`❌ Producción failed: ${e.message}`, 'error');
             }
         }
 

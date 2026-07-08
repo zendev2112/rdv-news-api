@@ -93,6 +93,14 @@
       "dest": "/api/agent/publish.js"
     },
     {
+      "src": "/api/agent/metrics",
+      "dest": "/api/agent/metrics.js"
+    },
+    {
+      "src": "/vendor/(.*)",
+      "dest": "/public/vendor/$1"
+    },
+    {
       "src": "/api/fetch/section",
       "dest": "/api/fetch/section.js"
     },
