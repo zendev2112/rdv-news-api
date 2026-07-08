@@ -135,6 +135,33 @@ const INSIGHTS = [
   },
 ]
 
+// PostHog no longer accepts the legacy `filters` payload when creating
+// insights via the API ("legacy filters is not available for this user") —
+// convert each definition to the modern query schema (InsightVizNode).
+function toQuery(f) {
+  return {
+    kind: 'InsightVizNode',
+    source: {
+      kind: 'TrendsQuery',
+      dateRange: { date_from: f.date_from },
+      interval: f.interval,
+      series: f.events.map((e) => ({
+        kind: 'EventsNode',
+        event: e.id,
+        name: e.id,
+        math: e.math || 'total',
+        ...(e.custom_name ? { custom_name: e.custom_name } : {}),
+        ...(e.math_property ? { math_property: e.math_property } : {}),
+        ...(e.properties ? { properties: e.properties } : {}),
+      })),
+      trendsFilter: { display: f.display },
+      ...(f.breakdown
+        ? { breakdownFilter: { breakdown: f.breakdown, breakdown_type: f.breakdown_type } }
+        : {}),
+    },
+  }
+}
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 const { data: projects } = await api.get('/api/projects/')
 const project = projects.results?.[0]
@@ -178,7 +205,7 @@ for (const ins of INSIGHTS) {
     await api.post(`/api/projects/${project.id}/insights/`, {
       name: ins.name,
       description: ins.description,
-      filters: ins.filters,
+      query: toQuery(ins.filters),
       dashboards: [dashboard.id],
       saved: true,
     })
