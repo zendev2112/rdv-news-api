@@ -741,6 +741,85 @@
         .sheet-tier-local { color: #4f46e5; background: #eef2ff; }
         .sheet-tier-dia { color: #6b7280; background: #f3f4f6; }
 
+        /* ── Pauta de Hoy: per-table progress meters ── */
+        .sheet-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            font-size: 12px;
+            color: #52514e;
+            margin: 12px 0 14px;
+        }
+
+        .sheet-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-right: 5px;
+            vertical-align: -1px;
+        }
+
+        .sheet-row {
+            display: grid;
+            grid-template-columns: 200px 1fr 64px;
+            gap: 12px;
+            align-items: center;
+            padding: 4px 0;
+        }
+
+        .sheet-row-total {
+            padding: 6px 0 12px;
+            border-bottom: 1px solid #e2e8f0;
+            margin-bottom: 8px;
+        }
+
+        .sheet-name {
+            font-size: 13px;
+            color: #334155;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sheet-track {
+            position: relative;
+            height: 14px;
+            background: #f1f5f9;
+            border-radius: 7px;
+            overflow: hidden;
+            display: flex;
+            gap: 2px;
+        }
+
+        .sheet-track-lg { height: 20px; border-radius: 10px; }
+
+        .sheet-seg { height: 100%; }
+
+        .sheet-tick {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: rgba(11, 11, 11, 0.35);
+        }
+
+        .sheet-count {
+            font-size: 13px;
+            font-weight: 600;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .sheet-err {
+            font-size: 12px;
+            color: #dc2626;
+        }
+
+        @media (max-width: 700px) {
+            .sheet-row { grid-template-columns: 130px 1fr 56px; }
+        }
+
         .btn-slide {
             border: 1px solid #c7d2fe;
             background: #eef2ff;
@@ -983,9 +1062,9 @@
                     <button class="btn btn-primary" style="width: auto; padding: 8px 16px; margin: 0;"
                         onclick="loadDaySheet()">Refresh</button>
                 </div>
-                <p style="color:#666; font-size:13px; margin-top:8px;">Producción de hoy contra la pauta editorial, con
-                    el veredicto del gate de revisión por nota: ✅ publish · 🟡 hold · ⛔ reject · ⏳ sin revisar.
-                    Refresca sola al terminar un envío.</p>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Producción de hoy contra la pauta editorial:
+                    cada barra se llena hacia la pauta de su tabla, coloreada por el veredicto del gate de revisión.
+                    La marca oscura señala la pauta cuando la producción la supera. Refresca sola al terminar un envío.</p>
                 <div id="sheet-board">
                     <p class="cur-empty">Sign in and press Refresh to load today's production.</p>
                 </div>
@@ -1359,7 +1438,33 @@
             }
         }
 
-        // ── Day-sheet production board ────────────────────────
+        // ── Day-sheet production board: one progress meter per table ─────────
+        // Each table's bar fills toward its quota; the fill is segmented by the
+        // review gate's verdict (status colors, never reused for series). The
+        // dark tick marks the pauta when production overflows it. Every quota'd
+        // table is shown — empty bars included; nothing is folded away.
+        const SHEET_SEGS = [
+            { key: 'publish', color: '#0ca30c', label: '✅ Publicar' },
+            { key: 'hold', color: '#fab219', label: '🟡 Revisar' },
+            { key: 'reject', color: '#d03b3b', label: '⛔ Rechazada' },
+            { key: 'pending', color: '#c3c2b7', label: '⏳ Sin revisar' },
+        ];
+
+        function sheetMeter(r, large) {
+            // Denominator = whichever is bigger, pauta or production, so the
+            // segments always fit; a tick marks the pauta when it's inside.
+            const den = Math.max(r.quota || 0, r.generated || 0, 1);
+            let segs = '';
+            for (const s of SHEET_SEGS) {
+                const n = r[s.key] || 0;
+                if (n) segs += `<span class="sheet-seg" style="width:${(n / den) * 100}%; background:${s.color};" title="${s.label}: ${n}"></span>`;
+            }
+            const tick = (r.generated || 0) > (r.quota || 0)
+                ? `<span class="sheet-tick" style="left:${((r.quota || 0) / den) * 100}%;" title="pauta: ${r.quota}"></span>`
+                : '';
+            return `<div class="sheet-track${large ? ' sheet-track-lg' : ''}" title="${r.generated || 0} de ${r.quota || 0}">${segs}${tick}</div>`;
+        }
+
         function renderDaySheet(data) {
             const rows = data.rows || [];
             const box = document.getElementById('sheet-board');
@@ -1367,9 +1472,23 @@
                 box.innerHTML = '<p class="cur-empty">Sin pauta para hoy.</p>';
                 return;
             }
-            let html = `<table class="sheet-table"><thead><tr>
-                <th>Tabla</th><th>Hoy</th><th>✅</th><th>🟡</th><th>⛔</th><th>⏳</th>
-            </tr></thead><tbody>`;
+
+            let html = `<div class="sheet-legend">${SHEET_SEGS.map(s =>
+                `<span><span class="sheet-dot" style="background:${s.color}"></span>${s.label}</span>`).join('')}</div>`;
+
+            // Day total up top: the one meter that answers "¿vamos a tiempo?".
+            const t = rows.reduce((a, r) => ({
+                generated: a.generated + (r.generated || 0), quota: a.quota + (r.quota || 0),
+                publish: a.publish + (r.publish || 0), hold: a.hold + (r.hold || 0),
+                reject: a.reject + (r.reject || 0), pending: a.pending + (r.pending || 0)
+            }), { generated: 0, quota: 0, publish: 0, hold: 0, reject: 0, pending: 0 });
+            const pct = t.quota ? Math.round((t.generated / t.quota) * 100) : 0;
+            const tCls = t.generated >= t.quota ? 'sheet-done' : (t.generated > 0 ? 'sheet-short' : 'sheet-zero');
+            html += `<div class="sheet-row sheet-row-total">
+                <div class="sheet-name" style="font-weight:700;">Total del día${data.weekend ? ' (finde)' : ''} · ${pct}%</div>
+                ${sheetMeter(t, true)}
+                <div class="sheet-count ${tCls}">${t.generated}/${t.quota}</div></div>`;
+
             for (const r of rows) {
                 const tier = r.tier === 'local'
                     ? '<span class="sheet-tier sheet-tier-local">LOCAL</span>'
@@ -1377,25 +1496,17 @@
                         ? '<span class="sheet-tier sheet-tier-dia">DÍA</span>'
                         : '';
                 if (r.error) {
-                    html += `<tr><td>${escapeHtml(r.feedName)}${tier}</td>
-                        <td colspan="5" style="color:#dc2626;">error: ${escapeHtml(r.error)}</td></tr>`;
+                    html += `<div class="sheet-row">
+                        <div class="sheet-name">${escapeHtml(r.feedName)}${tier}</div>
+                        <div class="sheet-err">error: ${escapeHtml(r.error)}</div><div></div></div>`;
                     continue;
                 }
                 const cls = r.generated >= r.quota ? 'sheet-done' : (r.generated > 0 ? 'sheet-short' : 'sheet-zero');
-                html += `<tr><td>${escapeHtml(r.feedName)}${tier}</td>
-                    <td class="${cls}">${r.generated}/${r.quota}</td>
-                    <td>${r.publish || 0}</td><td>${r.hold || 0}</td>
-                    <td>${r.reject || 0}</td><td>${r.pending || 0}</td></tr>`;
+                html += `<div class="sheet-row">
+                    <div class="sheet-name" title="${escapeHtml(r.feedName)}">${escapeHtml(r.feedName)}${tier}</div>
+                    ${sheetMeter(r, false)}
+                    <div class="sheet-count ${cls}">${r.generated}/${r.quota}</div></div>`;
             }
-            const t = rows.reduce((a, r) => ({
-                g: a.g + (r.generated || 0), q: a.q + (r.quota || 0),
-                p: a.p + (r.publish || 0), h: a.h + (r.hold || 0),
-                x: a.x + (r.reject || 0), n: a.n + (r.pending || 0)
-            }), { g: 0, q: 0, p: 0, h: 0, x: 0, n: 0 });
-            html += `<tr style="font-weight:700; border-top:2px solid #e5e7eb;">
-                <td>Total${data.weekend ? ' (finde)' : ''}</td><td>${t.g}/${t.q}</td>
-                <td>${t.p}</td><td>${t.h}</td><td>${t.x}</td><td>${t.n}</td></tr>`;
-            html += '</tbody></table>';
             box.innerHTML = html;
         }
 
