@@ -821,6 +821,15 @@
             font-size: 12px;
         }
 
+        .sheet-hero-left {
+            font-size: 15px;
+            font-weight: 600;
+            color: #52514e;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .sheet-hero-left b { font-size: 20px; }
+
         .sheet-pills {
             display: flex;
             flex-wrap: wrap;
@@ -828,15 +837,38 @@
         }
 
         .sheet-pill {
+            position: relative;
+            overflow: hidden;
             display: inline-flex;
             align-items: center;
             gap: 7px;
             font-size: 12.5px;
-            padding: 7px 12px;
+            padding: 7px 12px 9px;
             border-radius: 10px;
             border: 1px solid #e2e8f0;
             background: #fff;
             color: #334155;
+        }
+
+        .sheet-id-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex: none;
+        }
+
+        .sheet-left {
+            font-size: 10.5px;
+            font-weight: 600;
+            color: #9a6a00;
+        }
+
+        .sheet-pill-prog {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            height: 3px;
+            border-radius: 0 2px 2px 0;
         }
 
         .sheet-pill b { font-variant-numeric: tabular-nums; font-weight: 700; }
@@ -1104,6 +1136,16 @@
         }
 
         .met-hm-zero .met-hm-lbl { color: #b6bcc6; }
+
+        .met-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: baseline;
+            flex: none;
+        }
 
         @media (max-width: 800px) {
             .met-grid {
@@ -1694,9 +1736,18 @@
             }
             const g = r.generated || 0, q = r.quota || 0;
             const done = g >= q && g > 0;
+            const left = Math.max(0, q - g);
             const cls = done ? 'sheet-pill-done' : g > 0 ? 'sheet-pill-part' : 'sheet-pill-zero';
-            const tip = `${r.feedName} — ${g} de ${q} · ✅ ${r.publish || 0} · 🟡 ${r.hold || 0} · ⛔ ${r.reject || 0} · ⏳ ${r.pending || 0}`;
-            return `<span class="sheet-pill ${cls}" title="${escapeHtml(tip)}">${done ? '✓ ' : ''}${escapeHtml(r.feedName)} <b>${g}/${q}</b></span>`;
+            const tip = `${r.feedName} — ${g} de ${q}${done ? ' · pauta completa' : ` · faltan ${left}`} · ✅ ${r.publish || 0} · 🟡 ${r.hold || 0} · ⛔ ${r.reject || 0} · ⏳ ${r.pending || 0}`;
+            // Bottom edge = progress toward the pauta, in the state color; the
+            // dot is the table's identity color (same one everywhere).
+            const prog = q ? Math.min(100, (g / q) * 100) : 0;
+            const progColor = done ? '#0ca30c' : '#2a78d6';
+            return `<span class="sheet-pill ${cls}" title="${escapeHtml(tip)}">
+                <span class="sheet-id-dot" style="background:${idColor(r.feedId || r.feedName)};${g === 0 ? 'opacity:.35;' : ''}"></span>
+                ${done ? '✓ ' : ''}${escapeHtml(r.feedName)} <b>${g}/${q}</b>${!done && g > 0 ? `<small class="sheet-left">faltan ${left}</small>` : ''}
+                ${prog > 0 ? `<span class="sheet-pill-prog" style="width:${prog}%; background:${progColor};"></span>` : ''}
+            </span>`;
         }
 
         function renderDaySheet(data) {
@@ -1718,20 +1769,25 @@
             const chips = SHEET_VCHIPS.map(c =>
                 `<span class="sheet-chip${t[c.key] ? '' : ' sheet-chip-dim'}">${c.label} ${t[c.key]}</span>`).join('');
 
+            const totLeft = Math.max(0, t.quota - t.generated);
+            const totDone = t.generated >= t.quota && t.generated > 0;
             let html = `<div class="sheet-hero">
                 <div class="sheet-hero-num">${t.generated}<small>/${t.quota}</small></div>
                 <div class="sheet-hero-meta"><strong>${pct}% de la pauta de hoy</strong>${data.weekend ? ' (fin de semana)' : ''}<br>${hoy}</div>
+                <div class="sheet-hero-left" style="${totDone ? 'color:#0a6b0a;' : ''}">${totDone ? '✓ pauta completa' : `faltan <b>${totLeft}</b>`}</div>
                 <div class="sheet-chips">${chips}</div></div>
-                <div class="sheet-bar"><div class="sheet-bar-fill" style="width:${Math.min(100, pct)}%;${t.generated >= t.quota && t.generated ? 'background:#0ca30c;' : ''}"></div></div>`;
+                <div class="sheet-bar"><div class="sheet-bar-fill" style="width:${Math.min(100, pct)}%;${totDone ? 'background:#0ca30c;' : ''}"></div></div>`;
 
             for (const tier of SHEET_TIERS) {
                 const group = rows.filter(r => r.tier === tier.key);
                 if (!group.length) continue;
                 const g = group.reduce((s, r) => s + (r.generated || 0), 0);
                 const q = group.reduce((s, r) => s + (r.quota || 0), 0);
+                const gLeft = Math.max(0, q - g);
                 const sorted = [...group].sort((a, b) => (b.generated || 0) - (a.generated || 0) ||
                     String(a.feedName).localeCompare(String(b.feedName), 'es'));
-                html += `<div class="sheet-group"><div class="sheet-group-h">${tier.label} <span>${g}/${q}</span></div>
+                html += `<div class="sheet-group"><div class="sheet-group-h">${tier.label}
+                        <span>${g}/${q}${g >= q && g > 0 ? ' · ✓ completa' : ` · faltan ${gLeft}`}</span></div>
                     <div class="sheet-pills">${sorted.map(sheetPill).join('')}</div></div>`;
             }
             // Any tier outside the known three still gets its pills (complete data).
@@ -1771,6 +1827,16 @@
         const MET_INK = { grid: '#e1e0d9', axis: '#c3c2b7', tick: '#898781', label: '#52514e' };
         const MET_BLUE = '#2a78d6', MET_AQUA = '#1baf7a';
         let metCharts = {};
+
+        // Stable identity color per section/caja/tabla: hash of the id → hue.
+        // The same id gets the same color everywhere, forever (independent of
+        // sort order or counts). Identity aid only — the label is always shown.
+        function idColor(id, l = 42) {
+            let h = 5381;
+            const s = String(id);
+            for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+            return `hsl(${((h % 360) + 360) % 360}, 62%, ${l}%)`;
+        }
 
         // Direct value labels at the end of every bar in every series — the
         // exact numbers are always readable without hovering (and carry the
@@ -1815,7 +1881,7 @@
                 data: {
                     labels: rows.map(r => r[labelKey]),
                     datasets: [
-                        { label: 'Publicadas', data: rows.map(r => r.published), backgroundColor: MET_BLUE, borderRadius: 4, barThickness: 14 }
+                        { label: 'Publicadas', data: rows.map(r => r.published), backgroundColor: rows.map(r => idColor(r.id, 46)), borderRadius: 4, barThickness: 14 }
                     ]
                 },
                 plugins: [metBarLabels],
@@ -1846,7 +1912,7 @@
                 const hoy = s[s.length - 1] || 0, d7 = sum(s.slice(-7)), d30 = r.published || 0;
                 t1 += hoy; t7 += d7; t30 += d30;
                 const dim = d30 === 0 ? ' style="color:#94a3b8;"' : '';
-                html += `<tr${dim}><td>${escapeHtml(r[labelKey])}</td><td>${hoy}</td><td>${d7}</td><td>${d30}</td></tr>`;
+                html += `<tr${dim}><td><span class="met-dot" style="background:${idColor(r.id)};${d30 === 0 ? 'opacity:.35;' : ''}"></span>${escapeHtml(r[labelKey])}</td><td>${hoy}</td><td>${d7}</td><td>${d30}</td></tr>`;
             }
             html += `<tr style="font-weight:700; border-top:2px solid #e5e7eb;">
                 <td>Total</td><td>${t1}</td><td>${t7}</td><td>${t30}</td></tr>`;
@@ -1900,7 +1966,7 @@
                 const series = r[key] || [];
                 const total = sum(series);
                 html += `<tr class="${total === 0 ? 'met-hm-zero' : ''}">
-                    <td class="met-hm-lbl" title="${escapeHtml(String(r[labelKey]))}">${escapeHtml(String(r[labelKey]))}</td>`;
+                    <td class="met-hm-lbl" title="${escapeHtml(String(r[labelKey]))}"><span class="met-dot" style="background:${idColor(r.id)};${total === 0 ? 'opacity:.35;' : ''}"></span>${escapeHtml(String(r[labelKey]))}</td>`;
                 series.forEach((v, i) => {
                     colTotals[i] += v;
                     const idx = v ? Math.min(HEAT_RAMP.length - 1, Math.ceil((v / max) * HEAT_RAMP.length) - 1) : -1;
