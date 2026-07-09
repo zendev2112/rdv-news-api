@@ -878,6 +878,64 @@
         .sheet-pill-zero { color: #94a3b8; background: #fafbfc; }
         .sheet-pill-err  { background: #fdf1f1; border-color: #f0c4c4; color: #b02a2a; }
 
+        /* ── Picker live tally: current selection by caja / sección ── */
+        #cur-tally {
+            position: sticky;
+            top: 8px;
+            z-index: 5;
+            background: #fff;
+            border: 1px solid #dbe3ee;
+            border-radius: 10px;
+            padding: 8px 12px;
+            margin: 10px 0;
+            box-shadow: 0 2px 10px rgba(15, 23, 42, .07);
+        }
+
+        .cur-tally-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 3px 0;
+        }
+
+        .cur-tally-k {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            color: #94a3b8;
+            min-width: 84px;
+        }
+
+        .cur-tally-lead {
+            font-size: 14px;
+            font-weight: 800;
+            color: #0b0b0b;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .cur-tally-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11.5px;
+            padding: 3px 9px;
+            border-radius: 999px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            color: #334155;
+            white-space: nowrap;
+        }
+
+        .cur-tally-pill b { font-variant-numeric: tabular-nums; }
+
+        .cur-tally-pill.over {
+            border-color: #f0c4c4;
+            background: #fdf1f1;
+            color: #b02a2a;
+        }
+
         /* ── Aprobación queue: Claude suggests, the editor decides ── */
         .apv-group { margin-top: 18px; }
 
@@ -1295,6 +1353,7 @@
                     <button class="btn btn-success" id="btn-generate" onclick="generateSelected()" disabled>Send selected (0)</button>
                 </div>
                 <div class="cur-summary" id="cur-summary"></div>
+                <div id="cur-tally" style="display:none;"></div>
                 <div id="cur-plan">
                     <p class="cur-empty">Press Fetch titles to pull the latest news from every block's feeds.</p>
                 </div>
@@ -2124,6 +2183,49 @@
             // The execute payload reads `front` — keep it in sync with the box pick
             // (including "(sin caja)" → null = no homepage placement).
             if (kind === 'block') titleItems[i].front = value || null;
+            renderPickTally();
+        }
+
+        // Live tally of the CURRENT selection by caja and by sección — the editor
+        // sees exactly how many they're picking for each destination while they
+        // pick, instead of counting by hand. Sticky above the deck; updates on
+        // every checkbox and every placement dropdown change. Caja counts show
+        // the box's slots (n/slots) and warn when the pick exceeds them.
+        function renderPickTally() {
+            const box = document.getElementById('cur-tally');
+            if (!box) return;
+            const byBlock = new Map(), bySection = new Map();
+            let total = 0;
+            document.querySelectorAll('.cur-cb:checked').forEach(cb => {
+                const it = titleItems[+cb.dataset.i];
+                if (!it) return;
+                total++;
+                const b = it.block || '(sin caja)';
+                byBlock.set(b, (byBlock.get(b) || 0) + 1);
+                const s = it.section || '(sin sección)';
+                bySection.set(s, (bySection.get(s) || 0) + 1);
+            });
+            if (!total) { box.style.display = 'none'; box.innerHTML = ''; return; }
+            box.style.display = 'block';
+            const blockMeta = new Map((placementCatalog.blocks || []).map(b => [b.id, b]));
+            const secMeta = new Map((placementCatalog.sections || []).map(s => [s.id, s]));
+            const pill = (id, label, n, slots) => {
+                const over = slots && n > slots;
+                const tip = `${label}: ${n} seleccionada(s)${slots ? ` · la caja tiene ${slots} lugares` : ''}${over ? ' — MÁS que los lugares de la caja' : ''}`;
+                return `<span class="cur-tally-pill${over ? ' over' : ''}" title="${escapeHtml(tip)}">
+                    <span class="met-dot" style="background:${idColor(id)}"></span>${escapeHtml(label)} <b>${n}${slots ? `/${slots}` : ''}</b></span>`;
+            };
+            const blockPills = [...byBlock.entries()].sort((a, b) => b[1] - a[1])
+                .map(([id, n]) => {
+                    const m = blockMeta.get(id);
+                    return pill(id, m ? m.label : id, n, m && m.slots);
+                }).join('');
+            const secPills = [...bySection.entries()].sort((a, b) => b[1] - a[1])
+                .map(([id, n]) => pill(id, (secMeta.get(id) || {}).name || id, n, null)).join('');
+            box.innerHTML = `
+                <div class="cur-tally-row"><span class="cur-tally-k">Seleccionadas</span><span class="cur-tally-lead">${total}</span></div>
+                <div class="cur-tally-row"><span class="cur-tally-k">Por caja</span>${blockPills}</div>
+                <div class="cur-tally-row"><span class="cur-tally-k">Por sección</span>${secPills}</div>`;
         }
 
         // Placement dropdown: "Sugeridas" (the table's routing menu, Claude's pick
@@ -2168,6 +2270,7 @@
             btn.textContent = `Send selected (${n})`;
             btn.disabled = n === 0;
             updateTabBadges();
+            renderPickTally();
         }
 
         function relTime(ts) {

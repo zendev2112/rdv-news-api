@@ -98,7 +98,7 @@ async function buildTitleList(onlyFeedId) {
     // (the menu is Claude's suggestion, the catalog is the editor's freedom).
     catalog: {
       sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, parent: s.parent })),
-      blocks: HOMEPAGE_BLOCKS.map((b) => ({ id: b.front, label: b.label })),
+      blocks: HOMEPAGE_BLOCKS.map((b) => ({ id: b.front, label: b.label, slots: b.slots })),
     },
     stats: {
       feedsPulled: feedIds.length,
