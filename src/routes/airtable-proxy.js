@@ -2,17 +2,64 @@ import express from 'express'
 
 const router = express.Router()
 
-// Simple API key authentication
+// Simple API key authentication — env only, fail closed (no hardcoded fallback).
 const authenticateApiKey = (req, res, next) => {
   const apiKey = req.headers['x-api-key']
-  const validApiKey =
-    process.env.CLIENT_API_KEY || 'rdv_secure_api_key_2024_xyz123'
+  const validApiKey = process.env.CLIENT_API_KEY
 
-  if (apiKey !== validApiKey) {
+  if (!validApiKey || apiKey !== validApiKey) {
     return res.status(401).json({ error: 'Invalid API key' })
   }
   next()
 }
+
+const TABLE = 'Redes Sociales'
+const airtableAuth = () => {
+  const baseId = process.env.AIRTABLE_BASE_ID
+  const token = process.env.AIRTABLE_TOKEN
+  if (!baseId || !token) throw new Error('Airtable credentials not configured')
+  return { baseId, token }
+}
+
+// The image generator's approval queue: Redes Sociales records the editor
+// ticked `aprobado` and that haven't been posted yet (`redesPublicado` unset).
+// Same gate mechanism as article publishing — the tick is the editor's call.
+router.get('/pending-approved', authenticateApiKey, async (req, res) => {
+  try {
+    const { baseId, token } = airtableAuth()
+    const params = new URLSearchParams()
+    params.append('filterByFormula', 'AND({aprobado}, NOT({redesPublicado}))')
+    params.append('pageSize', '50')
+    for (const f of ['title', 'overline', 'socialMediaText', 'imgUrl', 'section', 'created_at']) {
+      params.append('fields[]', f)
+    }
+    const response = await fetch(
+      `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(TABLE)}?${params}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    if (!response.ok) {
+      const errorText = await response.text()
+      return res.status(response.status).json({ error: 'Airtable request failed', details: errorText })
+    }
+    const data = await response.json()
+    res.json({
+      success: true,
+      records: (data.records || []).map((r) => ({
+        recordId: r.id,
+        title: r.fields?.title || '(sin título)',
+        overline: r.fields?.overline || '',
+        socialMediaText: r.fields?.socialMediaText || '',
+        imgUrl: r.fields?.imgUrl || '',
+        section: r.fields?.section || '',
+        createdAt: r.createdTime || null,
+      })),
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('pending-approved error:', error)
+    res.status(500).json({ error: 'Failed to fetch approved queue', timestamp: new Date().toISOString() })
+  }
+})
 
 // Proxy for Airtable GET requests
 // Proxy for Airtable GET requests
@@ -24,9 +71,8 @@ router.get('/record/:recordId', authenticateApiKey, async (req, res) => {
         return res.status(400).json({ error: 'Invalid record ID format' })
       }
       
-      const baseId = process.env.AIRTABLE_BASE_ID || 'appWtDlgG21KUI3IN'
-      const tableName = 'Redes Sociales'
-      const token = process.env.AIRTABLE_TOKEN || 'patlPzRF8YzZNnogn.8b3d2d68528bfa5b0643a212f832966d1a327f6ca85e8c0f373609452318af4c'
+      const { baseId, token } = airtableAuth()
+      const tableName = TABLE
       
       const airtableUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}/${recordId}`
       
@@ -82,11 +128,8 @@ router.patch('/record/:recordId', authenticateApiKey, async (req, res) => {
       return res.status(400).json({ error: 'Invalid fields data' })
     }
 
-    const baseId = process.env.AIRTABLE_BASE_ID || 'appWtDlgG21KUI3IN'
-    const tableName = 'Redes Sociales'
-    const token =
-      process.env.AIRTABLE_TOKEN ||
-      'patlPzRF8YzZNnogn.8b3d2d68528bfa5b0643a212f832966d1a327f6ca85e8c0f373609452318af4c'
+    const { baseId, token } = airtableAuth()
+    const tableName = TABLE
 
     const airtableUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
       tableName
@@ -129,11 +172,8 @@ router.patch('/record/:recordId', authenticateApiKey, async (req, res) => {
 // Test Airtable connection
 router.get('/test-connection', authenticateApiKey, async (req, res) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || 'appWtDlgG21KUI3IN'
-    const tableName = 'Redes Sociales'
-    const token =
-      process.env.AIRTABLE_TOKEN ||
-      'patlPzRF8YzZNnogn.8b3d2d68528bfa5b0643a212f832966d1a327f6ca85e8c0f373609452318af4c'
+    const { baseId, token } = airtableAuth()
+    const tableName = TABLE
 
     const airtableUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
       tableName
