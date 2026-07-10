@@ -21,14 +21,12 @@ const airtableAuth = () => {
   return { baseId, token }
 }
 
-// The image generator's approval queue: Redes Sociales records the editor
-// ticked `aprobado` and that haven't been posted yet (`redesPublicado` unset).
-// Same gate mechanism as article publishing — the tick is the editor's call.
-router.get('/pending-approved', authenticateApiKey, async (req, res) => {
+// Shared list shape for the two queue views below.
+async function listSocialQueue(res, formula, label) {
   try {
     const { baseId, token } = airtableAuth()
     const params = new URLSearchParams()
-    params.append('filterByFormula', 'AND({aprobado}, NOT({redesPublicado}))')
+    params.append('filterByFormula', formula)
     params.append('pageSize', '50')
     for (const f of ['title', 'overline', 'socialMediaText', 'imgUrl', 'section', 'created_at']) {
       params.append('fields[]', f)
@@ -56,8 +54,76 @@ router.get('/pending-approved', authenticateApiKey, async (req, res) => {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error('pending-approved error:', error)
-    res.status(500).json({ error: 'Failed to fetch approved queue', timestamp: new Date().toISOString() })
+    console.error(`${label} error:`, error)
+    res.status(500).json({ error: `Failed to fetch ${label}`, timestamp: new Date().toISOString() })
+  }
+}
+
+// The image generator's WORK queue: pieces awaiting the editor's decision —
+// not yet approved, not yet posted. The editor loads one, generates the
+// image, and approves it from the generator (see /approve-social).
+router.get('/pending-review', authenticateApiKey, (req, res) =>
+  listSocialQueue(res, 'AND(NOT({aprobado}), NOT({redesPublicado}))', 'pending-review'),
+)
+
+// Approved and not yet posted — what the future publish cron will drain.
+router.get('/pending-approved', authenticateApiKey, (req, res) =>
+  listSocialQueue(res, 'AND({aprobado}, NOT({redesPublicado}))', 'pending-approved'),
+)
+
+// The editor's approval, from the generator: saves the EXACT image they saw
+// (base64 → Cloudinary → Airtable attachment; Airtable silently drops
+// data-URL attachments, so the Cloudinary hop is required) and ticks
+// `aprobado` in the same call. The future cron posts exactly what was saved.
+router.post('/approve-social', authenticateApiKey, async (req, res) => {
+  try {
+    const { recordId, imageBase64, filename } = req.body || {}
+    if (!recordId || !String(recordId).startsWith('rec')) {
+      return res.status(400).json({ error: 'Invalid record ID' })
+    }
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      return res.status(400).json({ error: 'imageBase64 is required' })
+    }
+    const b64 = imageBase64.replace(/^data:image\/\w+;base64,/, '')
+    const buffer = Buffer.from(b64, 'base64')
+    if (!buffer.length) return res.status(400).json({ error: 'Empty image payload' })
+
+    const { uploadImage } = await import('../services/cloudinary.js')
+    const safeName = String(filename || `social-${recordId}.jpg`).replace(/[^\w.-]/g, '_')
+    const imageUrl = await uploadImage(buffer, safeName)
+
+    const { baseId, token } = airtableAuth()
+    const attachment = [{ url: imageUrl, filename: safeName }]
+    const response = await fetch(
+      `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(TABLE)}/${recordId}`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            social_image_instagram: attachment,
+            social_image_facebook: attachment,
+            social_image_twitter: attachment,
+            aprobado: true,
+          },
+        }),
+      },
+    )
+    if (!response.ok) {
+      const errorText = await response.text()
+      return res.status(response.status).json({ error: 'Airtable update failed', details: errorText })
+    }
+    const data = await response.json()
+    res.json({
+      success: true,
+      recordId: data.id,
+      imageUrl,
+      aprobado: !!data.fields?.aprobado,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('approve-social error:', error)
+    res.status(500).json({ error: 'Failed to approve', timestamp: new Date().toISOString() })
   }
 })
 
