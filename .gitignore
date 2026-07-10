@@ -5,3 +5,4 @@ node_modules/
 .state/
 rdv-news-frontend/
 POSTHOG.md
+reports/
