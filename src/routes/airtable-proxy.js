@@ -77,7 +77,7 @@ router.get('/pending-approved', authenticateApiKey, (req, res) =>
 // `aprobado` in the same call. The future cron posts exactly what was saved.
 router.post('/approve-social', authenticateApiKey, async (req, res) => {
   try {
-    const { recordId, imageBase64, filename } = req.body || {}
+    const { recordId, imageBase64, filename, socialMediaText } = req.body || {}
     if (!recordId || !String(recordId).startsWith('rec')) {
       return res.status(400).json({ error: 'Invalid record ID' })
     }
@@ -105,6 +105,11 @@ router.post('/approve-social', authenticateApiKey, async (req, res) => {
           fields: {
             social_image_instagram: attachment,
             aprobado: true,
+            // The caption as the editor approved it (optional) — publish-social
+            // reads socialMediaText, so the edited text is what gets posted.
+            ...(typeof socialMediaText === 'string' && socialMediaText.trim()
+              ? { socialMediaText: socialMediaText.trim() }
+              : {}),
           },
         }),
       },
