@@ -127,7 +127,85 @@ router.post('/approve-social', authenticateApiKey, async (req, res) => {
   }
 })
 
-// Proxy for Airtable GET requests
+// Publish ONE approved piece to Instagram — the "Publicar aprobadas" button
+// (same pattern as the articles publish button; a cron can wrap this later).
+// The record must carry what the editor approved: the saved image attachment
+// and the caption. Posting goes through the same Make.com webhook the manual
+// "Instagram Post" button uses — Make owns the actual Instagram call.
+// Airtable attachment URLs are short-lived signed URLs, so we read the record
+// and hand the FRESH url straight to Make. `dryRun: true` skips the webhook
+// (testing without posting).
+const MAKE_INSTAGRAM_WEBHOOK =
+  process.env.MAKE_INSTAGRAM_WEBHOOK ||
+  'https://hook.us1.make.com/u76xfgrwqlmcbbjdn4k8a98pb4sth59w'
+
+router.post('/publish-social', authenticateApiKey, async (req, res) => {
+  try {
+    const { recordId, dryRun } = req.body || {}
+    if (!recordId || !String(recordId).startsWith('rec')) {
+      return res.status(400).json({ error: 'Invalid record ID' })
+    }
+    const { baseId, token } = airtableAuth()
+    const recordUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(TABLE)}/${recordId}`
+
+    const recRes = await fetch(recordUrl, { headers: { Authorization: `Bearer ${token}` } })
+    if (!recRes.ok) {
+      return res.status(recRes.status).json({ error: 'Record not found', details: await recRes.text() })
+    }
+    const record = await recRes.json()
+    const f = record.fields || {}
+
+    if (!f.aprobado) return res.status(409).json({ error: 'La pieza no está aprobada' })
+    if (f.redesPublicado) return res.status(409).json({ error: 'La pieza ya fue publicada' })
+    const attachment = Array.isArray(f.social_image_instagram) ? f.social_image_instagram[0] : null
+    if (!attachment?.url) {
+      return res.status(409).json({ error: 'La pieza no tiene imagen guardada (social_image_instagram vacío)' })
+    }
+    const caption = String(f.socialMediaText || f.title || '').trim()
+    if (!caption) return res.status(409).json({ error: 'La pieza no tiene texto (socialMediaText vacío)' })
+
+    if (!dryRun) {
+      const makeRes = await fetch(MAKE_INSTAGRAM_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'rdv-news-api' },
+        body: JSON.stringify({
+          image_url: attachment.url,
+          image_public_id: attachment.filename || recordId,
+          caption,
+          post_to_instagram: true,
+          timestamp: new Date().toISOString(),
+          content_type: 'post',
+        }),
+      })
+      const makeText = await makeRes.text()
+      if (!makeRes.ok) {
+        return res.status(502).json({ error: `Make webhook failed: HTTP ${makeRes.status}`, details: makeText.slice(0, 300) })
+      }
+    }
+
+    // Mark done so it leaves the approved queue (skip on dry runs).
+    if (!dryRun) {
+      await fetch(recordUrl, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { redesPublicado: true } }),
+      })
+    }
+
+    res.json({
+      success: true,
+      recordId,
+      title: f.title || '',
+      dryRun: !!dryRun,
+      posted: !dryRun,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('publish-social error:', error)
+    res.status(500).json({ error: 'Failed to publish', timestamp: new Date().toISOString() })
+  }
+})
+
 // Proxy for Airtable GET requests
 router.get('/record/:recordId', authenticateApiKey, async (req, res) => {
     try {
