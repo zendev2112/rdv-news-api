@@ -93,6 +93,8 @@ router.post('/approve-social', authenticateApiKey, async (req, res) => {
     const imageUrl = await uploadImage(buffer, safeName)
 
     const { baseId, token } = airtableAuth()
+    // Instagram attachment only — the editor dropped the facebook/twitter
+    // image columns from the table; writing them would 422 once deleted.
     const attachment = [{ url: imageUrl, filename: safeName }]
     const response = await fetch(
       `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(TABLE)}/${recordId}`,
@@ -102,8 +104,6 @@ router.post('/approve-social', authenticateApiKey, async (req, res) => {
         body: JSON.stringify({
           fields: {
             social_image_instagram: attachment,
-            social_image_facebook: attachment,
-            social_image_twitter: attachment,
             aprobado: true,
           },
         }),
