@@ -68,8 +68,9 @@ export const SECTION_ROUTING = {
     blocks: ['PoliticaYEconomiaSection', 'InversionesSection', 'PymesYEmprendimientosSection', 'PropiedadesSection'],
   },
   autos: {
-    // Folded into Economía: no 'autos' Supabase section exists → section 'economia'.
-    sections: ['economia'],
+    // Real Autos section since 2026-07 (Supabase row created; previously
+    // folded into Economía). Default = autos; economia stays as menu option.
+    sections: ['autos', 'economia'],
     blocks: ['MasNoticiasSection'],
   },
   politica: {

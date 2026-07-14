@@ -21,6 +21,7 @@ export const SECTIONS = [
   { id: 'agricultura', name: 'Agricultura', parent: 'agro' },
   { id: 'agro', name: 'Agro', parent: null },
   { id: 'ambiente', name: 'Ambiente', parent: 'sociedad' },
+  { id: 'autos', name: 'Autos', parent: null },
   { id: 'campos', name: 'Campos', parent: 'propiedades' },
   { id: 'ciencia', name: 'Ciencia', parent: 'sociedad' },
   { id: 'cine-series', name: 'Cine y Series', parent: 'cultura' },

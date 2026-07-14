@@ -103,6 +103,7 @@ const sectionNameToId = {
   Política: 'politica',
   Economía: 'economia',
   Agro: 'agro',
+  Autos: 'autos',
   Sociedad: 'sociedad',
   Salud: 'salud',
   Cultura: 'cultura',
