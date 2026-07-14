@@ -612,7 +612,12 @@ async function fetchRecords(sectionId = 'primera-plana', params = {}) {
  */
 async function updateRecord(recordId, fields, sectionId) {
   try {
-    const tableName = encodeURIComponent(sectionId)
+    // sectionId may be a feed id ('la-sexta') or a literal table name
+    // ('Primera Plana'). Resolve feed ids to their real table name — using
+    // the raw id only matches single-word tables by case-insensitive luck;
+    // hyphenated ids ('la-sexta' vs "La Sexta") 403 as MODEL_NOT_FOUND.
+    const section = config.getSection(sectionId)
+    const tableName = encodeURIComponent(section?.tableName || sectionId)
     const url = `https://api.airtable.com/v0/${baseId}/${tableName}/${recordId}`
 
     console.log(
