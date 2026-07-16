@@ -482,6 +482,21 @@ async function getRecord(recordId, sectionId = 'primera-plana') {
       }
     }
 
+    // Resolve feed ids to their configured table name FIRST — the Title-Case
+    // guess below can't reconstruct connectors ('historia-literatura' is
+    // "Historia y Literatura", 'cine-series' is "Cine y Series"), which broke
+    // publishing for every table whose name has more words than its id.
+    const configuredTable = config.getSection(sectionId)?.tableName
+    if (configuredTable && configuredTable !== sectionId) {
+      try {
+        const record = await base(configuredTable).find(recordId)
+        logger.info(`Retrieved record ${recordId} from ${configuredTable} (via ${sectionId})`)
+        return record
+      } catch (_) {
+        // fall through to the legacy attempts below
+      }
+    }
+
     // For other tables, try the original section ID first
     try {
       const record = await base(sectionId).find(recordId)
