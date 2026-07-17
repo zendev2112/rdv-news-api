@@ -20,6 +20,14 @@
     {
       "path": "/api/cron/review",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/markets",
+      "schedule": "0 16 * * 1-5"
+    },
+    {
+      "path": "/api/cron/markets",
+      "schedule": "30 21 * * 1-5"
     }
   ],
   "builds": [
@@ -27,7 +35,10 @@
       "src": "src/server.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["src/templates/**", "src/assets/**"],
+        "includeFiles": [
+          "src/templates/**",
+          "src/assets/**"
+        ],
         "maxDuration": 300
       }
     },
@@ -43,7 +54,9 @@
       "use": "@vercel/node",
       "config": {
         "maxDuration": 300,
-        "includeFiles": ["src/**"]
+        "includeFiles": [
+          "src/**"
+        ]
       }
     },
     {
@@ -75,6 +88,10 @@
     {
       "src": "/api/cron/review",
       "dest": "/api/cron/review.js"
+    },
+    {
+      "src": "/api/cron/markets",
+      "dest": "/api/cron/markets.js"
     },
     {
       "src": "/api/fetch/all",
