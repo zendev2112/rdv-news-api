@@ -28,6 +28,26 @@
     {
       "path": "/api/cron/markets",
       "schedule": "30 21 * * 1-5"
+    },
+    {
+      "path": "/api/cron/publish-web",
+      "schedule": "0 10-23,0-2 * * *"
+    },
+    {
+      "path": "/api/cron/publish-social",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/publish-social",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/publish-social",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/cron/publish-social",
+      "schedule": "0 0 * * *"
     }
   ],
   "builds": [
@@ -92,6 +112,14 @@
     {
       "src": "/api/cron/markets",
       "dest": "/api/cron/markets.js"
+    },
+    {
+      "src": "/api/cron/publish-social",
+      "dest": "/api/cron/publish-social.js"
+    },
+    {
+      "src": "/api/cron/publish-web",
+      "dest": "/api/cron/publish-web.js"
     },
     {
       "src": "/api/fetch/all",
