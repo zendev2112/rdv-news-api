@@ -598,6 +598,22 @@
             cursor: pointer;
         }
 
+        .cur-sched {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            font-size: 11px;
+            color: #6b7280;
+        }
+
+        .cur-sched input {
+            font-size: 11px;
+            padding: 1px 3px;
+            border: 1px solid #c7d2fe;
+            border-radius: 8px;
+            color: #4338ca;
+        }
+
         .cur-score {
             flex: 0 0 auto;
             font-size: 12px;
@@ -2203,6 +2219,14 @@
             renderPickTally();
         }
 
+        // Per-article schedule in the picker. datetime-local is naive → pin to
+        // ART (-03:00) so it fires at the intended Argentine hour. Blank = the
+        // article publishes at the next cron run after Send.
+        function setSchedule(i, value) {
+            if (!titleItems[i]) return;
+            titleItems[i].publicarEn = schedToArtISO(value);
+        }
+
         // Live tally of the CURRENT selection by caja and by sección — the editor
         // sees exactly how many they're picking for each destination while they
         // pick, instead of counting by hand. Sticky above the deck; updates on
@@ -2379,13 +2403,14 @@
                         feedId: f.feedId, feedName: f.feedName, proposed: !!pick,
                         score: (pick && Number.isFinite(pick.score)) ? pick.score : null,
                         reason: (pick && pick.reason) || null,
-                        section: secId, block: blockId,
+                        section: secId, block: blockId, publicarEn: null,
                     });
                     // Placement controls: editable dropdowns with the table's routing
                     // menu as "Sugeridas" on top (Claude's pick pre-selected) and the
                     // FULL catalog below — the editor may place an article anywhere.
                     const sectionControl = placementSelect(i, 'section', f.sectionMenu || [], secId);
                     const blockControl = placementSelect(i, 'block', (f.blockMenu || []).map(b => b.id), blockId);
+                    const schedControl = `<label class="cur-sched" title="Programar (opcional, hora Argentina). Vacío = se publica en la próxima corrida.">🕐<input type="datetime-local" onchange="setSchedule(${i}, this.value)"></label>`;
                     const thumb = it.image
                         ? `<img class="cur-thumb" src="${encodeURI(it.image)}" loading="lazy" alt="">`
                         : '<div class="cur-thumb cur-thumb-empty"></div>';
@@ -2401,7 +2426,7 @@
                         <div class="cur-body">
                             <a class="cur-title" href="${encodeURI(it.url)}" target="_blank" rel="noopener">${escapeHtml(it.title || it.url)}</a>
                             ${reason}
-                            <div class="cur-tags"><span>${relTime(it.pubDate)}</span>${sectionControl}${blockControl}</div>
+                            <div class="cur-tags"><span>${relTime(it.pubDate)}</span>${sectionControl}${blockControl}${schedControl}</div>
                         </div>
                         ${scoreChip}
                         <span class="cur-rowstatus" id="cur-st-${i}"></span>
@@ -2540,7 +2565,7 @@
                     const res = await fetch(`${API_BASE}/api/agent/curate`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
-                        body: JSON.stringify({ mode: 'execute', assignments: [{ url: a.url, front: a.block || a.front, section: a.section || null, role: 'principal', feedId: a.feedId }] })
+                        body: JSON.stringify({ mode: 'execute', assignments: [{ url: a.url, front: a.block || a.front, section: a.section || null, role: 'principal', feedId: a.feedId, publicarEn: a.publicarEn || null, autoApprove: true }] })
                     });
                     const data = await res.json().catch(() => ({}));
                     if (res.status === 401) { addLog('❌ token rejected', 'error'); setStatus('status-curate', 'error', 'Auth error'); break; }
@@ -2658,7 +2683,6 @@
                             <button class="btn-apv" id="apv-btn-${i}" onclick="approveOne(${i})">✔ Aprobar</button>
                             <span class="apv-title" onclick="document.getElementById('apv-row-${i}').classList.toggle('open')">${escapeHtml(it.title)}${img}</span>
                             <span class="apv-chip">${escapeHtml(it.feedName)}</span>
-                            <label class="apv-sched" title="Programar publicación (opcional) — hora de Argentina. Vacío = se publica en la próxima corrida.">🕐 <input type="datetime-local" id="apv-sched-${i}" value="${schedToLocalInput(it.publicarEn)}"></label>
                             <span class="apv-meta">${it.createdAt ? apvAge(it.createdAt) : ''}</span>
                         </div>
                         ${it.verdictNote ? `<div class="apv-note ${vg.cls}">${it.confidence ? `<strong>confianza ${escapeHtml({ high: 'alta', medium: 'media', low: 'baja' }[it.confidence] || it.confidence)}</strong> · ` : ''}${escapeHtml(it.verdictNote)}</div>` : ''}
@@ -2692,16 +2716,13 @@
             const btn = document.getElementById('apv-btn-' + i);
             const row = document.getElementById('apv-row-' + i);
             const undo = row.classList.contains('apv-approved');
-            // On approve, the schedule input is the source of truth (set or clear);
-            // on undo we leave publicarEn alone.
-            const publicarEn = undo ? undefined : schedToArtISO(document.getElementById('apv-sched-' + i)?.value || '');
             btn.disabled = true;
             btn.textContent = '⏳';
             try {
                 const res = await fetch(`${API_BASE}/api/agent/publish`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
-                    body: JSON.stringify({ mode: 'approve', recordId: it.recordId, feedId: it.feedId, value: !undo, verdict: it.verdict, section: it.section || null, front: it.front || null, ...(undo ? {} : { publicarEn }) })
+                    body: JSON.stringify({ mode: 'approve', recordId: it.recordId, feedId: it.feedId, value: !undo, verdict: it.verdict, section: it.section || null, front: it.front || null })
                 });
                 if (res.status === 401) { addLog('❌ token rejected', 'error'); btn.textContent = undo ? 'Quitar' : '✔ Aprobar'; return; }
                 const data = await res.json().catch(() => ({}));
@@ -2709,7 +2730,7 @@
                 row.classList.toggle('apv-approved', !undo);
                 btn.textContent = undo ? '✔ Aprobar' : 'Quitar';
                 btn.classList.toggle('undo', !undo);
-                addLog(undo ? `↩️ Aprobación quitada: ${it.title}` : (publicarEn ? `✅ Aprobada y programada (${schedToLocalInput(publicarEn).replace('T', ' ')} ART): ${it.title}` : `✅ Aprobada: ${it.title}`), 'success');
+                addLog(undo ? `↩️ Aprobación quitada: ${it.title}` : `✅ Aprobada: ${it.title}`, 'success');
                 const n = document.querySelectorAll('.apv-row.apv-approved').length;
                 document.getElementById('apv-summary').textContent =
                     `${apvItems.length} en la cola · ${n} aprobada(s) — usá "Publicar aprobados" para mandarlas al sitio.`;
