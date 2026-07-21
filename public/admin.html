@@ -2240,8 +2240,12 @@
             };
             const opt = (id) =>
                 `<option value="${escapeHtml(id)}"${id === selected ? ' selected' : ''}>${isSection ? '📍 ' : ''}${escapeHtml(nameOf(id))}</option>`;
-            const rest = catalog.filter(c => !suggestedIds.includes(c.id))
-                .slice().sort((a, b) => (isSection ? a.name : a.label).localeCompare(isSection ? b.name : b.label, 'es'));
+            // Boxes keep homepage-coverage order (the catalog already arrives in
+            // that order); only sections are alphabetized (50 of them, easier to scan).
+            const rest = isSection
+                ? catalog.filter(c => !suggestedIds.includes(c.id))
+                    .slice().sort((a, b) => a.name.localeCompare(b.name, 'es'))
+                : catalog.filter(c => !suggestedIds.includes(c.id));
             if (!suggestedIds.length && !rest.length) return '';
             // A box is optional (front=null = no homepage placement); a section isn't.
             const none = !isSection
