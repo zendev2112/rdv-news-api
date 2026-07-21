@@ -28,7 +28,7 @@ async function listSocialQueue(res, formula, label) {
     const params = new URLSearchParams()
     params.append('filterByFormula', formula)
     params.append('pageSize', '50')
-    for (const f of ['title', 'overline', 'socialMediaText', 'imgUrl', 'section', 'created_at']) {
+    for (const f of ['title', 'overline', 'socialMediaText', 'imgUrl', 'section', 'publicarEn', 'created_at']) {
       params.append('fields[]', f)
     }
     const response = await fetch(
@@ -49,6 +49,7 @@ async function listSocialQueue(res, formula, label) {
         socialMediaText: r.fields?.socialMediaText || '',
         imgUrl: r.fields?.imgUrl || '',
         section: r.fields?.section || '',
+        publicarEn: r.fields?.publicarEn || null,
         createdAt: r.createdTime || null,
       })),
       timestamp: new Date().toISOString(),
@@ -66,10 +67,17 @@ router.get('/pending-review', authenticateApiKey, (req, res) =>
   listSocialQueue(res, 'AND(NOT({aprobado}), NOT({redesPublicado}))', 'pending-review'),
 )
 
-// Approved and not yet posted — what the future publish cron will drain.
-router.get('/pending-approved', authenticateApiKey, (req, res) =>
-  listSocialQueue(res, 'AND({aprobado}, NOT({redesPublicado}))', 'pending-approved'),
-)
+// Approved and not yet posted — what the publish cron drains. With ?due=1 it
+// only returns pieces whose scheduled time has arrived (publicarEn blank or
+// past); the cron passes it, the generator's manual button omits it so the
+// editor can still post scheduled pieces early.
+router.get('/pending-approved', authenticateApiKey, (req, res) => {
+  const base = 'AND({aprobado}, NOT({redesPublicado})'
+  const formula = req.query.due
+    ? `${base}, OR({publicarEn} = BLANK(), IS_BEFORE({publicarEn}, NOW())))`
+    : `${base})`
+  return listSocialQueue(res, formula, 'pending-approved')
+})
 
 // The editor's approval, from the generator: saves the EXACT image they saw
 // (base64 → Cloudinary → Airtable attachment; Airtable silently drops
@@ -77,7 +85,7 @@ router.get('/pending-approved', authenticateApiKey, (req, res) =>
 // `aprobado` in the same call. The future cron posts exactly what was saved.
 router.post('/approve-social', authenticateApiKey, async (req, res) => {
   try {
-    const { recordId, imageBase64, filename, socialMediaText } = req.body || {}
+    const { recordId, imageBase64, filename, socialMediaText, publicarEn } = req.body || {}
     if (!recordId || !String(recordId).startsWith('rec')) {
       return res.status(400).json({ error: 'Invalid record ID' })
     }
@@ -109,6 +117,11 @@ router.post('/approve-social', authenticateApiKey, async (req, res) => {
             // reads socialMediaText, so the edited text is what gets posted.
             ...(typeof socialMediaText === 'string' && socialMediaText.trim()
               ? { socialMediaText: socialMediaText.trim() }
+              : {}),
+            // Optional schedule (ISO with ART offset). The cron holds the post
+            // until this instant; blank/absent = post at the next paced run.
+            ...(typeof publicarEn === 'string' && publicarEn.trim()
+              ? { publicarEn: publicarEn.trim() }
               : {}),
           },
         }),

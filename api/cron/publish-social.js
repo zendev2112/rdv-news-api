@@ -24,8 +24,9 @@ export default async function handler(req, res) {
   const apiHeaders = { 'Content-Type': 'application/json', 'X-API-Key': key }
 
   try {
-    // 1. Approved-and-unposted social pieces.
-    const listRes = await fetch(`${BASE}/api/airtable-proxy/pending-approved`, { headers: apiHeaders })
+    // 1. Approved-and-unposted social pieces that are DUE (due=1 → respects
+    //    publicarEn; the manual button omits it to allow early posting).
+    const listRes = await fetch(`${BASE}/api/airtable-proxy/pending-approved?due=1`, { headers: apiHeaders })
     const list = await listRes.json().catch(() => ({}))
     if (!listRes.ok || !list.success) {
       return res.status(502).json({ ok: false, error: `pending-approved failed: HTTP ${listRes.status}`, details: list })

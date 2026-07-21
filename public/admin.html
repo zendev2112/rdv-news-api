@@ -956,6 +956,23 @@
 
         .apv-row.apv-approved { background: #f0faf0; border-color: #b7e3b7; }
 
+        .apv-sched {
+            font-size: 11px;
+            color: #64748b;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            white-space: nowrap;
+        }
+
+        .apv-sched input {
+            font-size: 11px;
+            padding: 2px 4px;
+            border: 1px solid #d8dee9;
+            border-radius: 6px;
+            color: #334155;
+        }
+
         .apv-head {
             display: flex;
             align-items: center;
@@ -2641,6 +2658,7 @@
                             <button class="btn-apv" id="apv-btn-${i}" onclick="approveOne(${i})">✔ Aprobar</button>
                             <span class="apv-title" onclick="document.getElementById('apv-row-${i}').classList.toggle('open')">${escapeHtml(it.title)}${img}</span>
                             <span class="apv-chip">${escapeHtml(it.feedName)}</span>
+                            <label class="apv-sched" title="Programar publicación (opcional) — hora de Argentina. Vacío = se publica en la próxima corrida.">🕐 <input type="datetime-local" id="apv-sched-${i}" value="${schedToLocalInput(it.publicarEn)}"></label>
                             <span class="apv-meta">${it.createdAt ? apvAge(it.createdAt) : ''}</span>
                         </div>
                         ${it.verdictNote ? `<div class="apv-note ${vg.cls}">${it.confidence ? `<strong>confianza ${escapeHtml({ high: 'alta', medium: 'media', low: 'baja' }[it.confidence] || it.confidence)}</strong> · ` : ''}${escapeHtml(it.verdictNote)}</div>` : ''}
@@ -2656,19 +2674,34 @@
             box.innerHTML = html;
         }
 
+        // ART wall-clock ↔ instant. datetime-local is naive; we pin it to ART
+        // (-03:00) so it fires at the intended local hour regardless of the
+        // editor's browser timezone.
+        function schedToArtISO(localValue) {
+            return localValue ? new Date(localValue + ':00-03:00').toISOString() : null;
+        }
+        function schedToLocalInput(iso) {
+            if (!iso) return '';
+            const art = new Date(new Date(iso).getTime() - 3 * 3600 * 1000);
+            return art.toISOString().slice(0, 16);
+        }
+
         async function approveOne(i) {
             const it = apvItems[i];
             if (!it) return;
             const btn = document.getElementById('apv-btn-' + i);
             const row = document.getElementById('apv-row-' + i);
             const undo = row.classList.contains('apv-approved');
+            // On approve, the schedule input is the source of truth (set or clear);
+            // on undo we leave publicarEn alone.
+            const publicarEn = undo ? undefined : schedToArtISO(document.getElementById('apv-sched-' + i)?.value || '');
             btn.disabled = true;
             btn.textContent = '⏳';
             try {
                 const res = await fetch(`${API_BASE}/api/agent/publish`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
-                    body: JSON.stringify({ mode: 'approve', recordId: it.recordId, feedId: it.feedId, value: !undo, verdict: it.verdict, section: it.section || null, front: it.front || null })
+                    body: JSON.stringify({ mode: 'approve', recordId: it.recordId, feedId: it.feedId, value: !undo, verdict: it.verdict, section: it.section || null, front: it.front || null, ...(undo ? {} : { publicarEn }) })
                 });
                 if (res.status === 401) { addLog('❌ token rejected', 'error'); btn.textContent = undo ? 'Quitar' : '✔ Aprobar'; return; }
                 const data = await res.json().catch(() => ({}));
@@ -2676,7 +2709,7 @@
                 row.classList.toggle('apv-approved', !undo);
                 btn.textContent = undo ? '✔ Aprobar' : 'Quitar';
                 btn.classList.toggle('undo', !undo);
-                addLog(undo ? `↩️ Aprobación quitada: ${it.title}` : `✅ Aprobada: ${it.title}`, 'success');
+                addLog(undo ? `↩️ Aprobación quitada: ${it.title}` : (publicarEn ? `✅ Aprobada y programada (${schedToLocalInput(publicarEn).replace('T', ' ')} ART): ${it.title}` : `✅ Aprobada: ${it.title}`), 'success');
                 const n = document.querySelectorAll('.apv-row.apv-approved').length;
                 document.getElementById('apv-summary').textContent =
                     `${apvItems.length} en la cola · ${n} aprobada(s) — usá "Publicar aprobados" para mandarlas al sitio.`;

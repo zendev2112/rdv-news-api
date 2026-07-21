@@ -25,9 +25,11 @@ export default async function handler(req, res) {
   const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${admin}` }
 
   try {
-    // 1. Find every approved-and-still-draft record across the section tables.
+    // 1. Find every approved record that is DUE — no schedule, or its scheduled
+    //    time has arrived (due:true applies the publicarEn filter). The manual
+    //    button omits due, so the editor can still force-publish scheduled ones.
     const listRes = await fetch(`${BASE}/api/agent/publish`, {
-      method: 'POST', headers: authHeaders, body: JSON.stringify({ mode: 'list' }),
+      method: 'POST', headers: authHeaders, body: JSON.stringify({ mode: 'list', due: true }),
     })
     const list = await listRes.json().catch(() => ({}))
     if (!listRes.ok) {

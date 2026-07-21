@@ -16,6 +16,14 @@ export const config = { maxDuration: 300 }
 // so those tables are simply skipped (add the field where you want the button).
 const READY_FORMULA = "AND({aprobado}, {status}='draft')"
 
+// The same, but only records whose scheduled time has arrived (or that carry no
+// schedule). The publish CRON passes due:true so it respects `publicarEn`; the
+// manual "Publicar aprobados" button uses the base formula so the editor still
+// sees (and can force-publish) scheduled records early. NOW()/IS_BEFORE compare
+// stored UTC instants — the ART-configured field fires at the intended wall time.
+const DUE_FORMULA =
+  "AND({aprobado}, {status}='draft', OR({publicarEn} = BLANK(), IS_BEFORE({publicarEn}, NOW())))"
+
 // Build the flat social payload the /webhooks/airtable/social-media route expects
 // (mirrors the Airtable publish button's socialPayload). The route handles the
 // section object/string and attachment shapes, so pass record fields through.
@@ -58,6 +66,7 @@ export default async function handler(req, res) {
 
   // ── List approved-and-still-draft records, grouped by table ─────────────────
   if (mode === 'list') {
+    const formula = body.due ? DUE_FORMULA : READY_FORMULA
     try {
       const feedIds = appConfig.sections.map((s) => s.id)
       const groups = []
@@ -67,7 +76,7 @@ export default async function handler(req, res) {
           feedIds.slice(i, i + CHUNK).map(async (feedId) => {
             const section = appConfig.getSection(feedId)
             const records = await airtableService.fetchRecords(feedId, {
-              filterByFormula: READY_FORMULA,
+              filterByFormula: formula,
               maxRecords: 100,
             })
             if (!records || !records.length) return
@@ -80,6 +89,7 @@ export default async function handler(req, res) {
                 feedId,
                 title: r.fields?.title || '(sin título)',
                 section: r.fields?.section || '',
+                publicarEn: r.fields?.publicarEn || null,
                 hasImage:
                   !!(r.fields?.imgUrl || (Array.isArray(r.fields?.image) && r.fields.image.length)),
               })),
@@ -150,6 +160,7 @@ export default async function handler(req, res) {
                   verdict: ['publish', 'hold', 'reject'].includes(head) ? head : 'none',
                   verdictNote: note,
                   confidence,
+                  publicarEn: f.publicarEn || null,
                   createdAt: r.createdTime || null,
                 }
               }),
@@ -178,8 +189,15 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'recordId and feedId are required' })
     }
     const value = body.value !== false
+    // Optional schedule: an ISO instant with the ART offset (…-03:00), or null
+    // to clear it. Only set when the key is present so plain approvals are
+    // untouched; when approving, an omitted publicarEn leaves any prior value.
+    const fields = { aprobado: value }
+    if ('publicarEn' in body) {
+      fields.publicarEn = body.publicarEn || null
+    }
     try {
-      await airtableService.updateRecord(recordId, { aprobado: value }, feedId)
+      await airtableService.updateRecord(recordId, fields, feedId)
       // Claude-suggestion vs editor-decision agreement data (verdict is what
       // Claude said; value is what the editor did).
       capture('editor_approval', {
