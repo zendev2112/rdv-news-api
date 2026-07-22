@@ -70,12 +70,25 @@ export async function handlePublishStatusChange(
 
     const updateData = { url: seoSlug }
 
-    // 3. Upload images to Cloudinary if imgUrl exists and is not already a Cloudinary URL
+    // 3. Upload images to Cloudinary from the durable source: the `image`
+    //    attachment (Airtable re-signs its URL fresh on every fetch, so it never
+    //    goes stale) or, failing that, a non-Cloudinary `imgUrl` string. The
+    //    attachment is the source of truth — `imgUrl` text may be empty (nothing
+    //    was pasted) or a dead, expired Airtable URL after a scheduling delay;
+    //    either way uploadImagesOnPublish re-derives from the live attachment.
+    //    Fire on the attachment's presence, NOT on imgUrl being non-empty — the
+    //    old gate skipped attachment-only records, which is why a source URL had
+    //    to be pasted into imgUrl by hand just to trigger this. Skip only when
+    //    imgUrl is ALREADY a Cloudinary URL (already processed).
     const imgUrl = fields.imgUrl || ''
     const isAlreadyCloudinary =
       imgUrl.includes('cloudinary.com') || imgUrl.includes('res.cloudinary')
+    const hasAttachment =
+      Array.isArray(fields.image) && fields.image.length > 0
 
-    if (imgUrl && !isAlreadyCloudinary) {
+    if (isAlreadyCloudinary) {
+      logger.info(`Images already on Cloudinary for record ${recordId}`)
+    } else if (hasAttachment || imgUrl) {
       const cloudinaryFields = await uploadImagesOnPublish(
         recordId,
         sectionId,
@@ -88,10 +101,8 @@ export async function handlePublishStatusChange(
           updateData['article-images'] = cloudinaryFields['article-images']
         }
       }
-    } else if (!imgUrl) {
-      logger.info(`No images to upload for record ${recordId}`)
     } else {
-      logger.info(`Images already on Cloudinary for record ${recordId}`)
+      logger.info(`No images to upload for record ${recordId}`)
     }
 
     // 4. Update Airtable record with Cloudinary URLs + SEO slug
