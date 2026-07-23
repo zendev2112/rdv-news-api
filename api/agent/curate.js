@@ -176,67 +176,43 @@ export default async function handler(req, res) {
       ])
       const sheet = daySheetFor().filter((r) => r.quota > 0)
       const formula = `IS_AFTER(CREATED_TIME(), '${startOfDayArtIso()}')`
+      const validFront = new Set(HOMEPAGE_BLOCKS.map((b) => b.front))
 
-      const rows = []
+      // Count today's records per homepage CAJA (the front page) — the editor's
+      // real target surface, not the Airtable tables. Each record counts toward
+      // its assigned box (`front`); if it carries none, fall back to the table's
+      // default box. The objetivo of each caja is its slots (front-page capacity).
+      const boxGenerated = new Map()
       const CHUNK = 4 // Airtable: 5 req/s per base
       for (let i = 0; i < sheet.length; i += CHUNK) {
         await Promise.all(
           sheet.slice(i, i + CHUNK).map(async (r) => {
-            const section = appConfig.getSection(r.feedId)
             try {
               const records = await airtableService.fetchRecords(r.feedId, {
                 filterByFormula: formula,
                 maxRecords: 100,
               })
-              const verdicts = { publish: 0, hold: 0, reject: 0, pending: 0 }
               for (const rec of records || []) {
-                const v = String(rec?.fields?.aiReview || '').split('·')[0].trim().toLowerCase()
-                if (v in verdicts) verdicts[v] += 1
-                else verdicts.pending += 1
+                let front = rec?.fields?.front
+                if (!front || !validFront.has(front)) front = blocksFor(r.feedId)[0]
+                if (!front) continue
+                boxGenerated.set(front, (boxGenerated.get(front) || 0) + 1)
               }
-              rows.push({
-                feedId: r.feedId,
-                feedName: section?.name || r.feedId,
-                tier: r.tier,
-                quota: r.quota,
-                generated: (records || []).length,
-                ...verdicts,
-              })
             } catch (err) {
-              rows.push({
-                feedId: r.feedId,
-                feedName: section?.name || r.feedId,
-                tier: r.tier,
-                quota: r.quota,
-                error: err.message,
-              })
+              // Skip on error; that caja simply shows fewer generadas.
             }
           }),
         )
       }
 
-      // Roll the per-table counts up into the homepage CAJAS — the editor's real
-      // target surface (the front page), not the Airtable tables. Each table's
-      // articles count toward its default box (the first block in its routing).
-      // Emitted in the real front-page order (top → bottom).
-      const boxAgg = new Map()
-      for (const r of rows) {
-        const front = blocksFor(r.feedId)[0]
-        if (!front) continue
-        if (!boxAgg.has(front)) {
-          boxAgg.set(front, { generated: 0, quota: 0, publish: 0, hold: 0, reject: 0, pending: 0 })
-        }
-        const b = boxAgg.get(front)
-        b.generated += r.generated || 0
-        b.quota += r.quota || 0
-        b.publish += r.publish || 0
-        b.hold += r.hold || 0
-        b.reject += r.reject || 0
-        b.pending += r.pending || 0
-      }
-      const boxRows = HOMEPAGE_BLOCKS.filter((bl) => boxAgg.has(bl.front)).map(
-        (bl) => ({ feedId: bl.front, feedName: bl.label, ...boxAgg.get(bl.front) }),
-      )
+      // One row per caja, in the real front-page order (top → bottom). Objetivo =
+      // slots de la caja; generadas = las creadas hoy que caen en ella.
+      const boxRows = HOMEPAGE_BLOCKS.filter((bl) => !bl.hidden).map((bl) => ({
+        feedId: bl.front,
+        feedName: bl.label,
+        generated: boxGenerated.get(bl.front) || 0,
+        quota: bl.slots,
+      }))
 
       return res.status(200).json({
         generatedAt: new Date().toISOString(),

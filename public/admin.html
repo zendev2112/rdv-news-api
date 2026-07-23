@@ -1832,7 +1832,7 @@
             const done = g >= q && g > 0;
             const left = Math.max(0, q - g);
             const cls = done ? 'sheet-pill-done' : g > 0 ? 'sheet-pill-part' : 'sheet-pill-zero';
-            const tip = `${r.feedName} — ${g} de ${q}${done ? ' · pauta completa' : ` · faltan ${left}`} · ✅ ${r.publish || 0} · 🟡 ${r.hold || 0} · ⛔ ${r.reject || 0} · ⏳ ${r.pending || 0}`;
+            const tip = `${r.feedName} — ${g} de ${q}${done ? ' · pauta completa' : ` · faltan ${left}`}`;
             // Bottom edge = progress toward the pauta, in the state color; the
             // dot is the table's identity color (same one everywhere).
             const prog = q ? Math.min(100, (g / q) * 100) : 0;
@@ -1860,16 +1860,12 @@
             const pct = t.quota ? Math.round((t.generated / t.quota) * 100) : 0;
             const hoy = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 
-            const chips = SHEET_VCHIPS.map(c =>
-                `<span class="sheet-chip${t[c.key] ? '' : ' sheet-chip-dim'}">${c.label} ${t[c.key]}</span>`).join('');
-
             const totLeft = Math.max(0, t.quota - t.generated);
             const totDone = t.generated >= t.quota && t.generated > 0;
             let html = `<div class="sheet-hero">
                 <div class="sheet-hero-num">${t.generated}<small>/${t.quota}</small></div>
                 <div class="sheet-hero-meta"><strong>${pct}% de la pauta de hoy</strong>${data.weekend ? ' (fin de semana)' : ''}<br>${hoy}</div>
-                <div class="sheet-hero-left" style="${totDone ? 'color:#0a6b0a;' : ''}">${totDone ? '✓ pauta completa' : `faltan <b>${totLeft}</b>`}</div>
-                <div class="sheet-chips">${chips}</div></div>
+                <div class="sheet-hero-left" style="${totDone ? 'color:#0a6b0a;' : ''}">${totDone ? '✓ pauta completa' : `faltan <b>${totLeft}</b>`}</div></div>
                 <div class="sheet-bar"><div class="sheet-bar-fill" style="width:${Math.min(100, pct)}%;${totDone ? 'background:#0ca30c;' : ''}"></div></div>`;
 
             // Las filas llegan ya en el orden real de la portada (arriba → abajo),

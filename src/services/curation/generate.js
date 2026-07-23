@@ -225,6 +225,10 @@ export async function generateDrafts({ assignments = [] } = {}) {
       // when it's a REAL section id — any of the ~50, not just the table menu.
       if (a.section && isValidSection(a.section)) fields.section = a.section
 
+      // Local + Local Facebook: these tables must never carry a scraped Facebook
+      // embed — blank the fb-post so the note stays plain text (editor 2026-07-23).
+      if (a.feedId === 'local' || a.feedId === 'local-facebook') fields['fb-post'] = ''
+
       // HUMAN GATE (restored 2026-07-23): every generated/ingested draft is born
       // UNAPPROVED — always. The editor is the ONLY one who ticks `aprobado`;
       // nothing reaches the publish cron without that manual decision. Auto-

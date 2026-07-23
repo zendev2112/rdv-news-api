@@ -1129,6 +1129,8 @@ async function processArticle(item, sectionId) {
     // the only one who ticks `aprobado`; force it false at insert so no default,
     // copy, or automation can ever hand the publish cron an unreviewed article.
     fields.aprobado = false
+    // Local + Local Facebook: never carry a scraped Facebook embed (editor 2026-07-23).
+    if (sectionId === 'local' || sectionId === 'local-facebook') fields['fb-post'] = ''
     // Byline follows the source field exactly: registry name for institutions and
     // attributed interviews, BLANK for a regular otros-medios note (source is blank
     // there by policy). NEVER fall back to the raw author handle — that would
