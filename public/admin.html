@@ -1276,7 +1276,7 @@
                     <input type="number" class="input" id="limit-all" value="10" min="1" max="50"
                         placeholder="Articles per section">
                     <div class="btn-group">
-                        <button class="btn btn-primary" id="btn-all" onclick="fetchAll()">Fetch All Sections</button>
+                        <button class="btn btn-primary" id="btn-all" onclick="fetchAll()">Traer todas las secciones</button>
                         <button class="btn btn-danger" id="btn-cancel-all" onclick="cancelFetch('all')"
                             style="display:none;">Cancel</button>
                     </div>
@@ -1320,7 +1320,7 @@
                     <input type="number" class="input" id="limit-section" value="10" min="1" max="50"
                         placeholder="Articles limit">
                     <div class="btn-group">
-                        <button class="btn btn-primary" id="btn-section" onclick="fetchSection()">Fetch Section</button>
+                        <button class="btn btn-primary" id="btn-section" onclick="fetchSection()">Traer sección</button>
                         <button class="btn btn-danger" id="btn-cancel-section" onclick="cancelFetch('section')"
                             style="display:none;">Cancel</button>
                     </div>
@@ -1379,16 +1379,16 @@
 
             <div class="card" style="margin-bottom: 30px;">
                 <h3 style="margin: 0;">🤖 News Picker <span class="status status-idle" id="status-curate">Idle</span></h3>
-                <p style="color:#666; font-size:13px; margin-top:8px;">Fresh RSS titles organized as one slide per source table. <strong>Fetch &amp; propose</strong> asks Claude to pre-select the ones worth covering (with a score and reason) — add or deselect anything, then send to Airtable. <strong>Nothing is generated until you click Send.</strong></p>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Títulos nuevos de RSS, organizados en una solapa por fuente. <strong>Buscar y proponer</strong> le pide a Claude que preseleccione los que vale la pena cubrir (con puntaje y motivo); agregá o quitá lo que quieras y enviá a Airtable. <strong>No se genera nada hasta que hacés clic en Enviar.</strong></p>
                 <div class="cur-controls">
-                    <button class="btn btn-primary" id="btn-propose" onclick="loadPicker('select')">🤖 Fetch &amp; propose</button>
-                    <button class="btn btn-primary" id="btn-plan" onclick="loadPicker('list')" style="background:#94a3b8;">Fetch titles only</button>
-                    <button class="btn btn-success" id="btn-generate" onclick="generateSelected()" disabled>Send selected (0)</button>
+                    <button class="btn btn-primary" id="btn-propose" onclick="loadPicker('select')">🤖 Buscar y proponer</button>
+                    <button class="btn btn-primary" id="btn-plan" onclick="loadPicker('list')" style="background:#94a3b8;">Solo títulos</button>
+                    <button class="btn btn-success" id="btn-generate" onclick="generateSelected()" disabled>Enviar seleccionados (0)</button>
                 </div>
                 <div class="cur-summary" id="cur-summary"></div>
                 <div id="cur-tally" style="display:none;"></div>
                 <div id="cur-plan">
-                    <p class="cur-empty">Press Fetch titles to pull the latest news from every block's feeds.</p>
+                    <p class="cur-empty">Presioná «Solo títulos» para traer las últimas noticias de los feeds de cada bloque.</p>
                 </div>
             </div>
 
@@ -2314,7 +2314,7 @@
         function updateGenerateBtn() {
             const n = document.querySelectorAll('.cur-cb:checked').length;
             const btn = document.getElementById('btn-generate');
-            btn.textContent = `Send selected (${n})`;
+            btn.textContent = `Enviar seleccionados (${n})`;
             btn.disabled = n === 0;
             updateTabBadges();
             renderPickTally();
