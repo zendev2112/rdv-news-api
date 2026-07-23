@@ -2220,8 +2220,10 @@
         }
 
         // Per-article schedule in the picker. datetime-local is naive → pin to
-        // ART (-03:00) so it fires at the intended Argentine hour. Blank = the
-        // article publishes at the next cron run after Send.
+        // ART (-03:00) so it fires at the intended Argentine hour. The schedule
+        // only sets WHEN a piece publishes ONCE THE EDITOR TICKS `aprobado` in
+        // Airtable — Send never approves anything. Blank = publishes at the next
+        // cron run after it is approved.
         function setSchedule(i, value) {
             if (!titleItems[i]) return;
             titleItems[i].publicarEn = schedToArtISO(value);
@@ -2410,7 +2412,7 @@
                     // FULL catalog below — the editor may place an article anywhere.
                     const sectionControl = placementSelect(i, 'section', f.sectionMenu || [], secId);
                     const blockControl = placementSelect(i, 'block', (f.blockMenu || []).map(b => b.id), blockId);
-                    const schedControl = `<label class="cur-sched" title="Programar (opcional, hora Argentina). Vacío = se publica en la próxima corrida.">🕐<input type="datetime-local" onchange="setSchedule(${i}, this.value)"></label>`;
+                    const schedControl = `<label class="cur-sched" title="Programar (opcional, hora Argentina). Solo define CUÁNDO se publica DESPUÉS de que marcás aprobado en Airtable. Enviar nunca aprueba.">🕐<input type="datetime-local" onchange="setSchedule(${i}, this.value)"></label>`;
                     const thumb = it.image
                         ? `<img class="cur-thumb" src="${encodeURI(it.image)}" loading="lazy" alt="">`
                         : '<div class="cur-thumb cur-thumb-empty"></div>';
@@ -2565,7 +2567,7 @@
                     const res = await fetch(`${API_BASE}/api/agent/curate`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}` },
-                        body: JSON.stringify({ mode: 'execute', assignments: [{ url: a.url, front: a.block || a.front, section: a.section || null, role: 'principal', feedId: a.feedId, publicarEn: a.publicarEn || null, autoApprove: true }] })
+                        body: JSON.stringify({ mode: 'execute', assignments: [{ url: a.url, front: a.block || a.front, section: a.section || null, role: 'principal', feedId: a.feedId, publicarEn: a.publicarEn || null }] })
                     });
                     const data = await res.json().catch(() => ({}));
                     if (res.status === 401) { addLog('❌ token rejected', 'error'); setStatus('status-curate', 'error', 'Auth error'); break; }
