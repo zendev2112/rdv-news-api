@@ -1379,10 +1379,9 @@
 
             <div class="card" style="margin-bottom: 30px;">
                 <h3 style="margin: 0;">🤖 News Picker <span class="status status-idle" id="status-curate">Idle</span></h3>
-                <p style="color:#666; font-size:13px; margin-top:8px;">Títulos nuevos de RSS, organizados en una solapa por fuente. <strong>Buscar y proponer</strong> le pide a Claude que preseleccione los que vale la pena cubrir (con puntaje y motivo); agregá o quitá lo que quieras y enviá a Airtable. <strong>No se genera nada hasta que hacés clic en Enviar.</strong></p>
+                <p style="color:#666; font-size:13px; margin-top:8px;">Traé los títulos nuevos de RSS con <strong>Solo títulos</strong>, organizados en una solapa por fuente. En cada solapa, <strong>🤖 Proponer esta tabla</strong> le pide a Claude que preseleccione los que vale la pena cubrir (con puntaje y motivo); agregá o quitá lo que quieras y enviá a Airtable. <strong>No se genera nada hasta que hacés clic en Enviar.</strong></p>
                 <div class="cur-controls">
-                    <button class="btn btn-primary" id="btn-propose" onclick="loadPicker('select')">🤖 Buscar y proponer</button>
-                    <button class="btn btn-primary" id="btn-plan" onclick="loadPicker('list')" style="background:#94a3b8;">Solo títulos</button>
+                    <button class="btn btn-primary" id="btn-plan" onclick="loadPicker('list')">Solo títulos</button>
                     <button class="btn btn-success" id="btn-generate" onclick="generateSelected()" disabled>Enviar seleccionados (0)</button>
                 </div>
                 <div class="cur-summary" id="cur-summary"></div>
@@ -2449,7 +2448,6 @@
             const proposing = mode === 'select';
             setStatus('status-curate', 'running', proposing ? 'Claude picking' : 'Fetching');
             document.getElementById('btn-plan').disabled = true;
-            document.getElementById('btn-propose').disabled = true;
             document.querySelectorAll('.btn-slide').forEach(b => b.disabled = true);
             document.getElementById('cur-summary').textContent = '';
             addLog(feedId
@@ -2496,7 +2494,6 @@
             } finally {
                 pickerBusy = false;
                 document.getElementById('btn-plan').disabled = false;
-                document.getElementById('btn-propose').disabled = false;
                 document.querySelectorAll('.btn-slide').forEach(b => b.disabled = false);
             }
         }
@@ -2543,7 +2540,6 @@
             setStatus('status-curate', 'running', 'Sending');
             pickerBusy = true; // block re-fetch/re-propose while the send loop runs
             document.getElementById('btn-plan').disabled = true;
-            document.getElementById('btn-propose').disabled = true;
             document.getElementById('btn-generate').disabled = true;
             document.querySelectorAll('.btn-slide').forEach(b => b.disabled = true);
             addLog(`🛠️ Sending ${boxes.length} title(s) to Airtable, one at a time...`, 'info');
@@ -2590,7 +2586,6 @@
             loadDaySheet(); // production board reflects the run immediately
             pickerBusy = false;
             document.getElementById('btn-plan').disabled = false;
-            document.getElementById('btn-propose').disabled = false;
             document.querySelectorAll('.btn-slide').forEach(b => b.disabled = false);
             updateGenerateBtn();
         }
