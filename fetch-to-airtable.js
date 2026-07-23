@@ -1125,6 +1125,10 @@ async function processArticle(item, sectionId) {
     }
 
     // ── STEP 3: Re-add fields the shared pipeline doesn't emit ───────────
+    // HUMAN GATE: RSS-ingested drafts are ALWAYS born unapproved. The editor is
+    // the only one who ticks `aprobado`; force it false at insert so no default,
+    // copy, or automation can ever hand the publish cron an unreviewed article.
+    fields.aprobado = false
     // Byline follows the source field exactly: registry name for institutions and
     // attributed interviews, BLANK for a regular otros-medios note (source is blank
     // there by policy). NEVER fall back to the raw author handle — that would

@@ -225,11 +225,14 @@ export async function generateDrafts({ assignments = [] } = {}) {
       // when it's a REAL section id — any of the ~50, not just the table menu.
       if (a.section && isValidSection(a.section)) fields.section = a.section
 
-      // News Picker sends autoApprove: the editor's Send IS the publish decision
-      // (one control surface — pick, place, schedule, done). Tick `aprobado` so
-      // the publish cron drains it, and carry the optional `publicarEn` schedule
-      // (ISO with ART offset) so it goes out at the chosen time (or next run).
-      if (a.autoApprove) fields.aprobado = true
+      // HUMAN GATE (restored 2026-07-23): every generated/ingested draft is born
+      // UNAPPROVED — always. The editor is the ONLY one who ticks `aprobado`;
+      // nothing reaches the publish cron without that manual decision. Auto-
+      // approving from the picker published unreviewed articles, so it is dead:
+      // `aprobado` is forced false at insert and never set true here. The optional
+      // `publicarEn` schedule is still carried (the editor can pre-set the time),
+      // but it only ever fires AFTER the editor ticks `aprobado` by hand.
+      fields.aprobado = false
       if (a.publicarEn) fields.publicarEn = a.publicarEn
 
       const res = await airtableService.insertRecords([{ fields }], a.feedId)
