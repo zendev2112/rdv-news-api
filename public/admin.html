@@ -1399,7 +1399,7 @@
                         onclick="loadDaySheet()">Refresh</button>
                 </div>
                 <p style="color:#666; font-size:13px; margin-top:8px;">Lo que se generó hoy contra la pauta editorial,
-                    tabla por tabla. <span style="color:#0a6b0a; font-weight:600;">Verde</span> = pauta cumplida,
+                    caja por caja de la portada. <span style="color:#0a6b0a; font-weight:600;">Verde</span> = pauta cumplida,
                     <span style="color:#1c5aa8; font-weight:600;">azul</span> = en curso, gris = sin notas todavía.
                     Refresca sola al terminar un envío.</p>
                 <div id="sheet-board">
@@ -1409,10 +1409,11 @@
 
             <div class="card" style="margin-bottom: 30px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h3 style="margin: 0;">📈 Publicadas en el sitio — últimos 30 días <span class="status status-idle" id="status-metrics">Idle</span></h3>
+                    <h3 style="margin: 0; cursor: pointer;" onclick="toggleCollapse('met-collapse', this)"><span class="caret" style="display:inline-block; width:1em; color:#94a3b8;">▸</span>📈 Publicadas en el sitio — últimos 30 días <span class="status status-idle" id="status-metrics">Idle</span></h3>
                     <button class="btn btn-primary" style="width: auto; padding: 8px 16px; margin: 0;"
                         onclick="loadMetrics()">Refresh</button>
                 </div>
+                <div id="met-collapse" style="display:none;">
                 <p style="color:#666; font-size:13px; margin-top:8px;">Notas publicadas en el sitio, día por día:
                     cuántas salieron, en qué sección y en qué caja de la portada.</p>
                 <div id="met-body" style="display:none;">
@@ -1449,9 +1450,10 @@
                 <div id="met-empty">
                     <p class="cur-empty">Sign in and press Refresh to load production metrics.</p>
                 </div>
+                </div>
             </div>
 
-            <div class="card" style="margin-bottom: 30px;">
+            <div class="card" style="margin-bottom: 30px; display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <h3 style="margin: 0;">✅ Aprobación — cola de borradores <span class="status status-idle" id="status-apv">Idle</span></h3>
                     <button class="btn btn-primary" style="width: auto; padding: 8px 16px; margin: 0;"
@@ -1870,25 +1872,21 @@
                 <div class="sheet-chips">${chips}</div></div>
                 <div class="sheet-bar"><div class="sheet-bar-fill" style="width:${Math.min(100, pct)}%;${totDone ? 'background:#0ca30c;' : ''}"></div></div>`;
 
-            for (const tier of SHEET_TIERS) {
-                const group = rows.filter(r => r.tier === tier.key);
-                if (!group.length) continue;
-                const g = group.reduce((s, r) => s + (r.generated || 0), 0);
-                const q = group.reduce((s, r) => s + (r.quota || 0), 0);
-                const gLeft = Math.max(0, q - g);
-                const sorted = [...group].sort((a, b) => (b.generated || 0) - (a.generated || 0) ||
-                    String(a.feedName).localeCompare(String(b.feedName), 'es'));
-                html += `<div class="sheet-group"><div class="sheet-group-h">${tier.label}
-                        <span>${g}/${q}${g >= q && g > 0 ? ' · ✓ completa' : ` · faltan ${gLeft}`}</span></div>
-                    <div class="sheet-pills">${sorted.map(sheetPill).join('')}</div></div>`;
-            }
-            // Any tier outside the known three still gets its pills (complete data).
-            const rest = rows.filter(r => !SHEET_TIERS.some(x => x.key === r.tier));
-            if (rest.length) {
-                html += `<div class="sheet-group"><div class="sheet-group-h">Otras tablas <span></span></div>
-                    <div class="sheet-pills">${rest.map(sheetPill).join('')}</div></div>`;
-            }
+            // Las filas llegan ya en el orden real de la portada (arriba → abajo),
+            // una por caja. NO reordenar: el tablero se lee como la home.
+            html += `<div class="sheet-group"><div class="sheet-group-h">Cajas de la portada
+                    <span>${t.generated}/${t.quota}${totDone ? ' · ✓ completa' : ` · faltan ${totLeft}`}</span></div>
+                <div class="sheet-pills">${rows.map(sheetPill).join('')}</div></div>`;
             box.innerHTML = html;
+        }
+
+        function toggleCollapse(id, h) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const open = el.style.display !== 'none';
+            el.style.display = open ? 'none' : '';
+            const c = h && h.querySelector ? h.querySelector('.caret') : null;
+            if (c) c.textContent = open ? '▸' : '▾';
         }
 
         async function loadDaySheet() {

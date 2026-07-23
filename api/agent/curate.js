@@ -163,11 +163,17 @@ export default async function handler(req, res) {
   // verdicts parsed from the aiReview field's stable prefix (PUBLISH/HOLD/...).
   if (mode === 'status') {
     try {
-      const [{ daySheetFor, startOfDayArtIso, isWeekendArt }, airtableService] =
-        await Promise.all([
-          import('../../src/config/day-sheet.js'),
-          import('../../src/services/airtable.js').then((m) => m.default),
-        ])
+      const [
+        { daySheetFor, startOfDayArtIso, isWeekendArt },
+        airtableService,
+        { blocksFor },
+        { HOMEPAGE_BLOCKS },
+      ] = await Promise.all([
+        import('../../src/config/day-sheet.js'),
+        import('../../src/services/airtable.js').then((m) => m.default),
+        import('../../src/config/section-routing.js'),
+        import('../../src/config/homepage-blocks.js'),
+      ])
       const sheet = daySheetFor().filter((r) => r.quota > 0)
       const formula = `IS_AFTER(CREATED_TIME(), '${startOfDayArtIso()}')`
 
@@ -209,18 +215,33 @@ export default async function handler(req, res) {
         )
       }
 
-      // Stable presentation order: locals first, then secondary, then recurring.
-      const tierRank = { local: 0, secondary: 1, recurring: 2 }
-      rows.sort(
-        (a, b) =>
-          (tierRank[a.tier] ?? 9) - (tierRank[b.tier] ?? 9) ||
-          a.feedName.localeCompare(b.feedName),
+      // Roll the per-table counts up into the homepage CAJAS — the editor's real
+      // target surface (the front page), not the Airtable tables. Each table's
+      // articles count toward its default box (the first block in its routing).
+      // Emitted in the real front-page order (top → bottom).
+      const boxAgg = new Map()
+      for (const r of rows) {
+        const front = blocksFor(r.feedId)[0]
+        if (!front) continue
+        if (!boxAgg.has(front)) {
+          boxAgg.set(front, { generated: 0, quota: 0, publish: 0, hold: 0, reject: 0, pending: 0 })
+        }
+        const b = boxAgg.get(front)
+        b.generated += r.generated || 0
+        b.quota += r.quota || 0
+        b.publish += r.publish || 0
+        b.hold += r.hold || 0
+        b.reject += r.reject || 0
+        b.pending += r.pending || 0
+      }
+      const boxRows = HOMEPAGE_BLOCKS.filter((bl) => boxAgg.has(bl.front)).map(
+        (bl) => ({ feedId: bl.front, feedName: bl.label, ...boxAgg.get(bl.front) }),
       )
 
       return res.status(200).json({
         generatedAt: new Date().toISOString(),
         weekend: isWeekendArt(),
-        rows,
+        rows: boxRows,
       })
     } catch (error) {
       console.error('curate status error:', error)
